@@ -2,7 +2,6 @@ package banner
 
 import (
 	"log"
-	"net/http"
 	"net/url"
 )
 
@@ -16,10 +15,10 @@ func setup() {
 	}
 
 	for _, path := range request_queue {
-		req, _ := http.NewRequest("GET", buildURL(path, nil), nil)
-		AddUserAgent(req)
+		req := BuildRequest("GET", path, nil)
+		log.Printf("GET %s", req.URL.String())
 		res, _ := client.Do(req)
-		log.Println(res)
+		log.Printf("%s %s", res.Status, res.Header["Content-Type"])
 	}
 
 	// Validate that cookies were set
@@ -46,5 +45,5 @@ func setup() {
 	}
 	log.Println("All cookies acquired. Session setup complete.")
 
-	// Validate that the session allows access to termSelection
+	// TODO: Validate that the session allows access to termSelection
 }
