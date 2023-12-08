@@ -1,11 +1,13 @@
 package banner
 
 import (
+	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 )
 
-func buildURL(path string, params map[string]string) string {
+func BuildRequestWithBody(method string, path string, params map[string]string, body io.Reader) *http.Request {
 	// Builds a URL for the given path and parameters
 	url := baseURL + path
 
@@ -22,7 +24,13 @@ func buildURL(path string, params map[string]string) string {
 		}
 	}
 
-	return url
+	request, _ := http.NewRequest(method, url, body)
+	AddUserAgent(request)
+	return request
+}
+
+func BuildRequest(method string, path string, params map[string]string) *http.Request {
+	return BuildRequestWithBody(method, path, params, nil)
 }
 
 func AddUserAgent(req *http.Request) {
@@ -37,4 +45,14 @@ func ContainsContentType(header string, search string) bool {
 		}
 	}
 	return false
+}
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func RandomString(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
 }
