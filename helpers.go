@@ -1,10 +1,13 @@
-package banner
+package main
 
 import (
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func BuildRequestWithBody(method string, path string, params map[string]string, body io.Reader) *http.Request {
@@ -55,4 +58,23 @@ func RandomString(n int) string {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(b)
+}
+
+func NoCache() string {
+	return strconv.Itoa(int(time.Now().UnixMilli()))
+}
+
+func onRequest(req *http.Request) {
+	log.Printf("GET %s", req.URL.String())
+}
+
+func onResponse(res *http.Response) {
+	log.Printf("%s %d %s", res.Status, res.ContentLength, res.Header["Content-Type"])
+}
+
+func Plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
