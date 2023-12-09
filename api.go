@@ -1,4 +1,4 @@
-package banner
+package main
 
 import (
 	"bytes"
@@ -14,132 +14,256 @@ var (
 )
 
 func init() {
-	sessionID = RandomString(5) + strconv.Itoa(int(time.Now().UnixMilli()))
+	sessionID = RandomString(5) + NoCache()
 	log.Printf("Session ID: %s", sessionID)
 }
 
+type Term struct {
+}
+
 // GET /classSearch/getTerms?searchTerm=&offset=1&max=10&_=1702069154094
-func GetTerms() {
-	req := BuildRequest("GET", "classSearch/getTerms", map[string]string{
-		"searchTerm": "",
-		"offset":     "1",
-		"max":        "10",
-		"_":          strconv.Itoa(int(time.Now().UnixMilli())),
+func GetTerms(search string, offset int, max int) ([]Term, error) {
+	req := BuildRequest("GET", "/classSearch/getTerms", map[string]string{
+		"searchTerm": search,
+		"offset":     strconv.Itoa(offset),
+		"max":        strconv.Itoa(max),
+		"_":          NoCache(),
 	})
+
+	onRequest(req)
+	res, err := client.Do(req)
+	onResponse(res)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assert that the response is JSON
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	}
+
+	return make([]Term, 0), nil
+}
+
+type TermParts struct {
 }
 
 // GET /classSearch/get_partOfTerm?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070282288
-func GetPartOfTerms() {
-	req := BuildRequest("GET", "classSearch/get_partOfTerm", map[string]string{
-		"searchTerm":      "",
-		"term":            "202420",
-		"offset":          "1",
-		"max":             "10",
+func GetPartOfTerms(search string, term int, offset int, max int) ([]TermParts, error) {
+	req := BuildRequest("GET", "/classSearch/get_partOfTerm", map[string]string{
+		"searchTerm":      search,
+		"term":            strconv.Itoa(term),
+		"offset":          strconv.Itoa(offset),
+		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               strconv.Itoa(int(time.Now().UnixMilli())),
+		"_":               NoCache(),
 	})
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assert that the response is JSON
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	}
+
+	return make([]TermParts, 0), nil
+}
+
+type Instructor struct {
 }
 
 // GET /classSearch/get_instructor?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1701951338584
-func GetInstructor() {
-	req := BuildRequest("GET", "classSearch/get_instructor", map[string]string{
-		"searchTerm":      "",
-		"term":            "202420",
-		"offset":          "1",
-		"max":             "10",
+func GetInstructor(search string, term int, offset int, max int) []Instructor {
+	req := BuildRequest("GET", "/classSearch/get_instructor", map[string]string{
+		"searchTerm":      search,
+		"term":            strconv.Itoa(term),
+		"offset":          strconv.Itoa(offset),
+		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               strconv.Itoa(int(time.Now().UnixMilli())),
+		"_":               NoCache(),
 	})
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("ERR %s", err)
+		return nil
+	}
+
+	// Assert that the response is JSON
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	}
+
+	return make([]Instructor, 0)
 }
 
-func GetClassDetails() {
+type ClassDetails struct {
+}
+
+func GetClassDetails(term int, crn int) *ClassDetails {
 	body, _ := json.Marshal(map[string]string{
-		"term":                  "202420",
-		"courseReferenceNumber": "36522",
-		"first":                 "first",
+		"term":                  strconv.Itoa(term),
+		"courseReferenceNumber": strconv.Itoa(crn),
+		"first":                 "first", // TODO: What is this?
 	})
-	req := BuildRequestWithBody("GET", "searchResults/getClassDetails", nil, bytes.NewBuffer(body))
+	req := BuildRequestWithBody("GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("ERR %s", err)
+		return nil
+	}
+
+	// Assert that the response is JSON
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	}
+
+	return &ClassDetails{}
 }
 
 // GET /searchResults/searchResults?txt_instructor=77521&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
 // GET /searchResults/searchResults?txt_subject=CS&txt_keywordlike=Application&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
-func Search() {
-	req := BuildRequest("GET", "classSearch/get_subject", map[string]string{
-		"txt_subject":     "CS",
-		"txt_keywordlike": "Application",
-		"txt_term":        "202420",
+func Search(subject string, keyword string, term string, startDate time.Time, endDate time.Time, offset int, max int, sort string, sortDescending bool) []string {
+	req := BuildRequest("GET", "/classSearch/get_subject", map[string]string{
+		"txt_subject":     subject,
+		"txt_keywordlike": keyword,
+		"txt_term":        term,
 		"startDatepicker": "",
 		"endDatepicker":   "",
 		"uniqueSessionId": sessionID,
-		"pageOffset":      "0",
-		"pageMaxSize":     "10",
+		"pageOffset":      strconv.Itoa(offset),
+		"pageMaxSize":     strconv.Itoa(max),
 		"sortColumn":      "subjectDescription",
 		"sortDirection":   "asc",
 	})
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("ERR %s", err)
+		return nil
+	}
+
+	// Assert that the response is JSON
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	}
+
+	return make([]string, 0)
+}
+
+type Subject struct {
 }
 
 // GET /classSearch/get_subject?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702069787420
-func GetSubjects() {
-	req := BuildRequest("GET", "classSearch/get_subject", map[string]string{
-		"searchTerm":      "",
-		"term":            "202420",
-		"offset":          "1",
-		"max":             "10",
+func GetSubjects(search string, term int, offset int, max int) []Subject {
+	req := BuildRequest("GET", "/classSearch/get_subject", map[string]string{
+		"searchTerm":      search,
+		"term":            strconv.Itoa(term),
+		"offset":          strconv.Itoa(offset),
+		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               "1702069787420",
+		"_":               NoCache(),
 	})
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("ERR %s", err)
+		return nil
+	}
+
+	// Assert that the response is JSON
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	}
+
+	return make([]Subject, 0)
+}
+
+type Campus struct {
 }
 
 // /classSearch/get_campus?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070341071
-func GetCampuses() {
-	req := BuildRequest("GET", "classSearch/get_campus", map[string]string{
-		"searchTerm":      "",
-		"term":            "202420",
-		"offset":          "1",
-		"max":             "10",
+func GetCampuses(search string, term int, offset int, max int) []Campus {
+	req := BuildRequest("GET", "/classSearch/get_campus", map[string]string{
+		"searchTerm":      search,
+		"term":            strconv.Itoa(term),
+		"offset":          strconv.Itoa(offset),
+		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               strconv.Itoa(int(time.Now().UnixMilli())),
+		"_":               NoCache(),
 	})
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("ERR %s", err)
+		return nil
+	}
+
+	// Assert that the response is JSON
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	}
+
+	return make([]Campus, 0)
+}
+
+type InstructionalMethod struct {
 }
 
 // / classSearch/get_instructionalMethod?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070364082
-func GetInstructionalMethods() {
-	req := BuildRequest("GET", "classSearch/get_instructionalMethod", map[string]string{
-		"searchTerm":      "",
-		"term":            "202420",
-		"offset":          "1",
-		"max":             "10",
+func GetInstructionalMethods(search string, term int, offset int, max int) ([]InstructionalMethod, error) {
+	req := BuildRequest("GET", "/classSearch/get_instructionalMethod", map[string]string{
+		"searchTerm":      search,
+		"term":            strconv.Itoa(term),
+		"offset":          strconv.Itoa(offset),
+		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               strconv.Itoa(int(time.Now().UnixMilli())),
+		"_":               NoCache(),
 	})
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("ERR %s", err)
+		return nil, err
+	}
+
+	// Assert that the response is JSON
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	}
+
+	return make([]InstructionalMethod, 0), nil
 }
 
 // GetCourseMeetingTime retrieves the meeting time information for a course based on the given term and course reference number (CRN).
 // It makes an HTTP GET request to the appropriate API endpoint and parses the response to extract the meeting time data.
 // The function returns a MeetingTimeResponse struct containing the extracted information.
-func GetCourseMeetingTime(term int, crn int) MeetingTimeResponse {
-	req := BuildRequest("GET", "searchResults/getFacultyMeetingTimes", map[string]string{
+func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
+	req := BuildRequest("GET", "/searchResults/getFacultyMeetingTimes", map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
 	})
 
 	log.Printf("GET %s", req.URL.String())
-	resp, err := client.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(resp.Header.Get("Content-Type"), "application/json") {
-		log.Fatalf("Response was not JSON: %s", resp.Header.Get("Content-Type"))
+	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+		log.Fatalf("Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
 	// Read the response body into JSON
-	defer resp.Body.Close()
+	defer res.Body.Close()
 	var body map[string][]map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&body)
+	err = json.NewDecoder(res.Body).Decode(&body)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	if len(body["fmt"]) > 1 {
@@ -195,7 +319,7 @@ func GetCourseMeetingTime(term int, crn int) MeetingTimeResponse {
 		})
 	}
 
-	return MeetingTimeResponse{
+	return &MeetingTimeResponse{
 		faculty:                faculty,
 		weekdays:               weekdays,
 		campus:                 campus,
@@ -212,5 +336,5 @@ func GetCourseMeetingTime(term int, crn int) MeetingTimeResponse {
 		meetingScheduleType:    meetingScheduleType,
 		meetingType:            meetingType,
 		meetingTypeDescription: meetingTypeDescription,
-	}
+	}, nil
 }
