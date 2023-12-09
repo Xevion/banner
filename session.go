@@ -1,11 +1,12 @@
-package banner
+package main
 
 import (
 	"log"
+	"net/http/cookiejar"
 	"net/url"
 )
 
-func setup() {
+func setup(cookies *cookiejar.Jar) {
 	// Makes the initial requests that sets up the session cookies for the rest of the application
 	log.Println("Setting up session...")
 
@@ -16,13 +17,17 @@ func setup() {
 
 	for _, path := range request_queue {
 		req := BuildRequest("GET", path, nil)
-		log.Printf("GET %s", req.URL.String())
+		onRequest(req)
 		res, _ := client.Do(req)
-		log.Printf("%s %s", res.Status, res.Header["Content-Type"])
+		onResponse(res)
 	}
 
 	// Validate that cookies were set
-	baseURL_parsed, _ := url.Parse(baseURL)
+	baseURL_parsed, err := url.Parse(baseURL)
+	if err != nil {
+		log.Fatalf("Failed to parse baseURL: %s", baseURL)
+	}
+
 	current_cookies := cookies.Cookies(baseURL_parsed)
 	required_cookies := map[string]bool{
 		"JSESSIONID": false,
