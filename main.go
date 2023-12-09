@@ -1,4 +1,4 @@
-package banner
+package main
 
 import (
 	"flag"
@@ -15,57 +15,16 @@ import (
 
 var (
 	// Base URL for all requests to the banner system
-	baseURL        string
-	client         http.Client
-	cookies        http.CookieJar
-	s              *discordgo.Session
-	RemoveCommands = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
-	commands       = []*discordgo.ApplicationCommand{
-		{
-			Name:        "time",
-			Description: "Get Class Meeting Time",
-		}}
-	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"time": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Embeds: []*discordgo.MessageEmbed{
-						{
-							Title:       "Permissions overview",
-							Description: "Overview of permissions for this command",
-							Fields: []*discordgo.MessageEmbedField{
-								{
-									Name:  "Users",
-									Value: "test",
-								},
-								{
-									Name:  "Channels",
-									Value: "test",
-								},
-								{
-									Name:  "Roles",
-									Value: "test",
-								},
-							},
-						},
-					},
-					AllowedMentions: &discordgo.MessageAllowedMentions{},
-				},
-			})
-		},
+	baseURL               string
+	client                http.Client
+	cookies               http.CookieJar
+	session               *discordgo.Session
+	RemoveCommands        = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
+	integerOptionMinValue = 0.0
+	commandHandlers       = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
+		"time": TimeCommandHandler,
 	}
 )
-
-func init() {
-
-	flag.Parse()
-	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-			h(s, i)
-		}
-	})
-}
 
 type MeetingTimeFaculty struct {
 	bannerId    int
@@ -107,32 +66,38 @@ func main() {
 	}
 
 	client = http.Client{Jar: cookies}
-	setup()
+	setup(cookies)
 
-	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
-	})
-	err = s.Open()
-	if err != nil {
-		log.Fatalf("Cannot open the session: %v", err)
-	}
-
-	s, err = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
+	session, err = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
 	if err != nil {
 		log.Fatalf("Invalid bot parameters: %v", err)
 	}
 
+	session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
+		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
+	})
+	err = session.Open()
+	if err != nil {
+		log.Fatalf("Cannot open the session: %v", err)
+	}
+
+	session.AddHandler(func(internalSession *discordgo.Session, interaction *discordgo.InteractionCreate) {
+		if handler, ok := commandHandlers[interaction.ApplicationCommandData().Name]; ok {
+			handler(internalSession, interaction)
+		}
+	})
+
 	log.Println("Adding commands...")
-	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
-	for i, v := range commands {
-		cmd, err := s.ApplicationCommandCreate(s.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v)
+	registeredCommands := make([]*discordgo.ApplicationCommand, len(commandDefinitions))
+	for i, v := range commandDefinitions {
+		cmd, err := session.ApplicationCommandCreate(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v)
 		if err != nil {
 			log.Panicf("Cannot create '%v' command: %v", v.Name, err)
 		}
 		registeredCommands[i] = cmd
 	}
 
-	defer s.Close()
+	defer session.Close()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
@@ -140,18 +105,10 @@ func main() {
 	<-stop
 
 	if *RemoveCommands {
-		log.Println("Removing commands...")
-		// // We need to fetch the commands, since deleting requires the command ID.
-		// // We are doing this from the returned commands on line 375, because using
-		// // this will delete all the commands, which might not be desirable, so we
-		// // are deleting only the commands that we added.
-		// registeredCommands, err := s.ApplicationCommands(s.State.User.ID, *GuildID)
-		// if err != nil {
-		// 	log.Fatalf("Could not fetch registered commands: %v", err)
-		// }
+		log.Printf("Removing %d command%s...\n", len(registeredCommands), Plural(len(registeredCommands)))
 
 		for _, v := range registeredCommands {
-			err := s.ApplicationCommandDelete(s.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v.ID)
+			err := session.ApplicationCommandDelete(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v.ID)
 			if err != nil {
 				log.Panicf("Cannot delete '%v' command: %v", v.Name, err)
 			}
