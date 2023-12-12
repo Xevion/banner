@@ -98,7 +98,7 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 							Value: fmt.Sprintf("%s - %s", courseMeetingTime.timeStart.String(), courseMeetingTime.timeEnd.String()),
 						},
 						{
-							Name:  "Weekdays",
+							Name:  "Days of Week",
 							Value: WeekdaysToString(courseMeetingTime.weekdays),
 						},
 					},
