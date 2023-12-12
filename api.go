@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"strconv"
 	"strings"
@@ -33,9 +34,14 @@ func GetTerms(search string, offset int, max int) ([]Term, error) {
 	onRequest(req)
 	res, err := client.Do(req)
 	onResponse(res)
+
 	if err != nil {
 		return nil, err
 	}
+
+	// print the response body
+	body, _ := io.ReadAll(res.Body)
+	log.Printf("Response Body: %s", body)
 
 	// Assert that the response is JSON
 	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
@@ -302,8 +308,10 @@ func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
 	const layout = "01/02/2006"
 	dateStart, _ := time.Parse(layout, meetingTimeMap["startDate"].(string))
 	dateEnd, _ := time.Parse(layout, meetingTimeMap["endDate"].(string))
-	timeStart, _ := strconv.ParseUint(meetingTimeMap["beginTime"].(string), 10, 0)
-	timeEnd, _ := strconv.ParseUint(meetingTimeMap["endTime"].(string), 10, 0)
+	timeStartInt, _ := strconv.ParseUint(meetingTimeMap["beginTime"].(string), 10, 0)
+	timeStart := ParseNaiveTime(timeStartInt)
+	timeEndInt, _ := strconv.ParseUint(meetingTimeMap["endTime"].(string), 10, 0)
+	timeEnd := ParseNaiveTime(timeEndInt)
 
 	// Extract faculty data
 	faculty := make([]MeetingTimeFaculty, 0)
