@@ -15,7 +15,7 @@ var (
 )
 
 func init() {
-	sessionID = RandomString(5) + NoCache()
+	sessionID = RandomString(5) + Nonce()
 	log.Printf("Session ID: %s", sessionID)
 }
 
@@ -28,7 +28,7 @@ func GetTerms(search string, offset int, max int) ([]Term, error) {
 		"searchTerm": search,
 		"offset":     strconv.Itoa(offset),
 		"max":        strconv.Itoa(max),
-		"_":          NoCache(),
+		"_":          Nonce(),
 	})
 
 	onRequest(req)
@@ -62,7 +62,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]TermParts, 
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               NoCache(),
+		"_":               Nonce(),
 	})
 
 	res, err := client.Do(req)
@@ -89,7 +89,7 @@ func GetInstructor(search string, term int, offset int, max int) []Instructor {
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               NoCache(),
+		"_":               Nonce(),
 	})
 
 	res, err := client.Do(req)
@@ -171,7 +171,7 @@ func GetSubjects(search string, term int, offset int, max int) []Subject {
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               NoCache(),
+		"_":               Nonce(),
 	})
 
 	res, err := client.Do(req)
@@ -199,7 +199,7 @@ func GetCampuses(search string, term int, offset int, max int) []Campus {
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               NoCache(),
+		"_":               Nonce(),
 	})
 
 	res, err := client.Do(req)
@@ -227,7 +227,7 @@ func GetInstructionalMethods(search string, term int, offset int, max int) ([]In
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
-		"_":               NoCache(),
+		"_":               Nonce(),
 	})
 
 	res, err := client.Do(req)

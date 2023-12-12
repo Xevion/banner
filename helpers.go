@@ -61,7 +61,8 @@ func RandomString(n int) string {
 	return string(b)
 }
 
-func NoCache() string {
+// Nonce returns a string made up of the current time in milliseconds, Unix epoch/UTC
+func Nonce() string {
 	return strconv.Itoa(int(time.Now().UnixMilli()))
 }
 
