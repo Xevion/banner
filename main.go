@@ -21,9 +21,6 @@ var (
 	session               *discordgo.Session
 	RemoveCommands        = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
 	integerOptionMinValue = 0.0
-	commandHandlers       = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"time": TimeCommandHandler,
-	}
 )
 
 type MeetingTimeFaculty struct {
@@ -43,8 +40,8 @@ type MeetingTimeResponse struct {
 	building               string
 	buildingDescription    string
 	room                   string
-	timeStart              uint64
-	timeEnd                uint64
+	timeStart              NaiveTime
+	timeEnd                NaiveTime
 	dateStart              time.Time
 	dateEnd                time.Time
 	hoursPerWeek           float32
@@ -87,7 +84,7 @@ func main() {
 		}
 	})
 
-	log.Println("Adding commands...")
+	log.Printf("Adding %d command%s...", len(commandDefinitions), Plural(len(commandDefinitions)))
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commandDefinitions))
 	for i, v := range commandDefinitions {
 		cmd, err := session.ApplicationCommandCreate(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"math/rand"
@@ -77,4 +78,60 @@ func Plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+func WeekdaysToString(days map[time.Weekday]bool) string {
+	str := ""
+
+	if days[time.Monday] {
+		str += "M"
+	}
+
+	if days[time.Tuesday] {
+		str += "Tu"
+	}
+
+	if days[time.Wednesday] {
+		str += "W"
+	}
+
+	if days[time.Thursday] {
+		str += "Th"
+	}
+
+	if days[time.Friday] {
+		str += "F"
+	}
+
+	if days[time.Saturday] {
+		str += "Sa"
+	}
+
+	if days[time.Sunday] {
+		str += "Su"
+	}
+
+	return str
+}
+
+type NaiveTime struct {
+	Hours   uint
+	Minutes uint
+}
+
+func ParseNaiveTime(integer uint64) NaiveTime {
+	minutes := uint(integer % 100)
+	hours := uint(integer / 100)
+
+	return NaiveTime{Hours: hours, Minutes: minutes}
+}
+
+func (nt NaiveTime) String() string {
+	meridiem := "AM"
+	hour := nt.Hours
+	if nt.Hours >= 12 {
+		meridiem = "PM"
+		hour -= 12
+	}
+	return fmt.Sprintf("%d:%02d%s", hour, nt.Minutes, meridiem)
 }
