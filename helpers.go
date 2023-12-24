@@ -3,12 +3,13 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func BuildRequestWithBody(method string, path string, params map[string]string, body io.Reader) *http.Request {

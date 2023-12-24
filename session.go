@@ -1,9 +1,10 @@
 package main
 
 import (
-	"log"
 	"net/http/cookiejar"
 	"net/url"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func setup(cookies *cookiejar.Jar) {

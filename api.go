@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -16,7 +17,7 @@ var (
 
 func init() {
 	sessionID = RandomString(5) + Nonce()
-	log.Printf("Session ID: %s", sessionID)
+	log.WithField("sessionId", sessionID).Debug("Session ID Generated")
 }
 
 type Term struct {
