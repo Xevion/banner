@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "github.com/rs/zerolog/log"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 
 func init() {
 	sessionID = RandomString(5) + Nonce()
-	log.WithField("sessionId", sessionID).Debug("Session ID Generated")
+	log.Debug().Str("sessionId", sessionID).Msg("Session ID Generated")
 }
 
 type Term struct {
@@ -262,7 +262,7 @@ func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
 
 	// Assert that the response is JSON
 	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
-		log.Fatalf("Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Fatal().Msgf("Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
 	// Read the response body into JSON

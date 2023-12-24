@@ -2,16 +2,15 @@ package main
 
 import (
 	"flag"
-	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -24,94 +23,44 @@ var (
 	integerOptionMinValue = 0.0
 )
 
-type MeetingTimeFaculty struct {
-	bannerId    int
-	category    string
-	displayName string
-	email       string
-	primary     bool
+// logOut implements zerolog.LevelWriter
+type logOut struct{}
+
+// Write should not be called
+func (l logOut) Write(p []byte) (n int, err error) {
+	return os.Stdout.Write(p)
 }
 
-type MeetingTimeResponse struct {
-	faculty                []MeetingTimeFaculty
-	weekdays               map[time.Weekday]bool
-	campus                 string
-	campusDescription      string
-	creditHours            int
-	building               string
-	buildingDescription    string
-	room                   string
-	timeStart              NaiveTime
-	timeEnd                NaiveTime
-	dateStart              time.Time
-	dateEnd                time.Time
-	hoursPerWeek           float32
-	meetingScheduleType    string
-	meetingType            string
-	meetingTypeDescription string
-}
+const timeFormat = "2006-01-02 15:04:05"
 
-// WriterHook is a hook that writes logs of specified LogLevels to specified Writer
-type WriterHook struct {
-	Writer    io.Writer
-	LogLevels []log.Level
-}
+var (
+	standardOut = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: timeFormat}
+	errorOut    = zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: timeFormat}
+)
 
-// Fire will be called when some logging function is called with current hook
-// It will format log entry to string and write it to appropriate writer
-func (hook *WriterHook) Fire(entry *log.Entry) error {
-	line, err := entry.String()
-	if err != nil {
-		return err
+// WriteLevel write to the appropriate output
+func (l logOut) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
+	if level <= zerolog.WarnLevel {
+		return standardOut.Write(p)
+	} else {
+		return errorOut.Write(p)
 	}
-	_, err = hook.Writer.Write([]byte(line))
-	return err
 }
 
-// Levels define on which log levels this hook would trigger
-func (hook *WriterHook) Levels() []log.Level {
-	return hook.LogLevels
+func init() {
+	log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
 }
 
 func main() {
-	log.SetOutput(io.Discard) // Send all logs to nowhere by default
-
-	// Send logs with level warning and higher to stderr
-	log.AddHook(&WriterHook{
-		Writer: os.Stderr,
-		LogLevels: []log.Level{
-			log.PanicLevel,
-			log.FatalLevel,
-			log.ErrorLevel,
-			log.WarnLevel,
-		},
-	})
-
-	// Send info and debug logs to stdout
-	log.AddHook(&WriterHook{
-		Writer: os.Stdout,
-		LogLevels: []log.Level{
-			log.InfoLevel,
-			log.DebugLevel,
-		},
-	})
-
-	log.SetFormatter(&log.TextFormatter{
-		TimestampFormat: "2006-01-02 15:04:05",
-		FullTimestamp:   true,
-	})
-
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Warn("Error loading .env file")
+		log.Debug().Err(err).Msg("Error loading .env file")
 	}
 	baseURL = os.Getenv("BANNER_BASE_URL")
 
 	cookies, err := cookiejar.New(nil)
 	if err != nil {
-		log.WithField("error", err).Fatal(err)
+		log.Err(err).Msg("Cannot create cookie jar")
 	}
 
 	client = http.Client{Jar: cookies}
@@ -119,20 +68,21 @@ func main() {
 
 	session, err = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
 	if err != nil {
-		log.WithField("error", err).Fatal("Invalid bot parameters")
+		log.Err(err).Msg("Invalid bot parameters")
 	}
 
 	session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		log.WithFields(log.Fields{
-			"username":      r.User.Username,
-			"discriminator": r.User.Discriminator,
-			"id":            r.User.ID,
-			"session":       s.State.SessionID,
-		}).Info("Bot is logged in")
+		// log.WithFields(log.Fields{
+		// 	"username":      r.User.Username,
+		// 	"discriminator": r.User.Discriminator,
+		// 	"id":            r.User.ID,
+		// 	"session":       s.State.SessionID,
+		// }).Info("Bot is logged in")
+		// log.
 	})
 	err = session.Open()
 	if err != nil {
-		log.Fatalf("Cannot open the session: %v", err)
+		log.Fatal().Msgf("Cannot open the session: %v", err)
 	}
 
 	session.AddHandler(func(internalSession *discordgo.Session, interaction *discordgo.InteractionCreate) {
@@ -146,7 +96,7 @@ func main() {
 	for i, v := range commandDefinitions {
 		cmd, err := session.ApplicationCommandCreate(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v)
 		if err != nil {
-			log.Panicf("Cannot create '%v' command: %v", v.Name, err)
+			log.Panic().Msgf("Cannot create '%v' command: %v", v.Name, err)
 		}
 		registeredCommands[i] = cmd
 	}
@@ -155,7 +105,7 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
-	log.Println("Press Ctrl+C to exit")
+	log.Info().Msgf("Press Ctrl+C to exit")
 	<-stop
 
 	if *RemoveCommands {
@@ -164,11 +114,11 @@ func main() {
 		for _, v := range registeredCommands {
 			err := session.ApplicationCommandDelete(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v.ID)
 			if err != nil {
-				log.Panicf("Cannot delete '%v' command: %v", v.Name, err)
+				log.Error().Msgf("Cannot delete '%v' command: %v", v.Name, err)
 			}
 		}
 	}
 
-	log.Println("Gracefully shutting down.")
+	log.Info().Msg("Gracefully shutting down.")
 
 }

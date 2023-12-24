@@ -6,7 +6,12 @@ require github.com/bwmarrin/discordgo v0.27.1
 
 require github.com/joho/godotenv v1.5.1
 
-require github.com/sirupsen/logrus v1.9.3 // indirect
+require (
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.19 // indirect
+	github.com/rs/zerolog v1.31.0 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
+)
 
 require (
 	github.com/gorilla/websocket v1.5.1 // fndirect

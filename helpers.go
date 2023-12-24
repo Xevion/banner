@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "github.com/rs/zerolog/log"
 )
 
 func BuildRequestWithBody(method string, path string, params map[string]string, body io.Reader) *http.Request {
