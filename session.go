@@ -1,13 +1,12 @@
 package main
 
 import (
-	"net/http"
 	"net/url"
 
 	log "github.com/rs/zerolog/log"
 )
 
-func setup(cookies *http.CookieJar) {
+func setup() {
 	// Makes the initial requests that sets up the session cookies for the rest of the application
 	log.Info().Msg("Setting up session...")
 
@@ -29,7 +28,7 @@ func setup(cookies *http.CookieJar) {
 		log.Fatal().Msgf("Failed to parse baseURL: %s", baseURL)
 	}
 
-	current_cookies := cookies.Cookies(baseURL_parsed)
+	current_cookies := client.Jar.Cookies(baseURL_parsed)
 	required_cookies := map[string]bool{
 		"JSESSIONID": false,
 		"SSB_COOKIE": false,

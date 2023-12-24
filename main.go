@@ -2,10 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
 	"os/signal"
+	"runtime"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
@@ -49,6 +52,34 @@ func (l logOut) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 
 func init() {
 	log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
+	discordgo.Logger = func(msgL, caller int, format string, a ...interface{}) {
+		pc, file, line, _ := runtime.Caller(caller)
+
+		files := strings.Split(file, "/")
+		file = files[len(files)-1]
+
+		name := runtime.FuncForPC(pc).Name()
+		fns := strings.Split(name, ".")
+		name = fns[len(fns)-1]
+
+		msg := fmt.Sprintf(format, a...)
+
+		var event *zerolog.Event
+		switch msgL {
+		case 0:
+			event = log.Debug()
+		case 1:
+			event = log.Info()
+		case 2:
+			event = log.Warn()
+		case 3:
+			event = log.Error()
+		default:
+			event = log.Info()
+		}
+
+		event.Str("file", file).Int("line", line).Str("function", name).Msg(msg)
+	}
 }
 
 func main() {
@@ -58,6 +89,7 @@ func main() {
 	}
 	baseURL = os.Getenv("BANNER_BASE_URL")
 
+	//
 	var err error
 	cookies, err = cookiejar.New(nil)
 	if err != nil {
@@ -65,34 +97,33 @@ func main() {
 	}
 
 	client = http.Client{Jar: cookies}
-	setup(&cookies)
+	setup()
 
 	session, err = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
 	if err != nil {
 		log.Err(err).Msg("Invalid bot parameters")
 	}
 
+	// Open discord session
 	session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		// log.WithFields(log.Fields{
-		// 	"username":      r.User.Username,
-		// 	"discriminator": r.User.Discriminator,
-		// 	"id":            r.User.ID,
-		// 	"session":       s.State.SessionID,
-		// }).Info("Bot is logged in")
-		// log.
+		log.Info().Str("username", r.User.Username).Str("discriminator", r.User.Discriminator).Str("id", r.User.ID).Str("session", s.State.SessionID).Msg("Bot is logged in")
 	})
 	err = session.Open()
 	if err != nil {
 		log.Fatal().Msgf("Cannot open the session: %v", err)
 	}
 
+	// Setup command handlers
 	session.AddHandler(func(internalSession *discordgo.Session, interaction *discordgo.InteractionCreate) {
 		if handler, ok := commandHandlers[interaction.ApplicationCommandData().Name]; ok {
 			handler(internalSession, interaction)
+		} else {
+			log.Warn().Msgf("Unknown command '%v'", interaction.ApplicationCommandData().Name)
 		}
 	})
 
-	log.Printf("Adding %d command%s...", len(commandDefinitions), Plural(len(commandDefinitions)))
+	// Register commands with discord
+	log.Info().Int("count", len(commandDefinitions)).Msg("Registering commands")
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commandDefinitions))
 	for i, v := range commandDefinitions {
 		cmd, err := session.ApplicationCommandCreate(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v)
@@ -102,24 +133,26 @@ func main() {
 		registeredCommands[i] = cmd
 	}
 
+	// Cloes session, ensure
 	defer session.Close()
+	defer client.CloseIdleConnections()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
-	log.Info().Msgf("Press Ctrl+C to exit")
+	log.Info().Msg("Press Ctrl+C to exit")
 	<-stop
 
 	if *RemoveCommands {
-		log.Printf("Removing %d command%s...\n", len(registeredCommands), Plural(len(registeredCommands)))
+		// log.Info().Array("commandIds", registeredCommands).Msg("Removing commands")
 
-		for _, v := range registeredCommands {
-			err := session.ApplicationCommandDelete(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v.ID)
+		for _, cmd := range registeredCommands {
+			err := session.ApplicationCommandDelete(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), cmd.ID)
 			if err != nil {
-				log.Error().Msgf("Cannot delete '%v' command: %v", v.Name, err)
+				log.Err(err).Str("command", cmd.Name)
 			}
 		}
 	}
 
-	log.Info().Msg("Gracefully shutting down.")
+	log.Info().Msg("Gracefully shutting down")
 
 }
