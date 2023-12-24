@@ -58,13 +58,14 @@ func main() {
 	}
 	baseURL = os.Getenv("BANNER_BASE_URL")
 
-	cookies, err := cookiejar.New(nil)
+	var err error
+	cookies, err = cookiejar.New(nil)
 	if err != nil {
 		log.Err(err).Msg("Cannot create cookie jar")
 	}
 
 	client = http.Client{Jar: cookies}
-	setup(cookies)
+	setup(&cookies)
 
 	session, err = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
 	if err != nil {

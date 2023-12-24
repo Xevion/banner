@@ -1,13 +1,13 @@
 package main
 
 import (
-	"net/http/cookiejar"
+	"net/http"
 	"net/url"
 
 	log "github.com/rs/zerolog/log"
 )
 
-func setup(cookies *cookiejar.Jar) {
+func setup(cookies *http.CookieJar) {
 	// Makes the initial requests that sets up the session cookies for the rest of the application
 	log.Info().Msg("Setting up session...")
 
