@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -50,7 +51,56 @@ type MeetingTimeResponse struct {
 	meetingTypeDescription string
 }
 
+// WriterHook is a hook that writes logs of specified LogLevels to specified Writer
+type WriterHook struct {
+	Writer    io.Writer
+	LogLevels []log.Level
+}
+
+// Fire will be called when some logging function is called with current hook
+// It will format log entry to string and write it to appropriate writer
+func (hook *WriterHook) Fire(entry *log.Entry) error {
+	line, err := entry.String()
+	if err != nil {
+		return err
+	}
+	_, err = hook.Writer.Write([]byte(line))
+	return err
+}
+
+// Levels define on which log levels this hook would trigger
+func (hook *WriterHook) Levels() []log.Level {
+	return hook.LogLevels
+}
+
 func main() {
+	log.SetOutput(io.Discard) // Send all logs to nowhere by default
+
+	// Send logs with level warning and higher to stderr
+	log.AddHook(&WriterHook{
+		Writer: os.Stderr,
+		LogLevels: []log.Level{
+			log.PanicLevel,
+			log.FatalLevel,
+			log.ErrorLevel,
+			log.WarnLevel,
+		},
+	})
+
+	// Send info and debug logs to stdout
+	log.AddHook(&WriterHook{
+		Writer: os.Stdout,
+		LogLevels: []log.Level{
+			log.InfoLevel,
+			log.DebugLevel,
+		},
+	})
+
+	log.SetFormatter(&log.TextFormatter{
+		TimestampFormat: "2006-01-02 15:04:05",
+		FullTimestamp:   true,
+	})
+
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.WithFields(log.Fields{
