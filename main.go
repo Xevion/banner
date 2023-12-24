@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -53,13 +53,15 @@ type MeetingTimeResponse struct {
 func main() {
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Warn("Error loading .env file")
 	}
 	baseURL = os.Getenv("BANNER_BASE_URL")
 
 	cookies, err := cookiejar.New(nil)
 	if err != nil {
-		log.Fatal(err)
+		log.WithField("error", err).Fatal(err)
 	}
 
 	client = http.Client{Jar: cookies}
@@ -67,11 +69,16 @@ func main() {
 
 	session, err = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
 	if err != nil {
-		log.Fatalf("Invalid bot parameters: %v", err)
+		log.WithField("error", err).Fatal("Invalid bot parameters")
 	}
 
 	session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
+		log.WithFields(log.Fields{
+			"username":      r.User.Username,
+			"discriminator": r.User.Discriminator,
+			"id":            r.User.ID,
+			"session":       s.State.SessionID,
+		}).Info("Bot is logged in")
 	})
 	err = session.Open()
 	if err != nil {
