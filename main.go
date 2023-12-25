@@ -61,16 +61,9 @@ func init() {
 	}
 	var isDevelopment bool = env == "development"
 
-	environmentDict := zerolog.Dict()
-	lo.ForEach(os.Environ(), func(envVar string, _ int) {
-		envVarSplit := strings.Split(envVar, "=")
-		environmentDict.Str(envVarSplit[0], envVarSplit[1])
-	})
-
 	if isDevelopment {
 		log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
 	}
-	log.Info().Dict("env", environmentDict).Msg("env")
 
 	discordgo.Logger = func(msgL, caller int, format string, a ...interface{}) {
 		pc, file, line, _ := runtime.Caller(caller)
