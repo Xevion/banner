@@ -52,7 +52,23 @@ func (l logOut) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 }
 
 func init() {
-	log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "development"
+	}
+	var isDevelopment bool = env == "development"
+
+	environmentDict := zerolog.Dict()
+	lo.ForEach(os.Environ(), func(envVar string, _ int) {
+		envVarSplit := strings.Split(envVar, "=")
+		environmentDict.Str(envVarSplit[0], envVarSplit[1])
+	})
+	log.Info().Dict("env", environmentDict).Msg("env")
+
+	if isDevelopment {
+		log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
+	}
+
 	discordgo.Logger = func(msgL, caller int, format string, a ...interface{}) {
 		pc, file, line, _ := runtime.Caller(caller)
 
@@ -90,16 +106,18 @@ func main() {
 	}
 	baseURL = os.Getenv("BANNER_BASE_URL")
 
-	//
+	// Create cookie jar
 	var err error
 	cookies, err = cookiejar.New(nil)
 	if err != nil {
 		log.Err(err).Msg("Cannot create cookie jar")
 	}
 
+	// Create client, setup session (acquire cookies)
 	client = http.Client{Jar: cookies}
 	setup()
 
+	// Create discord session
 	session, err = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
 	if err != nil {
 		log.Err(err).Msg("Invalid bot parameters")
@@ -130,13 +148,14 @@ func main() {
 	})
 	log.Info().Array("commands", zerolog.Arr()).Msg("Registering commands")
 
+	// Register commands
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commandDefinitions))
-	for i, v := range commandDefinitions {
-		cmd, err := session.ApplicationCommandCreate(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v)
+	for i, cmdDefinition := range commandDefinitions {
+		cmdInstance, err := session.ApplicationCommandCreate(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), cmdDefinition)
 		if err != nil {
-			log.Panic().Msgf("Cannot create '%v' command: %v", v.Name, err)
+			log.Panic().Err(err).Str("name", cmdDefinition.Name).Msgf("Cannot register command")
 		}
-		registeredCommands[i] = cmd
+		registeredCommands[i] = cmdInstance
 	}
 
 	// Cloes session, ensure

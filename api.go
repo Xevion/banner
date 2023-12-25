@@ -32,10 +32,7 @@ func GetTerms(search string, offset int, max int) ([]Term, error) {
 		"_":          Nonce(),
 	})
 
-	onRequest(req)
-	res, err := client.Do(req)
-	onResponse(res)
-
+	res, err := doRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +46,7 @@ func GetTerms(search string, offset int, max int) ([]Term, error) {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
-	return make([]Term, 0), nil
+	return make([]Term, 0, 0), nil
 }
 
 type TermParts struct {

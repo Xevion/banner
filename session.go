@@ -17,9 +17,7 @@ func setup() {
 
 	for _, path := range request_queue {
 		req := BuildRequest("GET", path, nil)
-		onRequest(req)
-		res, _ := client.Do(req)
-		onResponse(res)
+		doRequest(req)
 	}
 
 	// Validate that cookies were set

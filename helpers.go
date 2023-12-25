@@ -67,12 +67,15 @@ func Nonce() string {
 	return strconv.Itoa(int(time.Now().UnixMilli()))
 }
 
-func onRequest(req *http.Request) {
-	log.Printf("GET %s", req.URL.String())
-}
-
-func onResponse(res *http.Response) {
-	log.Printf("%s %d %s", res.Status, res.ContentLength, res.Header["Content-Type"])
+func doRequest(req *http.Request) (*http.Response, error) {
+	log.Debug().Str("method", req.Method).Msg("Request")
+	res, err := client.Do(req)
+	if err != nil {
+		log.Err(err).Str("method", req.Method).Msg("Request Failed")
+	} else {
+		log.Debug().Str("status", res.Status).Int64("content-length", res.ContentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
+	}
+	return res, err
 }
 
 func Plural(n int) string {
