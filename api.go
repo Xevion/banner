@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -38,11 +37,10 @@ func GetTerms(search string, offset int, max int) ([]Term, error) {
 	}
 
 	// print the response body
-	body, _ := io.ReadAll(res.Body)
-	log.Printf("Response Body: %s", body)
+	// _body, _ := io.ReadAll(res.Body)
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
@@ -69,7 +67,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]TermParts, 
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
@@ -97,7 +95,7 @@ func GetInstructor(search string, term int, offset int, max int) []Instructor {
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
@@ -121,7 +119,7 @@ func GetClassDetails(term int, crn int) *ClassDetails {
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
@@ -151,7 +149,7 @@ func Search(subject string, keyword string, term string, startDate time.Time, en
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
@@ -179,7 +177,7 @@ func GetSubjects(search string, term int, offset int, max int) []Subject {
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
@@ -207,7 +205,7 @@ func GetCampuses(search string, term int, offset int, max int) []Campus {
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
@@ -235,7 +233,7 @@ func GetInstructionalMethods(search string, term int, offset int, max int) ([]In
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
@@ -258,7 +256,7 @@ func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
 	}
 
 	// Assert that the response is JSON
-	if !ContainsContentType(res.Header.Get("Content-Type"), "application/json") {
+	if !ContainsContentType(res, "application/json") {
 		log.Fatal().Msgf("Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 

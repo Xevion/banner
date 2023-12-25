@@ -63,11 +63,11 @@ func init() {
 		envVarSplit := strings.Split(envVar, "=")
 		environmentDict.Str(envVarSplit[0], envVarSplit[1])
 	})
-	log.Info().Dict("env", environmentDict).Msg("env")
 
 	if isDevelopment {
 		log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
 	}
+	log.Info().Dict("env", environmentDict).Msg("env")
 
 	discordgo.Logger = func(msgL, caller int, format string, a ...interface{}) {
 		pc, file, line, _ := runtime.Caller(caller)
@@ -146,7 +146,7 @@ func main() {
 	lo.ForEach(commandDefinitions, func(cmd *discordgo.ApplicationCommand, _ int) {
 		arr.Str(cmd.Name)
 	})
-	log.Info().Array("commands", zerolog.Arr()).Msg("Registering commands")
+	log.Info().Array("commands", arr).Msg("Registering commands")
 
 	// Register commands
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commandDefinitions))

@@ -21,12 +21,12 @@ func setup() {
 	}
 
 	// Validate that cookies were set
-	baseURL_parsed, err := url.Parse(baseURL)
+	baseUrlParsed, err := url.Parse(baseURL)
 	if err != nil {
-		log.Fatal().Msgf("Failed to parse baseURL: %s", baseURL)
+		log.Fatal().Str("baseURL", baseURL).Err(err).Msg("Failed to parse baseURL")
 	}
 
-	current_cookies := client.Jar.Cookies(baseURL_parsed)
+	current_cookies := client.Jar.Cookies(baseUrlParsed)
 	required_cookies := map[string]bool{
 		"JSESSIONID": false,
 		"SSB_COOKIE": false,
@@ -41,12 +41,12 @@ func setup() {
 	}
 
 	// Check if all required cookies were set
-	for cookie_name, cookie_set := range required_cookies {
+	for cookieName, cookie_set := range required_cookies {
 		if !cookie_set {
-			log.Error().Msgf("Required cookie %s was not set", cookie_name)
+			log.Warn().Str("cookieName", cookieName).Msg("Required cookie not set")
 		}
 	}
-	log.Info().Msg("All cookies acquired. Session setup complete.")
+	log.Debug().Msg("All required cookies set, session setup complete")
 
 	// TODO: Validate that the session allows access to termSelection
 }
