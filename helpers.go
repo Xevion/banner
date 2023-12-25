@@ -111,7 +111,7 @@ func doRequest(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		log.Err(err).Str("method", req.Method).Msg("Request Failed")
 	} else {
-		log.Debug().Str("status", res.Status).Int64("content-length", res.ContentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
+		log.Debug().Int("status", res.StatusCode).Int64("content-length", res.ContentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
 	}
 	return res, err
 }
