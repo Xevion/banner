@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -22,52 +21,27 @@ import (
 )
 
 var (
-	// Base URL for all requests to the banner system
-	baseURL        string
-	client         http.Client
-	kv             *redis.Client
-	ctx            context.Context
-	isDevelopment  bool
-	cookies        http.CookieJar
-	session        *discordgo.Session
-	RemoveCommands = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
+	ctx           context.Context
+	kv            *redis.Client
+	session       *discordgo.Session
+	client        http.Client
+	cookies       http.CookieJar
+	isDevelopment bool
+	baseURL       string // Base URL for all requests to the banner system
+	environment   string
 )
-
-// logOut implements zerolog.LevelWriter
-type logOut struct{}
-
-// Write should not be called
-func (l logOut) Write(p []byte) (n int, err error) {
-	return os.Stdout.Write(p)
-}
-
-const timeFormat = "2006-01-02 15:04:05"
-
-var (
-	standardOut = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: timeFormat}
-	errorOut    = zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: timeFormat}
-)
-
-// WriteLevel write to the appropriate output
-func (l logOut) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
-	if level <= zerolog.WarnLevel {
-		return standardOut.Write(p)
-	} else {
-		return errorOut.Write(p)
-	}
-}
 
 func init() {
 	ctx = context.Background()
 
 	// Try to grab the environment variable, or default to development
-	env := GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
-	if env == "" {
-		env = "development"
+	environment := GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
+	if environment == "" {
+		environment = "development"
 	}
 
 	// Use the custom console writer if we're in development
-	isDevelopment = env == "development"
+	isDevelopment = environment == "development"
 	if isDevelopment {
 		log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
 	}
@@ -96,16 +70,16 @@ func main() {
 	}
 	kv = redis.NewClient(options)
 
-	// Test the redis instance, try to ping every 2 seconds 5 times, otherwise panic
 	var lastPingErr error
-	pingCount := 0
-	totalPings := 5
+	pingCount := 0  // Nth ping being attempted
+	totalPings := 5 // Total pings to attempt
 
 	// Wait for private networking to kick in (production only)
 	if !isDevelopment {
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
 
+	// Test the redis instance, try to ping every 2 seconds 5 times, otherwise panic
 	for {
 		pingCount++
 		if pingCount > totalPings {
@@ -172,7 +146,7 @@ func main() {
 	for i, cmdDefinition := range commandDefinitions {
 		// Create a hash of the command definition
 		hash := xxhash.Sum64(structhash.Dump(cmdDefinition, 1))
-		key := fmt.Sprintf("command:%s:xxhash", cmdDefinition.Name)
+		key := fmt.Sprintf("%s:command:%s:xxhash", environment, cmdDefinition.Name)
 
 		// Get the stored hash
 		storedHash, err := kv.Get(ctx, key).Uint64()
@@ -208,14 +182,11 @@ func main() {
 	defer client.CloseIdleConnections()
 
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
-	signal.Notify(stop, syscall.SIGTERM)
+	signal.Notify(stop, os.Interrupt)    // Ctrl+C signal
+	signal.Notify(stop, syscall.SIGTERM) // Container stop signal
 
-	if isDevelopment {
-		log.Info().Msg("Press Ctrl+C to exit")
-	}
 	<-stop
 
+	// Defers are called after this
 	log.Warn().Msg("Gracefully shutting down")
-
 }
