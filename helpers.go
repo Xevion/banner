@@ -5,10 +5,12 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog"
 	log "github.com/rs/zerolog/log"
 )
 
@@ -42,7 +44,8 @@ func AddUserAgent(req *http.Request) {
 	req.Header.Add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36")
 }
 
-func ContainsContentType(response *http.Response, search string) bool {
+// ContentTypeMatch checks if the response has the given content type
+func ContentTypeMatch(response *http.Response, search string) bool {
 	// Split on commas, check if any of the types match
 	for _, content_type := range strings.Split(response.Header.Get("Content-Type"), ";") {
 		if content_type == search {
@@ -54,12 +57,45 @@ func ContainsContentType(response *http.Response, search string) bool {
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+// RandomString returns a random string of length n using the letterBytes constant
+// The constant used is specifically chosen to mimic Ellucian's banner session ID generation.
 func RandomString(n int) string {
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(b)
+}
+
+// DiscordGoLogger is a specialized helper function that implements discordgo's global logging interface.
+// It directs all logs to the zerolog implementation.
+func DiscordGoLogger(msgL, caller int, format string, a ...interface{}) {
+	pc, file, line, _ := runtime.Caller(caller)
+
+	files := strings.Split(file, "/")
+	file = files[len(files)-1]
+
+	name := runtime.FuncForPC(pc).Name()
+	fns := strings.Split(name, ".")
+	name = fns[len(fns)-1]
+
+	msg := fmt.Sprintf(format, a...)
+
+	var event *zerolog.Event
+	switch msgL {
+	case 0:
+		event = log.Debug()
+	case 1:
+		event = log.Info()
+	case 2:
+		event = log.Warn()
+	case 3:
+		event = log.Error()
+	default:
+		event = log.Info()
+	}
+
+	event.Str("file", file).Int("line", line).Str("function", name).Msg(msg)
 }
 
 // Nonce returns a string made up of the current time in milliseconds, Unix epoch/UTC

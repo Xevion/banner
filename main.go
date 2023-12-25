@@ -2,16 +2,14 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
 	"os/signal"
-	"runtime"
-	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
@@ -19,12 +17,12 @@ import (
 
 var (
 	// Base URL for all requests to the banner system
-	baseURL               string
-	client                http.Client
-	cookies               http.CookieJar
-	session               *discordgo.Session
-	RemoveCommands        = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
-	integerOptionMinValue = 0.0
+	baseURL        string
+	client         http.Client
+	kv             *redis.Client
+	cookies        http.CookieJar
+	session        *discordgo.Session
+	RemoveCommands = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
 )
 
 // logOut implements zerolog.LevelWriter
@@ -52,6 +50,7 @@ func (l logOut) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 }
 
 func init() {
+	// Try to grab the environment variable, or default to development
 	env := os.Getenv("ENVIRONMENT")
 	if env == "" {
 		env = os.Getenv("RAILWAY_ENVIRONMENT")
@@ -59,51 +58,32 @@ func init() {
 			env = "development"
 		}
 	}
-	var isDevelopment bool = env == "development"
 
+	// Use the custom console writer if we're in development
+	var isDevelopment bool = env == "development"
 	if isDevelopment {
 		log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
 	}
 
-	discordgo.Logger = func(msgL, caller int, format string, a ...interface{}) {
-		pc, file, line, _ := runtime.Caller(caller)
+	// Set discordgo's logger to use zerolog
+	discordgo.Logger = DiscordGoLogger
 
-		files := strings.Split(file, "/")
-		file = files[len(files)-1]
-
-		name := runtime.FuncForPC(pc).Name()
-		fns := strings.Split(name, ".")
-		name = fns[len(fns)-1]
-
-		msg := fmt.Sprintf(format, a...)
-
-		var event *zerolog.Event
-		switch msgL {
-		case 0:
-			event = log.Debug()
-		case 1:
-			event = log.Info()
-		case 2:
-			event = log.Warn()
-		case 3:
-			event = log.Error()
-		default:
-			event = log.Info()
-		}
-
-		event.Str("file", file).Int("line", line).Str("function", name).Msg(msg)
-	}
-}
-
-func main() {
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Debug().Err(err).Msg("Error loading .env file")
 	}
 	baseURL = os.Getenv("BANNER_BASE_URL")
+}
+
+func main() {
+	// Setup redis
+	options, err := redis.ParseURL(os.Getenv("REDIS_URL"))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot parse redis url")
+	}
+	kv = redis.NewClient(options)
 
 	// Create cookie jar
-	var err error
 	cookies, err = cookiejar.New(nil)
 	if err != nil {
 		log.Err(err).Msg("Cannot create cookie jar")
@@ -125,15 +105,16 @@ func main() {
 	})
 	err = session.Open()
 	if err != nil {
-		log.Fatal().Msgf("Cannot open the session: %v", err)
+		log.Fatal().Err(err).Msg("Cannot open the session")
 	}
 
 	// Setup command handlers
 	session.AddHandler(func(internalSession *discordgo.Session, interaction *discordgo.InteractionCreate) {
-		if handler, ok := commandHandlers[interaction.ApplicationCommandData().Name]; ok {
+		name := interaction.ApplicationCommandData().Name
+		if handler, ok := commandHandlers[name]; ok {
 			handler(internalSession, interaction)
 		} else {
-			log.Warn().Msgf("Unknown command '%v'", interaction.ApplicationCommandData().Name)
+			log.Warn().Str("commandName", name).Msg("Unknown command")
 		}
 	})
 
@@ -164,8 +145,6 @@ func main() {
 	<-stop
 
 	if *RemoveCommands {
-		// log.Info().Array("commandIds", registeredCommands).Msg("Removing commands")
-
 		for _, cmd := range registeredCommands {
 			err := session.ApplicationCommandDelete(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), cmd.ID)
 			if err != nil {
