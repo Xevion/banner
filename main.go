@@ -52,9 +52,12 @@ func (l logOut) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 }
 
 func init() {
-	env := os.Getenv("ENV")
+	env := os.Getenv("ENVIRONMENT")
 	if env == "" {
-		env = "development"
+		env = os.Getenv("RAILWAY_ENVIRONMENT")
+		if env == "" {
+			env = "development"
+		}
 	}
 	var isDevelopment bool = env == "development"
 
@@ -178,6 +181,6 @@ func main() {
 		}
 	}
 
-	log.Info().Msg("Gracefully shutting down")
+	log.Warn().Msg("Gracefully shutting down")
 
 }
