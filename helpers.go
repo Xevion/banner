@@ -5,6 +5,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -176,4 +177,13 @@ func (nt NaiveTime) String() string {
 		hour -= 12
 	}
 	return fmt.Sprintf("%d:%02d%s", hour, nt.Minutes, meridiem)
+}
+
+func GetFirstEnv(key ...string) string {
+	for _, k := range key {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }

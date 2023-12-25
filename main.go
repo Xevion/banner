@@ -59,12 +59,9 @@ func init() {
 	ctx = context.Background()
 
 	// Try to grab the environment variable, or default to development
-	env := os.Getenv("ENVIRONMENT")
+	env := GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
 	if env == "" {
-		env = os.Getenv("RAILWAY_ENVIRONMENT")
-		if env == "" {
-			env = "development"
-		}
+		env = "development"
 	}
 
 	// Use the custom console writer if we're in development
@@ -85,13 +82,12 @@ func init() {
 
 func main() {
 	// Setup redis
-	redisUrl := os.Getenv("REDIS_URL")
+	redisUrl := GetFirstEnv("REDIS_URL", "REDIS_PRIVATE_URL")
 	if redisUrl == "" {
-		redisUrl = os.Getenv("PRIVATE_REDIS_URL")
-		if redisUrl == "" {
-			log.Fatal().Msg("REDIS_URL is not set (public or private)")
-		}
+		log.Fatal().Msg("REDIS_URL/REDIS_PRIVATE_URL not set")
 	}
+
+	// Parse URL and create client
 	options, err := redis.ParseURL(redisUrl)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Cannot parse redis url")
