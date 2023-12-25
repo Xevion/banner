@@ -164,17 +164,46 @@ func main() {
 			continue
 		}
 
+		// Unregister the old command
+		oldCommandId, err := kv.Get(ctx, fmt.Sprintf("%s:command:%s:id", environment, cmdDefinition.Name)).Result()
+		if err != nil {
+			if err != redis.Nil {
+				// It's an unlikely case, but if required, we could get the old command ID from discord to unregister it.
+				log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot get old command ID from redis")
+			} else {
+				log.Debug().Str("name", cmdDefinition.Name).Str("key", key).Msg("Old command ID not found in redis")
+			}
+		} else {
+			err = session.ApplicationCommandDelete(session.State.User.ID, "", oldCommandId)
+			if err != nil {
+				log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot unregister old command")
+			} else {
+				log.Info().Str("name", cmdDefinition.Name).Str("key", key).Msg("Unregistered old command")
+			}
+		}
+
 		// Register the command
 		cmdInstance, err := session.ApplicationCommandCreate(session.State.User.ID, "", cmdDefinition)
 		if err != nil {
 			log.Panic().Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot register command")
 		}
-		err = kv.Set(ctx, key, hash, 0).Err()
-		if err != nil {
-			log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot set command hash in redis")
-		}
 		registeredCommands[i] = cmdInstance
 		log.Info().Str("name", cmdDefinition.Name).Str("key", key).Msg("Registered command")
+
+		// Store the hash for the new registered command
+		err = kv.Set(ctx, key, hash, 0).Err()
+		if err != nil {
+			// No panic - the command is still registered, hash is only to prevent unnecessary registrations
+			log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot set command hash in redis")
+			continue
+		}
+
+		// Store the command ID to unregister later
+		err = kv.Set(ctx, fmt.Sprintf("%s:command:%s:id", environment, cmdDefinition.Name), cmdInstance.ID, 0).Err()
+		if err != nil {
+			// No
+			log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot set command ID in redis")
+		}
 	}
 
 	// Cloes session, ensure http client closes idle connections
