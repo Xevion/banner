@@ -85,7 +85,14 @@ func init() {
 
 func main() {
 	// Setup redis
-	options, err := redis.ParseURL(os.Getenv("REDIS_URL"))
+	redisUrl := os.Getenv("REDIS_URL")
+	if redisUrl == "" {
+		redisUrl = os.Getenv("PRIVATE_REDIS_URL")
+		if redisUrl == "" {
+			log.Fatal().Msg("REDIS_URL is not set (public or private)")
+		}
+	}
+	options, err := redis.ParseURL(redisUrl)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Cannot parse redis url")
 	}
