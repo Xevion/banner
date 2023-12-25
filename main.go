@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
+	"encoding/base64"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
 	"os/signal"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/cespare/xxhash/v2"
+	"github.com/cnf/structhash"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
@@ -20,6 +25,7 @@ var (
 	baseURL        string
 	client         http.Client
 	kv             *redis.Client
+	ctx            context.Context
 	cookies        http.CookieJar
 	session        *discordgo.Session
 	RemoveCommands = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
@@ -50,6 +56,8 @@ func (l logOut) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 }
 
 func init() {
+	ctx = context.Background()
+
 	// Try to grab the environment variable, or default to development
 	env := os.Getenv("ENVIRONMENT")
 	if env == "" {
@@ -82,6 +90,13 @@ func main() {
 		log.Fatal().Err(err).Msg("Cannot parse redis url")
 	}
 	kv = redis.NewClient(options)
+
+	// Test the redis instance
+	pong, err := kv.Ping(ctx).Result()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot connect to redis")
+	}
+	log.Debug().Str("ping", pong).Msg("Redis connection successful")
 
 	// Create cookie jar
 	cookies, err = cookiejar.New(nil)
@@ -128,14 +143,39 @@ func main() {
 	// Register commands
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commandDefinitions))
 	for i, cmdDefinition := range commandDefinitions {
-		cmdInstance, err := session.ApplicationCommandCreate(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), cmdDefinition)
+		// Compare the hash to the hash stored in redis
+		hash := xxhash.Sum64(structhash.Dump(cmdDefinition, 1))
+		key := fmt.Sprintf("command:%s:xxhash", cmdDefinition.Name)
+		keyB64 := base64.StdEncoding.EncodeToString([]byte(key))
+		storedHash, err := kv.Get(ctx, key).Uint64()
 		if err != nil {
-			log.Panic().Err(err).Str("name", cmdDefinition.Name).Msgf("Cannot register command")
+			if err != redis.Nil {
+				log.Err(err).Msg("Cannot get command hash from redis")
+			} else {
+				log.Debug().Str("command", cmdDefinition.Name).Str("key", keyB64).Msg("Command hash not found in redis")
+			}
+		}
+
+		// If the hash is the same, skip registering the command
+		if hash == storedHash {
+			log.Debug().Str("command", cmdDefinition.Name).Str("key", keyB64).Msg("Command hash matches, skipping registration")
+			continue
+		}
+
+		// Register the command
+		cmdInstance, err := session.ApplicationCommandCreate(session.State.User.ID, "", cmdDefinition)
+		if err != nil {
+			log.Panic().Err(err).Str("name", cmdDefinition.Name).Str("key", keyB64).Msg("Cannot register command")
+		}
+		err = kv.Set(ctx, key, hash, 0).Err()
+		if err != nil {
+			log.Err(err).Str("name", cmdDefinition.Name).Str("key", keyB64).Msg("Cannot set command hash in redis")
 		}
 		registeredCommands[i] = cmdInstance
+		log.Info().Str("name", cmdDefinition.Name).Str("key", keyB64).Msg("Registered command")
 	}
 
-	// Cloes session, ensure
+	// Cloes session, ensure http client closes idle connections
 	defer session.Close()
 	defer client.CloseIdleConnections()
 
@@ -143,15 +183,6 @@ func main() {
 	signal.Notify(stop, os.Interrupt)
 	log.Info().Msg("Press Ctrl+C to exit")
 	<-stop
-
-	if *RemoveCommands {
-		for _, cmd := range registeredCommands {
-			err := session.ApplicationCommandDelete(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), cmd.ID)
-			if err != nil {
-				log.Err(err).Str("command", cmd.Name)
-			}
-		}
-	}
 
 	log.Warn().Msg("Gracefully shutting down")
 
