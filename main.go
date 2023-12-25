@@ -8,6 +8,7 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -208,7 +209,11 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
-	log.Info().Msg("Press Ctrl+C to exit")
+	signal.Notify(stop, syscall.SIGTERM)
+
+	if isDevelopment {
+		log.Info().Msg("Press Ctrl+C to exit")
+	}
 	<-stop
 
 	log.Warn().Msg("Gracefully shutting down")
