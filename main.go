@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"net/http"
@@ -170,36 +169,37 @@ func main() {
 	// Register commands
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commandDefinitions))
 	for i, cmdDefinition := range commandDefinitions {
-		// Compare the hash to the hash stored in redis
+		// Create a hash of the command definition
 		hash := xxhash.Sum64(structhash.Dump(cmdDefinition, 1))
 		key := fmt.Sprintf("command:%s:xxhash", cmdDefinition.Name)
-		keyB64 := base64.StdEncoding.EncodeToString([]byte(key))
+
+		// Get the stored hash
 		storedHash, err := kv.Get(ctx, key).Uint64()
 		if err != nil {
 			if err != redis.Nil {
 				log.Err(err).Msg("Cannot get command hash from redis")
 			} else {
-				log.Debug().Str("command", cmdDefinition.Name).Str("key", keyB64).Msg("Command hash not found in redis")
+				log.Debug().Str("command", cmdDefinition.Name).Str("key", key).Msg("Command hash not found in redis")
 			}
 		}
 
 		// If the hash is the same, skip registering the command
 		if hash == storedHash {
-			log.Debug().Str("command", cmdDefinition.Name).Str("key", keyB64).Msg("Command hash matches, skipping registration")
+			log.Debug().Str("command", cmdDefinition.Name).Str("key", key).Msg("Command hash matches, skipping registration")
 			continue
 		}
 
 		// Register the command
 		cmdInstance, err := session.ApplicationCommandCreate(session.State.User.ID, "", cmdDefinition)
 		if err != nil {
-			log.Panic().Err(err).Str("name", cmdDefinition.Name).Str("key", keyB64).Msg("Cannot register command")
+			log.Panic().Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot register command")
 		}
 		err = kv.Set(ctx, key, hash, 0).Err()
 		if err != nil {
-			log.Err(err).Str("name", cmdDefinition.Name).Str("key", keyB64).Msg("Cannot set command hash in redis")
+			log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot set command hash in redis")
 		}
 		registeredCommands[i] = cmdInstance
-		log.Info().Str("name", cmdDefinition.Name).Str("key", keyB64).Msg("Registered command")
+		log.Info().Str("name", cmdDefinition.Name).Str("key", key).Msg("Registered command")
 	}
 
 	// Cloes session, ensure http client closes idle connections
