@@ -35,10 +35,11 @@ func init() {
 	ctx = context.Background()
 
 	// Try to grab the environment variable, or default to development
-	environment := GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
+	environment = GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
 	if environment == "" {
 		environment = "development"
 	}
+	log.Debug().Str("environment", environment).Msg("")
 
 	// Use the custom console writer if we're in development
 	isDevelopment = environment == "development"
@@ -160,23 +161,28 @@ func main() {
 
 		// If the hash is the same, skip registering the command
 		if hash == storedHash {
-			log.Debug().Str("command", cmdDefinition.Name).Str("key", key).Msg("Command hash matches, skipping registration")
+			log.Debug().Str("command", cmdDefinition.Name).Str("key", key).Uint64("hash", hash).Msg("Command hash matches, skipping registration")
 			continue
 		}
+		log.Info().Str("command", cmdDefinition.Name).Str("key", key).Uint64("hash", hash).Uint64("storedHash", storedHash).Msg("Command hash mismatch, registering command")
 
-		// Unregister the old command
+		// Unregister the old command first (retrieve the ID from redis)
 		oldCommandId, err := kv.Get(ctx, fmt.Sprintf("%s:command:%s:id", environment, cmdDefinition.Name)).Result()
 		if err != nil {
 			if err != redis.Nil {
-				// It's an unlikely case, but if required, we could get the old command ID from discord to unregister it.
-				log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot get old command ID from redis")
+				// Not really sure what to do here, something failed with redis. Best to just keep the old commad in place.
+				log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot get old command ID from redis (skipping registration/deletion)")
+				continue
 			} else {
+				// It's an unlikely case, but if required, we could get the old command ID from discord to unregisstter it.
 				log.Debug().Str("name", cmdDefinition.Name).Str("key", key).Msg("Old command ID not found in redis")
 			}
 		} else {
 			err = session.ApplicationCommandDelete(session.State.User.ID, "", oldCommandId)
 			if err != nil {
+				// No panic - the command is probably still registered.
 				log.Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot unregister old command")
+				continue
 			} else {
 				log.Info().Str("name", cmdDefinition.Name).Str("key", key).Msg("Unregistered old command")
 			}
