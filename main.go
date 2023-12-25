@@ -9,6 +9,7 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/cespare/xxhash/v2"
@@ -26,6 +27,7 @@ var (
 	client         http.Client
 	kv             *redis.Client
 	ctx            context.Context
+	isDevelopment  bool
 	cookies        http.CookieJar
 	session        *discordgo.Session
 	RemoveCommands = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
@@ -65,7 +67,7 @@ func init() {
 	}
 
 	// Use the custom console writer if we're in development
-	var isDevelopment bool = env == "development"
+	isDevelopment = env == "development"
 	if isDevelopment {
 		log.Logger = zerolog.New(logOut{}).With().Timestamp().Logger()
 	}
@@ -94,12 +96,34 @@ func main() {
 	}
 	kv = redis.NewClient(options)
 
-	// Test the redis instance
-	pong, err := kv.Ping(ctx).Result()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Cannot connect to redis")
+	// Test the redis instance, try to ping every 2 seconds 5 times, otherwise panic
+	var lastPingErr error
+	pingCount := 0
+	totalPings := 5
+
+	// Wait for private networking to kick in (production only)
+	if !isDevelopment {
+		time.Sleep(150 * time.Millisecond)
 	}
-	log.Debug().Str("ping", pong).Msg("Redis connection successful")
+
+	for {
+		pingCount++
+		if pingCount > totalPings {
+			log.Fatal().Err(lastPingErr).Msg("Reached ping limit while trying to connect")
+		}
+
+		pong, err := kv.Ping(ctx).Result()
+		if err != nil {
+			lastPingErr = err
+			log.Warn().Err(err).Int("pings", pingCount).Int("remaining", totalPings-pingCount).Msg("Cannot ping redis")
+			time.Sleep(2 * time.Second)
+
+			continue
+		}
+
+		log.Debug().Str("ping", pong).Msg("Redis connection successful")
+		break
+	}
 
 	// Create cookie jar
 	cookies, err = cookiejar.New(nil)
