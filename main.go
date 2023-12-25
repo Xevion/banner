@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 )
 
 var (
@@ -123,7 +124,12 @@ func main() {
 	})
 
 	// Register commands with discord
-	log.Info().Int("count", len(commandDefinitions)).Msg("Registering commands")
+	arr := zerolog.Arr()
+	lo.ForEach(commandDefinitions, func(cmd *discordgo.ApplicationCommand, _ int) {
+		arr.Str(cmd.Name)
+	})
+	log.Info().Array("commands", zerolog.Arr()).Msg("Registering commands")
+
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commandDefinitions))
 	for i, v := range commandDefinitions {
 		cmd, err := session.ApplicationCommandCreate(session.State.User.ID, os.Getenv("BOT_TARGET_GUILD"), v)
