@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
@@ -26,10 +27,17 @@ var (
 	isDevelopment bool
 	baseURL       string // Base URL for all requests to the banner system
 	environment   string
+	CentralTime   *time.Location
 )
 
 func init() {
 	ctx = context.Background()
+
+	var err error
+	CentralTime, err = time.LoadLocation("America/Chicago")
+	if err != nil {
+		panic(err)
+	}
 
 	// Set zerolog's timestamp function to use the central timezone
 	zerolog.TimestampFunc = func() time.Time {

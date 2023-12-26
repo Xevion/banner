@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-	_ "time/tzdata"
 
 	"github.com/rs/zerolog/log"
 )
@@ -27,16 +26,9 @@ type Term struct {
 
 var (
 	SpringRange, SummerRange, FallRange YearDayRange
-	CentralTime                         *time.Location
 )
 
 func init() {
-	var err error
-	CentralTime, err = time.LoadLocation("America/Chicago")
-	if err != nil {
-		panic(err)
-	}
-
 	SpringRange, SummerRange, FallRange = GetYearDayRange(uint16(time.Now().Year()))
 
 	currentTerm, nextTerm := GetCurrentTerm(time.Now())
