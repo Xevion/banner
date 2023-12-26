@@ -104,8 +104,8 @@ func Nonce() string {
 	return strconv.Itoa(int(time.Now().UnixMilli()))
 }
 
-// doRequest performs & logs the request, logging and returning the response
-func doRequest(req *http.Request) (*http.Response, error) {
+// DoRequest performs & logs the request, logging and returning the response
+func DoRequest(req *http.Request) (*http.Response, error) {
 	log.Debug().Str("method", strings.TrimRight(req.Method, " ")).Str("url", req.URL.String()).Str("query", req.URL.RawQuery).Str("content-type", req.Header.Get("Content-Type")).Msg("Request")
 	res, err := client.Do(req)
 	if err != nil {
