@@ -140,9 +140,9 @@ func main() {
 	log.Info().Array("commands", arr).Msg("Registering commands")
 
 	// Register commands
-	commands, err := Register()
+	Register()
 
-	terms, _ := GetTerms("", 1, 25)
+	// terms, _ := GetTerms("", 1, 25)
 
 	// Cloes session, ensure http client closes idle connections
 	defer session.Close()
