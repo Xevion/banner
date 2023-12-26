@@ -23,7 +23,7 @@ type Term struct {
 }
 
 var (
-	SpringRange, SummerRange, FallRange = GetYearDayRange(uint16(time.Now().Year()))
+	SpringRange, SummerRange, FallRange YearDayRange
 	CentralTime                         *time.Location
 )
 
@@ -33,6 +33,8 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
+	SpringRange, SummerRange, FallRange = GetYearDayRange(uint16(time.Now().Year()))
 }
 
 type YearDayRange struct {
