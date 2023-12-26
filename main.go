@@ -43,7 +43,7 @@ func init() {
 	// 	log.Logger = zerolog.New(logSplitter{}).With().Timestamp().Logger()
 	// }
 	hooked := log.Hook(JsonColorizerHook{})
-	log.Logger = zerolog.New(hooked).With().Timestamp().Logger()
+	log.Logger = zerolog.New(hooked).With().Logger()
 	log.Debug().Str("environment", environment).Msg("Environment Loaded")
 
 	// Set discordgo's logger to use zerolog
