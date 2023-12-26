@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -14,11 +15,14 @@ var (
 	sessionID string = RandomString(5) + Nonce()
 )
 
-type Term struct {
+// BannerTerm represents a term in the Banner system
+type BannerTerm struct {
+	Code        string `json:"code"`
+	Description string `json:"description"`
 }
 
 // GET /classSearch/getTerms?searchTerm=&offset=1&max=10&_=1702069154094
-func GetTerms(search string, offset int, max int) ([]Term, error) {
+func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 	req := BuildRequest("GET", "/classSearch/getTerms", map[string]string{
 		"searchTerm": search,
 		"offset":     strconv.Itoa(offset),
@@ -26,20 +30,32 @@ func GetTerms(search string, offset int, max int) ([]Term, error) {
 		"_":          Nonce(),
 	})
 
-	res, err := doRequest(req)
+	res, err := DoRequest(req)
 	if err != nil {
 		return nil, err
 	}
 
-	// print the response body
-	// _body, _ := io.ReadAll(res.Body)
-
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
-		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+	if contentType := res.Header.Get("Content-Type"); !strings.Contains(contentType, JsonContentType) {
+		return nil, &UnexpectedContentTypeError{
+			Expected: JsonContentType,
+			Actual:   contentType,
+		}
 	}
 
-	return make([]Term, 0, 0), nil
+	// print the response body
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	log.Printf("Response: %s", body)
+
+	terms := make([]BannerTerm, 0, 10)
+	json.Unmarshal(body, &terms)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return terms, nil
 }
 
 type TermParts struct {
@@ -56,7 +72,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]TermParts, 
 		"_":               Nonce(),
 	})
 
-	res, err := client.Do(req)
+	res, err := DoRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -83,9 +99,8 @@ func GetInstructor(search string, term int, offset int, max int) []Instructor {
 		"_":               Nonce(),
 	})
 
-	res, err := client.Do(req)
+	res, err := DoRequest(req)
 	if err != nil {
-		log.Printf("ERR %s", err)
 		return nil
 	}
 
@@ -107,9 +122,9 @@ func GetClassDetails(term int, crn int) *ClassDetails {
 		"first":                 "first", // TODO: What is this?
 	})
 	req := BuildRequestWithBody("GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
-	res, err := client.Do(req)
+
+	res, err := DoRequest(req)
 	if err != nil {
-		log.Printf("ERR %s", err)
 		return nil
 	}
 
@@ -137,9 +152,8 @@ func Search(subject string, keyword string, term string, startDate time.Time, en
 		"sortDirection":   "asc",
 	})
 
-	res, err := client.Do(req)
+	res, err := DoRequest(req)
 	if err != nil {
-		log.Printf("ERR %s", err)
 		return nil
 	}
 
@@ -165,9 +179,8 @@ func GetSubjects(search string, term int, offset int, max int) []Subject {
 		"_":               Nonce(),
 	})
 
-	res, err := client.Do(req)
+	res, err := DoRequest(req)
 	if err != nil {
-		log.Printf("ERR %s", err)
 		return nil
 	}
 
@@ -193,7 +206,7 @@ func GetCampuses(search string, term int, offset int, max int) []Campus {
 		"_":               Nonce(),
 	})
 
-	res, err := client.Do(req)
+	res, err := DoRequest(req)
 	if err != nil {
 		log.Printf("ERR %s", err)
 		return nil
@@ -221,7 +234,7 @@ func GetInstructionalMethods(search string, term int, offset int, max int) ([]In
 		"_":               Nonce(),
 	})
 
-	res, err := client.Do(req)
+	res, err := DoRequest(req)
 	if err != nil {
 		log.Printf("ERR %s", err)
 		return nil, err
@@ -244,8 +257,7 @@ func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
 		"courseReferenceNumber": strconv.Itoa(crn),
 	})
 
-	log.Printf("GET %s", req.URL.String())
-	res, err := client.Do(req)
+	res, err := DoRequest(req)
 	if err != nil {
 		return nil, err
 	}

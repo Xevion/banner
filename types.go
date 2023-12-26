@@ -2,6 +2,8 @@ package main
 
 import "time"
 
+const JsonContentType = "application/json"
+
 type MeetingTimeFaculty struct {
 	bannerId    int
 	category    string
