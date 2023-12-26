@@ -22,6 +22,7 @@ func Register() ([]*discordgo.ApplicationCommand, error) {
 	if err != nil {
 		log.Panic().Err(err).Msg("Cannot get commands")
 	}
+	log.Debug().Int("registered", len(currentComands)).Int("definitions", len(commandDefinitions)).Msg("Commands Counted")
 	if len(currentComands) != len(commandDefinitions) {
 		log.Info().Int("registered", len(currentComands)).Int("definitions", len(commandDefinitions)).Msg("Number of registered commands does not match number of command definitions, registering all commands")
 		return SimpleRegister(currentComands)
