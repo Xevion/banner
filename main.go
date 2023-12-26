@@ -39,12 +39,13 @@ func init() {
 
 	// Use the custom console writer if we're in development
 	isDevelopment = environment == "development"
-	// if isDevelopment {
-	// 	log.Logger = zerolog.New(logSplitter{}).With().Timestamp().Logger()
-	// }
-	hooked := log.Hook(JsonColorizerHook{})
-	log.Logger = zerolog.New(hooked).With().Logger()
-	log.Debug().Str("environment", environment).Msg("Environment Loaded")
+	if isDevelopment {
+		log.Logger = zerolog.New(logSplitter{}).With().Timestamp().Logger()
+	} else {
+		hooked := log.Hook(JsonColorizerHook{})
+		log.Logger = zerolog.New(hooked).With().Timestamp().Logger()
+		log.Debug().Str("environment", environment).Msg("Environment Loaded")
+	}
 
 	// Set discordgo's logger to use zerolog
 	discordgo.Logger = DiscordGoLogger

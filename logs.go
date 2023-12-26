@@ -13,7 +13,7 @@ var (
 	standardOut = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: timeFormat}
 	errorOut    = zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: timeFormat}
 	buffer      = new(bytes.Buffer)
-	bufferOut   = zerolog.ConsoleWriter{Out: buffer, TimeFormat: timeFormat}
+	bufferOut   = zerolog.ConsoleWriter{Out: buffer, TimeFormat: ""}
 )
 
 // logSplitter implements zerolog.LevelWriter
