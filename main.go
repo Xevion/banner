@@ -31,6 +31,11 @@ var (
 func init() {
 	ctx = context.Background()
 
+	// Set zerolog's timestamp function to use the central timezone
+	zerolog.TimestampFunc = func() time.Time {
+		return time.Now().In(CentralTime)
+	}
+
 	// Try to grab the environment variable, or default to development
 	environment = GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
 	if environment == "" {
