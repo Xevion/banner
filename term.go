@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	_ "time/tzdata"
 )
 
 // Term selection should yield smart results based on the current time, as well as the input provided.
