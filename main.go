@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -154,6 +156,19 @@ func main() {
 		arr.Str(cmd.Name)
 	})
 	log.Info().Array("commands", arr).Msg("Registering commands")
+
+	// Unregister commands from server
+	guildId, _ := strconv.ParseInt(os.Getenv("BOT_TARGET_GUILD"), 10, 64)
+	commands, err := session.ApplicationCommands(session.State.User.ID, fmt.Sprint(guildId))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot get commands")
+	}
+	for _, cmd := range commands {
+		err := session.ApplicationCommandDelete(session.State.User.ID, fmt.Sprint(guildId), cmd.ID)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Cannot delete command")
+		}
+	}
 
 	// Register commands
 	Register()
