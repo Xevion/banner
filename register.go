@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
@@ -76,7 +77,7 @@ func Register() ([]*discordgo.ApplicationCommand, error) {
 		// Register the command
 		cmdInstance, err := session.ApplicationCommandCreate(session.State.User.ID, "", cmdDefinition)
 		if err != nil {
-			log.Panic().Err(err).Str("name", cmdDefinition.Name).Str("key", key).Msg("Cannot register command")
+			return nil, errors.Join(err, fmt.Errorf("cannot register command %s", cmdDefinition.Name))
 		}
 		registeredCommands[i] = cmdInstance
 		log.Info().Str("name", cmdDefinition.Name).Str("key", key).Msg("Registered command")
