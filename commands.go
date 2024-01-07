@@ -75,6 +75,9 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		})
 		return
 	}
+
+	duration := courseMeetingTime.timeEnd.Sub(courseMeetingTime.timeStart)
+
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -95,7 +98,7 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 						},
 						{
 							Name:  "Start/End Time",
-							Value: fmt.Sprintf("%s - %s", courseMeetingTime.timeStart.String(), courseMeetingTime.timeEnd.String()),
+							Value: fmt.Sprintf("%s - %s (%d min)", courseMeetingTime.timeStart.String(), courseMeetingTime.timeEnd.String(), int64(duration.Minutes())),
 						},
 						{
 							Name:  "Days of Week",
