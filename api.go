@@ -11,9 +11,7 @@ import (
 	log "github.com/rs/zerolog/log"
 )
 
-var (
-	sessionID string = RandomString(5) + Nonce()
-)
+var sessionID string = RandomString(5) + Nonce()
 
 // BannerTerm represents a term in the Banner system
 type BannerTerm struct {
@@ -46,7 +44,6 @@ func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 	// print the response body
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
-	log.Printf("Response: %s", body)
 
 	terms := make([]BannerTerm, 0, 10)
 	json.Unmarshal(body, &terms)
@@ -58,11 +55,8 @@ func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 	return terms, nil
 }
 
-type TermParts struct {
-}
-
 // GET /classSearch/get_partOfTerm?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070282288
-func GetPartOfTerms(search string, term int, offset int, max int) ([]TermParts, error) {
+func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm, error) {
 	req := BuildRequest("GET", "/classSearch/get_partOfTerm", map[string]string{
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
@@ -82,11 +76,20 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]TermParts, 
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
-	return make([]TermParts, 0), nil
+	// print the response body
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	terms := make([]BannerTerm, 0, 10)
+	err = json.Unmarshal(body, &terms)
+	if err != nil {
+		return nil, err
+	}
+
+	return terms, nil
 }
 
-type Instructor struct {
-}
+type Instructor struct{}
 
 // GET /classSearch/get_instructor?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1701951338584
 func GetInstructor(search string, term int, offset int, max int) []Instructor {
@@ -112,8 +115,7 @@ func GetInstructor(search string, term int, offset int, max int) []Instructor {
 	return make([]Instructor, 0)
 }
 
-type ClassDetails struct {
-}
+type ClassDetails struct{}
 
 func GetClassDetails(term int, crn int) *ClassDetails {
 	body, _ := json.Marshal(map[string]string{
@@ -136,21 +138,56 @@ func GetClassDetails(term int, crn int) *ClassDetails {
 	return &ClassDetails{}
 }
 
+type SearchResult struct {
+	Success             bool   `json:"success"`
+	TotalCount          int    `json:"totalCount"`
+	PageOffset          int    `json:"pageOffset"`
+	PageMaxSize         int    `json:"pageMaxSize"`
+	PathMode            string `json:"pathMode"`
+	SearchResultsConfig []struct {
+		Config  string `json:"config"`
+		Display string `json:"display"`
+	} `json:"searchResultsConfig"`
+	Data []struct {
+		Id                      int     `json:"id"`
+		Term                    string  `json:"term"`
+		TermDesc                string  `json:"termDesc"`
+		CourseReferenceNumber   string  `json:"courseReferenceNumber"`
+		PartOfTerm              string  `json:"partOfTerm"`
+		CourseNumber            string  `json:"courseNumber"`
+		Subject                 string  `json:"subject"`
+		SubjectDescription      string  `json:"subjectDescription"`
+		SequenceNumber          string  `json:"sequenceNumber"`
+		CampusDescription       string  `json:"campusDescription"`
+		ScheduleTypeDescription string  `json:"scheduleTypeDescription"`
+		CourseTitle             string  `json:"courseTitle"`
+		CreditHours             int     `json:"creditHours"`
+		MaximumEnrollment       int     `json:"maximumEnrollment"`
+		Enrollment              int     `json:"enrollment"`
+		SeatsAvailable          int     `json:"seatsAvailable"`
+		WaitCapacity            int     `json:"waitCapacity"`
+		WaitCount               int     `json:"waitCount"`
+		CrossList               *string `json:"crossList"`
+		CrossListCapacity       *int    `json:"crossListCapacity"`
+	} `json:"data"`
+}
+
 // GET /searchResults/searchResults?txt_instructor=77521&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
 // GET /searchResults/searchResults?txt_subject=CS&txt_keywordlike=Application&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
-func Search(subject string, keyword string, term string, startDate time.Time, endDate time.Time, offset int, max int, sort string, sortDescending bool) []string {
-	req := BuildRequest("GET", "/classSearch/get_subject", map[string]string{
-		"txt_subject":     subject,
-		"txt_keywordlike": keyword,
-		"txt_term":        term,
-		"startDatepicker": "",
-		"endDatepicker":   "",
-		"uniqueSessionId": sessionID,
-		"pageOffset":      strconv.Itoa(offset),
-		"pageMaxSize":     strconv.Itoa(max),
-		"sortColumn":      "subjectDescription",
-		"sortDirection":   "asc",
-	})
+func Search(query Query, offset int, max int, sort string, sortDescending bool) *SearchResult {
+	params := query.Paramify()
+
+	params["txt_term"] = "202420" // TODO: Make this automatic but dynamically specifiable
+	params["uniqueSessionId"] = sessionID
+	params["pageOffset"] = strconv.Itoa(offset)
+	params["pageMaxSize"] = strconv.Itoa(max)
+	params["sortColumn"] = sort
+	params["sortDirection"] = "asc"
+	// These dates are not available for usage anywhere in the UI, but are included in every query
+	params["startDatepicker"] = ""
+	params["endDatepicker"] = ""
+
+	req := BuildRequest("GET", "/classSearch/get_subject", params)
 
 	res, err := DoRequest(req)
 	if err != nil {
@@ -162,11 +199,19 @@ func Search(subject string, keyword string, term string, startDate time.Time, en
 		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
-	return make([]string, 0)
+	body, _ := io.ReadAll(res.Body)
+
+	var result SearchResult
+	err = json.Unmarshal(body, &result)
+
+	if err != nil {
+		return nil
+	}
+
+	return &result
 }
 
-type Subject struct {
-}
+type Subject struct{}
 
 // GET /classSearch/get_subject?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702069787420
 func GetSubjects(search string, term int, offset int, max int) []Subject {
@@ -192,8 +237,7 @@ func GetSubjects(search string, term int, offset int, max int) []Subject {
 	return make([]Subject, 0)
 }
 
-type Campus struct {
-}
+type Campus struct{}
 
 // /classSearch/get_campus?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070341071
 func GetCampuses(search string, term int, offset int, max int) []Campus {
@@ -220,8 +264,7 @@ func GetCampuses(search string, term int, offset int, max int) []Campus {
 	return make([]Campus, 0)
 }
 
-type InstructionalMethod struct {
-}
+type InstructionalMethod struct{}
 
 // / classSearch/get_instructionalMethod?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070364082
 func GetInstructionalMethods(search string, term int, offset int, max int) ([]InstructionalMethod, error) {
