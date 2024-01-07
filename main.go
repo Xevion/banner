@@ -33,6 +33,11 @@ var (
 )
 
 func init() {
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Debug().Err(err).Msg("Error loading .env file")
+	}
+
 	ctx = context.Background()
 
 	var err error
@@ -65,10 +70,6 @@ func init() {
 	// Set discordgo's logger to use zerolog
 	discordgo.Logger = DiscordGoLogger
 
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Debug().Err(err).Msg("Error loading .env file")
-	}
 	baseURL = os.Getenv("BANNER_BASE_URL")
 }
 
