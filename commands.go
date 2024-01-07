@@ -10,11 +10,68 @@ import (
 var (
 	commandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition}
 	commandHandlers    = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"time": TimeCommandHandler,
-		"term": TermCommandHandler,
+		"time":   TimeCommandHandler,
+		"term":   TermCommandHandler,
+		"search": SearchCommandHandler,
 	}
 	minLength = 0
 )
+
+var SearchCommandDefinition = &discordgo.ApplicationCommand{
+	Name:        "search",
+	Description: "Search for a course",
+	Options: []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			MinLength:   &minLength,
+			MaxLength:   8,
+			Name:        "query",
+			Description: "Search query",
+			Required:    true,
+		},
+	},
+}
+
+func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
+	query := Query{
+		Keywords: &[]string{"Computer Science"},
+	}
+	courses := Search(query, 0, 5, "", false)
+	fetch_time := time.Now()
+	fields := []*discordgo.MessageEmbedField{}
+
+	for _, course := range courses.Data {
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   "Name",
+			Value:  course.CourseTitle,
+			Inline: true,
+		}, &discordgo.MessageEmbedField{
+			Name:   "CRN",
+			Value:  "12345",
+			Inline: true,
+		}, &discordgo.MessageEmbedField{
+			Name:   "Credits",
+			Value:  "3",
+			Inline: true,
+		})
+	}
+
+	session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Footer: &discordgo.MessageEmbedFooter{
+						Text: fmt.Sprintf("Fetched at %s", fetch_time.Format("Monday, January 2, 2006 at 3:04:05PM")),
+					},
+					Description: "",
+					Fields:      fields,
+				},
+			},
+			AllowedMentions: &discordgo.MessageAllowedMentions{},
+		},
+	})
+}
 
 var TermCommandDefinition = &discordgo.ApplicationCommand{
 	Name:        "term",
@@ -52,12 +109,6 @@ var TimeCommandDefinition = &discordgo.ApplicationCommand{
 			Description: "Course Reference Number",
 			Required:    true,
 		},
-		{
-			Type:        discordgo.ApplicationCommandOptionString,
-			Name:        "term",
-			Description: "Term",
-			Required:    false,
-		},
 	},
 }
 
@@ -65,7 +116,6 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	fetch_time := time.Now()
 	crn := i.ApplicationCommandData().Options[0].IntValue()
 	courseMeetingTime, err := GetCourseMeetingTime(202420, int(crn))
-
 	if err != nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
