@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -60,12 +58,11 @@ func init() {
 	// Use the custom console writer if we're in development
 	isDevelopment = environment == "development"
 	if isDevelopment {
-		log.Logger = zerolog.New(logSplitter{}).With().Timestamp().Logger()
+		log.Logger = zerolog.New(logSplitter{std: stdConsole, err: errConsole}).With().Timestamp().Logger()
 	} else {
-		hooked := log.Hook(JsonColorizerHook{})
-		log.Logger = zerolog.New(hooked).With().Timestamp().Logger()
-		log.Debug().Str("environment", environment).Msg("Environment Loaded")
+		log.Logger = zerolog.New(logSplitter{std: os.Stdout, err: os.Stderr}).With().Timestamp().Logger()
 	}
+	log.Debug().Str("environment", environment).Msg("Loggers Setup")
 
 	// Set discordgo's logger to use zerolog
 	discordgo.Logger = DiscordGoLogger
