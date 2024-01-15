@@ -15,6 +15,7 @@ import (
 	log "github.com/rs/zerolog/log"
 )
 
+// BuildRequestWithBody builds a request with the given method, path, parameters, and body
 func BuildRequestWithBody(method string, path string, params map[string]string, body io.Reader) *http.Request {
 	// Builds a URL for the given path and parameters
 	url := baseURL + path
@@ -37,10 +38,12 @@ func BuildRequestWithBody(method string, path string, params map[string]string, 
 	return request
 }
 
+// BuildRequest builds a request with the given method, path, and parameters and an empty body
 func BuildRequest(method string, path string, params map[string]string) *http.Request {
 	return BuildRequestWithBody(method, path, params, nil)
 }
 
+// AddUserAgent adds a false but consistent user agent to the request
 func AddUserAgent(req *http.Request) {
 	req.Header.Add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36")
 }
@@ -100,6 +103,7 @@ func DiscordGoLogger(msgL, caller int, format string, a ...interface{}) {
 }
 
 // Nonce returns a string made up of the current time in milliseconds, Unix epoch/UTC
+// This is typically used as a query parameter to prevent request caching in the browser.
 func Nonce() string {
 	return strconv.Itoa(int(time.Now().UnixMilli()))
 }
@@ -111,7 +115,13 @@ func DoRequest(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		log.Err(err).Str("method", req.Method).Msg("Request Failed")
 	} else {
-		log.Debug().Int("status", res.StatusCode).Int64("content-length", res.ContentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
+		// Get the content length
+		contentLength := res.ContentLength
+		if contentLength == -1 {
+			contentLength, _ = strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
+		}
+
+		log.Debug().Int("status", res.StatusCode).Int64("content-length", contentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
 	}
 	return res, err
 }
@@ -136,7 +146,7 @@ func WeekdaysToString(days map[time.Weekday]bool) string {
 	}
 
 	str := ""
-	
+
 	if days[time.Monday] {
 		str += "M"
 	}
@@ -202,3 +212,4 @@ func GetFirstEnv(key ...string) string {
 	}
 	return ""
 }
+
