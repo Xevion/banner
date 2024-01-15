@@ -124,8 +124,19 @@ func Plural(n int) string {
 }
 
 func WeekdaysToString(days map[time.Weekday]bool) string {
-	str := ""
+	// If no days are present
+	numDays := len(days)
+	if numDays == 0 {
+		return "None"
+	}
 
+	// If all days are present
+	if numDays == 7 {
+		return "Everyday"
+	}
+
+	str := ""
+	
 	if days[time.Monday] {
 		str += "M"
 	}
