@@ -8,11 +8,11 @@ import (
 )
 
 var (
-	commandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition}
+	commandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition, SearchCommandDefinition}
 	commandHandlers    = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"time":   TimeCommandHandler,
-		"term":   TermCommandHandler,
-		"search": SearchCommandHandler,
+		TimeCommandDefinition.Name:   TimeCommandHandler,
+		TermCommandDefinition.Name:   TermCommandHandler,
+		SearchCommandDefinition.Name: SearchCommandHandler,
 	}
 	minLength = 0
 )
