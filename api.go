@@ -174,7 +174,7 @@ type SearchResult struct {
 
 // GET /searchResults/searchResults?txt_instructor=77521&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
 // GET /searchResults/searchResults?txt_subject=CS&txt_keywordlike=Application&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
-func Search(query Query, offset int, max int, sort string, sortDescending bool) *SearchResult {
+func Search(query Query, offset int, max int, sort string, sortDescending bool) (*SearchResult, error) {
 	params := query.Paramify()
 
 	params["txt_term"] = "202420" // TODO: Make this automatic but dynamically specifiable
@@ -187,16 +187,16 @@ func Search(query Query, offset int, max int, sort string, sortDescending bool) 
 	params["startDatepicker"] = ""
 	params["endDatepicker"] = ""
 
-	req := BuildRequest("GET", "/classSearch/get_subject", params)
+	req := BuildRequest("GET", "/searchResults/searchResults", params)
 
 	res, err := DoRequest(req)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Error().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	body, _ := io.ReadAll(res.Body)
@@ -205,10 +205,10 @@ func Search(query Query, offset int, max int, sort string, sortDescending bool) 
 	err = json.Unmarshal(body, &result)
 
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	return &result
+	return &result, nil
 }
 
 type Subject struct{}
