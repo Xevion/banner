@@ -34,7 +34,7 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 
 func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 	query := Query{
-		Keywords: &[]string{"Computer Science"},
+		keywords: &[]string{"Computer Science"},
 	}
 	courses := Search(query, 0, 5, "", false)
 	fetch_time := time.Now()

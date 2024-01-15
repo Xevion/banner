@@ -9,19 +9,88 @@ import (
 )
 
 type Query struct {
-	Subject             *string
-	Title               *string
-	Keywords            *[]string
-	OpenOnly            *bool
-	TermPart            *[]string // e.g. [1, B6, 8, J]
-	Campus              *[]string // e.g. [9, 1DT, 1LR]
-	InstructionalMethod *[]string // e.g. [HB]
-	Attributes          *[]string // e.g. [060, 010]
-	Instructor          *[]uint64 // e.g. [27957, 27961]
-	StartTime           *time.Duration
-	EndTime             *time.Duration
-	CreditHours         *Range
-	CourseNumberRange   *Range
+	subject             *string
+	title               *string
+	keywords            *[]string
+	openOnly            *bool
+	termPart            *[]string // e.g. [1, B6, 8, J]
+	campus              *[]string // e.g. [9, 1DT, 1LR]
+	instructionalMethod *[]string // e.g. [HB]
+	attributes          *[]string // e.g. [060, 010]
+	instructor          *[]uint64 // e.g. [27957, 27961]
+	startTime           *time.Duration
+	endTime             *time.Duration
+	creditHours         *Range
+	courseNumberRange   *Range
+}
+
+func NewQuery() *Query {
+	return &Query{}
+}
+
+func (q *Query) Subject(subject string) *Query {
+	q.subject = &subject
+	return q
+}
+
+func (q *Query) Title(title string) *Query {
+	q.title = &title
+	return q
+}
+
+func (q *Query) Keywords(keywords []string) *Query {
+	q.keywords = &keywords
+	return q
+}
+
+func (q *Query) OpenOnly(openOnly bool) *Query {
+	q.openOnly = &openOnly
+	return q
+}
+
+func (q *Query) TermPart(termPart []string) *Query {
+	q.termPart = &termPart
+	return q
+}
+
+func (q *Query) Campus(campus []string) *Query {
+	q.campus = &campus
+	return q
+}
+
+func (q *Query) InstructionalMethod(instructionalMethod []string) *Query {
+	q.instructionalMethod = &instructionalMethod
+	return q
+}
+
+func (q *Query) Attributes(attributes []string) *Query {
+	q.attributes = &attributes
+	return q
+}
+
+func (q *Query) Instructor(instructor []uint64) *Query {
+	q.instructor = &instructor
+	return q
+}
+
+func (q *Query) StartTime(startTime time.Duration) *Query {
+	q.startTime = &startTime
+	return q
+}
+
+func (q *Query) EndTime(endTime time.Duration) *Query {
+	q.endTime = &endTime
+	return q
+}
+
+func (q *Query) CreditHours(creditHours Range) *Query {
+	q.creditHours = &creditHours
+	return q
+}
+
+func (q *Query) CourseNumberRange(courseNumberRange Range) *Query {
+	q.courseNumberRange = &courseNumberRange
+	return q
 }
 
 type Range struct {
@@ -44,7 +113,7 @@ func FormatTimeParameter(d time.Duration) (string, string, string) {
 
 		// Exceptional case: 12PM = 12, 1PM = 1, 2PM = 2
 		if hours >= 13 {
-			hourParameter = strconv.FormatInt(hours - 12, 10) // 13 - 12 = 1, 14 - 12 = 2
+			hourParameter = strconv.FormatInt(hours-12, 10) // 13 - 12 = 1, 14 - 12 = 2
 		} else {
 			hourParameter = strconv.FormatInt(hours, 10)
 		}
@@ -61,63 +130,63 @@ func FormatTimeParameter(d time.Duration) (string, string, string) {
 func (q *Query) Paramify() map[string]string {
 	params := map[string]string{}
 
-	if q.Subject != nil {
-		params["txt_subject"] = *q.Subject
+	if q.subject != nil {
+		params["txt_subject"] = *q.subject
 	}
 
-	if q.Title != nil {
+	if q.title != nil {
 		// Whitespace can prevent valid queries from succeeding
-		params["txt_title"] = strings.TrimSpace(*q.Title)
+		params["txt_title"] = strings.TrimSpace(*q.title)
 	}
 
-	if q.Keywords != nil {
-		params["txt_keyword"] = strings.Join(*q.Keywords, " ")
+	if q.keywords != nil {
+		params["txt_keyword"] = strings.Join(*q.keywords, " ")
 	}
 
-	if q.OpenOnly != nil {
+	if q.openOnly != nil {
 		params["chk_open_only"] = "true"
 	}
 
-	if q.TermPart != nil {
-		params["txt_partOfTerm"] = strings.Join(*q.TermPart, ",")
+	if q.termPart != nil {
+		params["txt_partOfTerm"] = strings.Join(*q.termPart, ",")
 	}
 
-	if q.Campus != nil {
-		params["txt_campus"] = strings.Join(*q.Campus, ",")
+	if q.campus != nil {
+		params["txt_campus"] = strings.Join(*q.campus, ",")
 	}
 
-	if q.Attributes != nil {
-		params["txt_attribute"] = strings.Join(*q.Attributes, ",")
+	if q.attributes != nil {
+		params["txt_attribute"] = strings.Join(*q.attributes, ",")
 	}
 
-	if q.Instructor != nil {
-		params["txt_instructor"] = strings.Join(lo.Map(*q.Instructor, func(i uint64, _ int) string {
+	if q.instructor != nil {
+		params["txt_instructor"] = strings.Join(lo.Map(*q.instructor, func(i uint64, _ int) string {
 			return strconv.FormatUint(i, 10)
 		}), ",")
 	}
 
-	if q.StartTime != nil {
-		hour, minute, meridiem := FormatTimeParameter(*q.StartTime)
+	if q.startTime != nil {
+		hour, minute, meridiem := FormatTimeParameter(*q.startTime)
 		params["select_start_hour"] = hour
 		params["select_start_min"] = minute
 		params["select_start_ampm"] = meridiem
 	}
 
-	if q.EndTime != nil {
-		hour, minute, meridiem := FormatTimeParameter(*q.EndTime)
+	if q.endTime != nil {
+		hour, minute, meridiem := FormatTimeParameter(*q.endTime)
 		params["select_end_hour"] = hour
 		params["select_end_min"] = minute
 		params["select_end_ampm"] = meridiem
 	}
 
-	if q.CreditHours != nil {
-		params["txt_credithourlow"] = strconv.Itoa(q.CreditHours.Low)
-		params["txt_credithourhigh"] = strconv.Itoa(q.CreditHours.High)
+	if q.creditHours != nil {
+		params["txt_credithourlow"] = strconv.Itoa(q.creditHours.Low)
+		params["txt_credithourhigh"] = strconv.Itoa(q.creditHours.High)
 	}
 
-	if q.CourseNumberRange != nil {
-		params["txt_course_number_range"] = strconv.Itoa(q.CourseNumberRange.Low)
-		params["txt_course_number_range_to"] = strconv.Itoa(q.CourseNumberRange.High)
+	if q.courseNumberRange != nil {
+		params["txt_course_number_range"] = strconv.Itoa(q.courseNumberRange.Low)
+		params["txt_course_number_range_to"] = strconv.Itoa(q.courseNumberRange.High)
 	}
 
 	return params
