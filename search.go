@@ -37,25 +37,27 @@ func FormatTimeParameter(d time.Duration) (string, string, string) {
 	hours := int64(d.Hours())
 	minutes := int64(d.Minutes()) % 60
 
-	minuteParameter = string(minutes)
+	minuteParameter = strconv.FormatInt(minutes, 10)
 
 	if hours >= 12 {
 		hourParameter = "PM"
 
 		// Exceptional case: 12PM = 12, 1PM = 1, 2PM = 2
 		if hours >= 13 {
-			hourParameter = string(hours - 12) // 13 - 12 = 1, 14 - 12 = 2
+			hourParameter = strconv.FormatInt(hours - 12, 10) // 13 - 12 = 1, 14 - 12 = 2
 		} else {
-			hourParameter = string(hours)
+			hourParameter = strconv.FormatInt(hours, 10)
 		}
 	} else {
 		meridiemParameter = "AM"
-		hourParameter = string(hours)
+		hourParameter = strconv.FormatInt(hours, 10)
 	}
 
 	return hourParameter, minuteParameter, meridiemParameter
 }
 
+// Paramify converts a Query into a map of parameters that can be used in a POST request
+// This function assumes each query key only appears once.
 func (q *Query) Paramify() map[string]string {
 	params := map[string]string{}
 
@@ -109,13 +111,13 @@ func (q *Query) Paramify() map[string]string {
 	}
 
 	if q.CreditHours != nil {
-		params["txt_credithourlow"] = string(q.CreditHours.Low)
-		params["txt_credithourhigh"] = string(q.CreditHours.High)
+		params["txt_credithourlow"] = strconv.Itoa(q.CreditHours.Low)
+		params["txt_credithourhigh"] = strconv.Itoa(q.CreditHours.High)
 	}
 
 	if q.CourseNumberRange != nil {
-		params["txt_course_number_range"] = string(q.CourseNumberRange.Low)
-		params["txt_course_number_range_to"] = string(q.CourseNumberRange.High)
+		params["txt_course_number_range"] = strconv.Itoa(q.CourseNumberRange.Low)
+		params["txt_course_number_range_to"] = strconv.Itoa(q.CourseNumberRange.High)
 	}
 
 	return params
