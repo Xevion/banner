@@ -100,7 +100,10 @@ func main() {
 			log.Fatal().Err(lastPingErr).Msg("Reached ping limit while trying to connect")
 		}
 
+		// Ping redis
 		pong, err := kv.Ping(ctx).Result()
+
+		// Failed; log error and wait 2 seconds
 		if err != nil {
 			lastPingErr = err
 			log.Warn().Err(err).Int("pings", pingCount).Int("remaining", totalPings-pingCount).Msg("Cannot ping redis")
@@ -155,8 +158,43 @@ func main() {
 	})
 	log.Info().Array("commands", arr).Msg("Registering commands")
 
+	// In development, use test server, otherwise empty (global) for command registration
+	guildTarget := ""
+	if isDevelopment {
+		guildTarget = os.Getenv("BOT_TARGET_GUILD")
+	}
+
 	// Register commands
-	Register()
+	existingCommands, err := session.ApplicationCommands(session.State.User.ID, guildTarget)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot get existing commands")
+	}
+
+	newCommands, err := session.ApplicationCommandBulkOverwrite(session.State.User.ID, guildTarget, commandDefinitions)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot register commands")
+	}
+
+	// Compare existing commands with new commands
+	for _, newCommand := range newCommands {
+		existingCommand, found := lo.Find(existingCommands, func(cmd *discordgo.ApplicationCommand) bool {
+			return cmd.Name == newCommand.Name
+		})
+
+		// New command
+		if !found {
+			log.Info().Str("commandName", newCommand.Name).Msg("Registered new command")
+			continue
+		}
+
+		// Compare versions
+		if newCommand.Version != existingCommand.Version {
+			log.Info().Str("commandName", newCommand.Name).
+				Str("oldVersion", existingCommand.Version).Str("newVersion", newCommand.Version).
+				Msg("Command Updated")
+		}
+	}
+	log.Info().Msg("Command registration complete")
 
 	// terms, _ := GetTerms("", 1, 25)
 
