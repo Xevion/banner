@@ -196,16 +196,16 @@ func main() {
 	}
 	log.Info().Msg("Command registration complete")
 
-	// terms, _ := GetTerms("", 1, 25)
-
-	// Cloes session, ensure http client closes idle connections
+	// Close session, ensure http client closes idle connections
 	defer session.Close()
 	defer client.CloseIdleConnections()
 
+	// Setup signal handler channel
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)    // Ctrl+C signal
 	signal.Notify(stop, syscall.SIGTERM) // Container stop signal
 
+	// Wait for signal (indefinite)
 	<-stop
 
 	// Defers are called after this
