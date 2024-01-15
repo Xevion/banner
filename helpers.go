@@ -5,6 +5,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -18,7 +19,7 @@ import (
 // BuildRequestWithBody builds a request with the given method, path, parameters, and body
 func BuildRequestWithBody(method string, path string, params map[string]string, body io.Reader) *http.Request {
 	// Builds a URL for the given path and parameters
-	url := baseURL + path
+	requestUrl := baseURL + path
 
 	if params != nil {
 		takenFirst := false
@@ -29,11 +30,11 @@ func BuildRequestWithBody(method string, path string, params map[string]string, 
 				takenFirst = true
 			}
 
-			url += paramChar + key + "=" + value
+			requestUrl += paramChar + url.QueryEscape(key) + "=" + url.QueryEscape(value)
 		}
 	}
 
-	request, _ := http.NewRequest(method, url, body)
+	request, _ := http.NewRequest(method, requestUrl, body)
 	AddUserAgent(request)
 	return request
 }
@@ -213,3 +214,27 @@ func GetFirstEnv(key ...string) string {
 	return ""
 }
 
+// GetPointer returns a pointer to the given value.
+// This function is useful for discordgo, which inexplicably requires pointers to integers for minLength arguments.
+func GetPointer(value int) *int {
+	return &value
+}
+
+// DumpHtml dumps a response body to a file for debugging purposes
+func DumpHtml(res *http.Response) {
+	// Use current time as filename + /dumps/ prefix
+	filename := fmt.Sprintf("dumps/%d.html", time.Now().Unix())
+	file, err := os.Create(filename)
+
+	if err != nil {
+		log.Err(err).Msg("Error creating file")
+		return
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, res.Body)
+	if err != nil {
+		log.Err(err).Msg("Error copying response body")
+		return
+	}
+}

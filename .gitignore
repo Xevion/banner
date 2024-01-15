@@ -2,3 +2,4 @@
 cover.cov
 banner
 .*.go
+dumps/
