@@ -46,12 +46,12 @@ type YearDayRange struct {
 // Summer: May 25th - August 15th
 // Fall: August 18th - December 10th
 func GetYearDayRange(year uint16) (YearDayRange, YearDayRange, YearDayRange) {
-	springStart := time.Date(int(year), time.January, 14, 0, 0, 0, 0, CentralTime).YearDay()
-	springEnd := time.Date(int(year), time.May, 1, 0, 0, 0, 0, CentralTime).YearDay()
-	summerStart := time.Date(int(year), time.May, 25, 0, 0, 0, 0, CentralTime).YearDay()
-	summerEnd := time.Date(int(year), time.August, 15, 0, 0, 0, 0, CentralTime).YearDay()
-	fallStart := time.Date(int(year), time.August, 18, 0, 0, 0, 0, CentralTime).YearDay()
-	fallEnd := time.Date(int(year), time.December, 10, 0, 0, 0, 0, CentralTime).YearDay()
+	springStart := time.Date(int(year), time.January, 14, 0, 0, 0, 0, centralTime).YearDay()
+	springEnd := time.Date(int(year), time.May, 1, 0, 0, 0, 0, centralTime).YearDay()
+	summerStart := time.Date(int(year), time.May, 25, 0, 0, 0, 0, centralTime).YearDay()
+	summerEnd := time.Date(int(year), time.August, 15, 0, 0, 0, 0, centralTime).YearDay()
+	fallStart := time.Date(int(year), time.August, 18, 0, 0, 0, 0, centralTime).YearDay()
+	fallEnd := time.Date(int(year), time.December, 10, 0, 0, 0, 0, centralTime).YearDay()
 
 	return YearDayRange{
 			Start: uint16(springStart),

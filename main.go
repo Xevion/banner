@@ -28,7 +28,7 @@ var (
 	isDevelopment bool
 	baseURL       string // Base URL for all requests to the banner system
 	environment   string
-	CentralTime   *time.Location
+	centralTime   *time.Location
 )
 
 func init() {
@@ -40,14 +40,14 @@ func init() {
 	ctx = context.Background()
 
 	var err error
-	CentralTime, err = time.LoadLocation("America/Chicago")
+	centralTime, err = time.LoadLocation("America/Chicago")
 	if err != nil {
 		panic(err)
 	}
 
 	// Set zerolog's timestamp function to use the central timezone
 	zerolog.TimestampFunc = func() time.Time {
-		return time.Now().In(CentralTime)
+		return time.Now().In(centralTime)
 	}
 
 	// Try to grab the environment variable, or default to development
