@@ -174,13 +174,11 @@ type SearchResult struct {
 
 // GET /searchResults/searchResults?txt_instructor=77521&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
 // GET /searchResults/searchResults?txt_subject=CS&txt_keywordlike=Application&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
-func Search(query Query, offset int, max int, sort string, sortDescending bool) (*SearchResult, error) {
+func Search(query *Query, sort string, sortDescending bool) (*SearchResult, error) {
 	params := query.Paramify()
 
 	params["txt_term"] = "202420" // TODO: Make this automatic but dynamically specifiable
 	params["uniqueSessionId"] = sessionID
-	params["pageOffset"] = strconv.Itoa(offset)
-	params["pageMaxSize"] = strconv.Itoa(max)
 	params["sortColumn"] = sort
 	params["sortDirection"] = "asc"
 	// These dates are not available for usage anywhere in the UI, but are included in every query

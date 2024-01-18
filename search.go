@@ -20,7 +20,10 @@ type Query struct {
 	instructor          *[]uint64 // e.g. [27957, 27961]
 	startTime           *time.Duration
 	endTime             *time.Duration
-	creditHours         *Range
+	minCredits          *int
+	maxCredits          *int
+	offset              int
+	maxResults          int
 	courseNumberRange   *Range
 }
 
@@ -98,13 +101,36 @@ func (q *Query) EndTime(endTime time.Duration) *Query {
 	return q
 }
 
-func (q *Query) CreditHours(creditHours Range) *Query {
-	q.creditHours = &creditHours
+func (q *Query) Credits(low int, high int) *Query {
+	q.minCredits = &low
+	q.maxCredits = &high
 	return q
 }
 
-func (q *Query) CourseNumberRange(courseNumberRange Range) *Query {
-	q.courseNumberRange = &courseNumberRange
+func (q *Query) MinCredits(value int) *Query {
+	q.minCredits = &value
+	return q
+}
+
+func (q *Query) MaxCredits(value int) *Query {
+	q.maxCredits = &value
+	return q
+}
+
+func (q *Query) CourseNumbers(low int, high int) *Query {
+	q.courseNumberRange = &Range{low, high}
+	return q
+}
+
+// Offset sets the offset for the query, allowing for pagination
+func (q *Query) Offset(offset int) *Query {
+	q.offset = offset
+	return q
+}
+
+// MaxResults sets the maximum number of results for the query
+func (q *Query) MaxResults(maxResults int) *Query {
+	q.maxResults = maxResults
 	return q
 }
 
@@ -194,15 +220,21 @@ func (q *Query) Paramify() map[string]string {
 		params["select_end_ampm"] = meridiem
 	}
 
-	if q.creditHours != nil {
-		params["txt_credithourlow"] = strconv.Itoa(q.creditHours.Low)
-		params["txt_credithourhigh"] = strconv.Itoa(q.creditHours.High)
+	if q.minCredits != nil {
+		params["txt_credithourlow"] = strconv.Itoa(*q.minCredits)
+	}
+
+	if q.maxCredits != nil {
+		params["txt_credithourhigh"] = strconv.Itoa(*q.maxCredits)
 	}
 
 	if q.courseNumberRange != nil {
 		params["txt_course_number_range"] = strconv.Itoa(q.courseNumberRange.Low)
 		params["txt_course_number_range_to"] = strconv.Itoa(q.courseNumberRange.High)
 	}
+
+	params["pageOffset"] = strconv.Itoa(q.offset)
+	params["pageMaxSize"] = strconv.Itoa(q.maxResults)
 
 	return params
 }
