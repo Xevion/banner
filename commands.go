@@ -10,7 +10,7 @@ import (
 
 var (
 	commandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition, SearchCommandDefinition}
-	commandHandlers    = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
+	commandHandlers    = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error{
 		TimeCommandDefinition.Name:   TimeCommandHandler,
 		TermCommandDefinition.Name:   TermCommandHandler,
 		SearchCommandDefinition.Name: SearchCommandHandler,
@@ -45,7 +45,7 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
-func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
+func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
 	data := interaction.ApplicationCommandData()
 	query := NewQuery().Credits(3, 6)
 
@@ -66,7 +66,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 				Content: "Error searching for courses",
 			},
 		})
-		return
+		return err
 	}
 
 	fetch_time := time.Now()
@@ -103,32 +103,55 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 			AllowedMentions: &discordgo.MessageAllowedMentions{},
 		},
 	})
+
+	return nil
 }
 
 var TermCommandDefinition = &discordgo.ApplicationCommand{
-	Name:        "term",
+	Name:        "terms",
 	Description: "Guess the current term, or search for a specific term",
 	Options: []*discordgo.ApplicationCommandOption{
 		{
 			Type:        discordgo.ApplicationCommandOptionString,
 			MinLength:   GetPointer(0),
 			MaxLength:   8,
-			Name:        "term",
+			Name:        "search",
 			Description: "Term to search for",
-			Required:    true,
+			Required:    false,
 		},
 	},
 }
 
-func TermCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
-	GetTerms("", 1, 25)
+func TermCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
+	data := interaction.ApplicationCommandData()
 
-	session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("```json\n%s```", "{\n  \"name\": \"Term\",\n  \"value\": \"202420\"\n}"),
-		},
-	})
+	var searchTerm string
+	if len(data.Options) == 1 {
+		searchTerm = data.Options[0].StringValue()
+	}
+
+	terms, err := GetTerms(searchTerm, 1, 25)
+
+	if err != nil {
+		RespondError(session, interaction.Interaction, "Error while fetching terms", err)
+		return err
+	}
+
+	fields := []*discordgo.MessageEmbedField{}
+
+	for _, t := range terms {
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   "ID",
+			Value:  t.Code,
+			Inline: true,
+		}, &discordgo.MessageEmbedField{
+			Name:   "Description",
+			Value:  t.Description,
+			Inline: true,
+		})
+	}
+
+	return nil
 }
 
 var TimeCommandDefinition = &discordgo.ApplicationCommand{
@@ -144,7 +167,7 @@ var TimeCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
-func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	fetch_time := time.Now()
 	crn := i.ApplicationCommandData().Options[0].IntValue()
 	courseMeetingTime, err := GetCourseMeetingTime(202420, int(crn))
@@ -155,7 +178,7 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Content: "Error getting meeting time",
 			},
 		})
-		return
+		return err
 	}
 
 	duration := courseMeetingTime.timeEnd.Sub(courseMeetingTime.timeStart)
@@ -192,4 +215,5 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			AllowedMentions: &discordgo.MessageAllowedMentions{},
 		},
 	})
+	return nil
 }

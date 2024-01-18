@@ -156,12 +156,18 @@ func main() {
 			log.Info().Str("name", name).Str("user", interaction.Member.User.Username).Dict("options", options).Msg("Command Invoked")
 
 			// Call handler
-			handler(internalSession, interaction)
+			err := handler(internalSession, interaction)
+
+			// Log error
+			if err != nil {
+				// TODO: Find a way to merge the response with the handler's error
+				log.Error().Str("commandName", name).Err(err).Msg("Command Handler Error")
+			}
 		} else {
 			log.Error().Str("commandName", name).Msg("Command Interaction Has No Handler")
 
 			// Respond with error
-			RespondError(internalSession, interaction.Interaction, "Command not found", nil)
+			RespondError(internalSession, interaction.Interaction, "Unexpected Error: interaction has no handler", nil)
 		}
 	})
 
