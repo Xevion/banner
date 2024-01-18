@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -145,9 +146,22 @@ func main() {
 	session.AddHandler(func(internalSession *discordgo.Session, interaction *discordgo.InteractionCreate) {
 		name := interaction.ApplicationCommandData().Name
 		if handler, ok := commandHandlers[name]; ok {
+			// Build dict of options for the log
+			options := zerolog.Dict()
+			for _, option := range interaction.ApplicationCommandData().Options {
+				options.Str(option.Name, fmt.Sprintf("%v", option.Value))
+			}
+
+			// Log command invocation
+			log.Info().Str("name", name).Str("user", interaction.Member.User.Username).Dict("options", options).Msg("Command Invoked")
+
+			// Call handler
 			handler(internalSession, interaction)
 		} else {
-			log.Warn().Str("commandName", name).Msg("Unknown command")
+			log.Error().Str("commandName", name).Msg("Command Interaction Has No Handler")
+
+			// Respond with error
+			RespondError(internalSession, interaction.Interaction, "Command not found", nil)
 		}
 	})
 
