@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -25,8 +25,8 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 			Type:        discordgo.ApplicationCommandOptionString,
 			MinLength:   GetPointer(0),
 			MaxLength:   16,
-			Name:        "name",
-			Description: "Course Name",
+			Name:        "title",
+			Description: "Course Title",
 			Required:    false,
 		},
 		{
@@ -42,6 +42,12 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 			Description: "Maximum number of results",
 			Required:    false,
 		},
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "keywords",
+			Description: "Keywords in Title or Description (space separated)",
+			Required:    false,
+		},
 	},
 }
 
@@ -51,10 +57,18 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 
 	for _, option := range data.Options {
 		switch option.Name {
-		case "name":
+		case "title":
+			query.Title(option.StringValue())
 		case "code":
+			// TODO: Handle & parse course codes properly
+		case "keywords":
+			query.Keywords(
+				strings.Split(option.StringValue(), " "),
+			)
 		case "max":
-			query.MaxResults(int(option.IntValue()))
+			query.MaxResults(
+				min(8, int(option.IntValue())),
+			)
 		}
 	}
 
@@ -74,21 +88,21 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 
 	for _, course := range courses.Data {
 		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   "Identifier",
+			Value:  fmt.Sprintf("%s %s-%s [%s]", course.Subject, course.CourseNumber, course.SequenceNumber, course.CourseReferenceNumber),
+			Inline: true,
+		}, &discordgo.MessageEmbedField{
 			Name:   "Name",
 			Value:  course.CourseTitle,
 			Inline: true,
 		}, &discordgo.MessageEmbedField{
-			Name:   "CRN",
-			Value:  course.CourseReferenceNumber,
-			Inline: true,
-		}, &discordgo.MessageEmbedField{
-			Name:   "Credits",
-			Value:  strconv.Itoa(course.CreditHours),
+			Name:   "Meeting Time",
+			Value:  "MWF 11AM-12:15PM",
 			Inline: true,
 		})
 	}
 
-	session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+	err = session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
@@ -104,7 +118,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		},
 	})
 
-	return nil
+	return err
 }
 
 var TermCommandDefinition = &discordgo.ApplicationCommand{
