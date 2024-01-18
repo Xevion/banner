@@ -184,15 +184,15 @@ type NaiveTime struct {
 	Minutes uint
 }
 
-func (nt NaiveTime) Sub(other NaiveTime) time.Duration {
+func (nt *NaiveTime) Sub(other *NaiveTime) time.Duration {
 	return time.Hour*time.Duration(nt.Hours-other.Hours) + time.Minute*time.Duration(nt.Minutes-other.Minutes)
 }
 
-func ParseNaiveTime(integer uint64) NaiveTime {
+func ParseNaiveTime(integer uint64) *NaiveTime {
 	minutes := uint(integer % 100)
 	hours := uint(integer / 100)
 
-	return NaiveTime{Hours: hours, Minutes: minutes}
+	return &NaiveTime{Hours: hours, Minutes: minutes}
 }
 
 func (nt NaiveTime) String() string {

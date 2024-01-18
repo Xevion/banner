@@ -92,10 +92,15 @@ func (m *MeetingTimeResponse) EndDay() time.Time {
 
 // StartTime returns the start time of the meeting time as a NaiveTime object
 // This is not cached and is parsed on each invocation. It may also panic without handling.
-func (m *MeetingTimeResponse) StartTime() NaiveTime {
-	value, err := strconv.ParseUint(m.MeetingTime.BeginTime, 10, 32)
+func (m *MeetingTimeResponse) StartTime() *NaiveTime {
+	raw := m.MeetingTime.BeginTime
+	if raw == "" {
+		return nil
+	}
+
+	value, err := strconv.ParseUint(raw, 10, 32)
 	if err != nil {
-		log.Fatal().Err(err).Str("raw", m.MeetingTime.BeginTime).Msg("Cannot parse start time integer")
+		log.Fatal().Err(err).Str("raw", raw).Msg("Cannot parse start time integer")
 	}
 
 	return ParseNaiveTime(value)
@@ -103,10 +108,15 @@ func (m *MeetingTimeResponse) StartTime() NaiveTime {
 
 // EndTime returns the end time of the meeting time as a NaiveTime object
 // This is not cached and is parsed on each invocation. It may also panic without handling.
-func (m *MeetingTimeResponse) EndTime() NaiveTime {
-	value, err := strconv.ParseUint(m.MeetingTime.EndTime, 10, 32)
+func (m *MeetingTimeResponse) EndTime() *NaiveTime {
+	raw := m.MeetingTime.EndTime
+	if raw == "" {
+		return nil
+	}
+
+	value, err := strconv.ParseUint(raw, 10, 32)
 	if err != nil {
-		log.Fatal().Err(err).Str("raw", m.MeetingTime.EndTime).Msg("Cannot parse end time integer")
+		log.Fatal().Err(err).Str("raw", raw).Msg("Cannot parse end time integer")
 	}
 
 	return ParseNaiveTime(value)
