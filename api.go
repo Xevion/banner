@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +21,7 @@ type BannerTerm struct {
 	Description string `json:"description"`
 }
 
-// GET /classSearch/getTerms?searchTerm=&offset=1&max=10&_=1702069154094
+// GetTerms
 func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 	req := BuildRequest("GET", "/classSearch/getTerms", map[string]string{
 		"searchTerm": search,
@@ -27,6 +29,10 @@ func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 		"max":        strconv.Itoa(max),
 		"_":          Nonce(),
 	})
+
+	if offset <= 0 {
+		return nil, errors.New("Offset must be greater than 0")
+	}
 
 	res, err := DoRequest(req)
 	if err != nil {
@@ -121,7 +127,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	// print the response body
@@ -157,7 +163,7 @@ func GetInstructor(search string, term int, offset int, max int) []Instructor {
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	return make([]Instructor, 0)
@@ -180,7 +186,7 @@ func GetClassDetails(term int, crn int) *ClassDetails {
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	return &ClassDetails{}
@@ -229,6 +235,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 	params["uniqueSessionId"] = sessionID
 	params["sortColumn"] = sort
 	params["sortDirection"] = "asc"
+
 	// These dates are not available for usage anywhere in the UI, but are included in every query
 	params["startDatepicker"] = ""
 	params["endDatepicker"] = ""
@@ -277,7 +284,7 @@ func GetSubjects(search string, term int, offset int, max int) []Subject {
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	return make([]Subject, 0)
@@ -298,13 +305,13 @@ func GetCampuses(search string, term int, offset int, max int) []Campus {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		log.Printf("ERR %s", err)
+		log.Err(err)
 		return nil
 	}
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	return make([]Campus, 0)
@@ -325,13 +332,13 @@ func GetInstructionalMethods(search string, term int, offset int, max int) ([]In
 
 	res, err := DoRequest(req)
 	if err != nil {
-		log.Printf("ERR %s", err)
+		log.Err(err).Msg("Failed to get instructional methods")
 		return nil, err
 	}
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Printf("ERR Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	return make([]InstructionalMethod, 0), nil
@@ -353,7 +360,7 @@ func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Msgf("Response was not JSON: %s", res.Header.Get("Content-Type"))
+		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	// Read the response body into JSON
@@ -365,7 +372,7 @@ func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
 	}
 
 	if len(body["fmt"]) > 1 {
-		log.Printf("Expected only one fmt child, found %d", len(body["fmt"]))
+		log.Warn().Interface("fmt", body["fmt"]).Msg("Multiple meeting times found")
 	}
 
 	// Acquire & cast the meeting time data
