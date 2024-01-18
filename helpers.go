@@ -200,7 +200,9 @@ func (nt NaiveTime) String() string {
 	hour := nt.Hours
 	if nt.Hours >= 12 {
 		meridiem = "PM"
-		hour -= 12
+		if nt.Hours > 12 {
+			hour -= 12
+		}
 	}
 	return fmt.Sprintf("%d:%02d%s", hour, nt.Minutes, meridiem)
 }
