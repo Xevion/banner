@@ -2,10 +2,18 @@
 
 A discord bot for executing queries & searches on the Ellucian Banner instance hosting all of UTSA's class data.
 
-All data is publicly available and 
+## Feature Wishlist
 
-## Features
-
+- Component Pagination
+- RateMyProfessor Integration (Linked/Embedded)
+- Smart term selection (i.e. Summer 2024 will be selected automatically when opened)
+- Rate Limiting (bursting with global/user limits)
+- DMs Integration (allow usage of the bot in DMs)
+- Class Change Notifications (get notified when details about a class change)
+- ICS Download (get a ICS download of your classes with location & timing perfectly - set for every class you're in)
+- Multi-term Querying (currently the backend for searching is kinda weird)
+- Full Autocomplete for Every Search Option
+- Metrics, Log Query, Priviledged Error Feedback
 - Search for Classes
     - Major, Professor, Location, Name, Time of Day
 - Subscribe to Classes
