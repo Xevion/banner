@@ -1,0 +1,51 @@
+{
+  "fmt": 
+  [
+    {
+      "category": "01",
+      "class": "net.hedtech.banner.student.schedule.SectionSessionDecorator",
+      "courseReferenceNumber": "27294",
+      "faculty": 
+      [
+        {
+          "bannerId": "150161",
+          "category": "01",
+          "class": "net.hedtech.banner.student.faculty.FacultyResultDecorator",
+          "courseReferenceNumber": "27294",
+          "displayName": "Alkittawi, Hend",
+          "emailAddress": "Hend.Alkittawi@utsa.edu",
+          "primaryIndicator": true,
+          "term": "202420"
+        }
+      ],
+      "meetingTime": {
+        "beginTime": "1000",
+        "building": "NPB",
+        "buildingDescription": "North Paseo Building",
+        "campus": "11",
+        "campusDescription": "Main Campus",
+        "category": "01",
+        "class": "net.hedtech.banner.general.overall.MeetingTimeDecorator",
+        "courseReferenceNumber": "27294",
+        "creditHourSession": 3.0,
+        "endDate": "05/10/2024",
+        "endTime": "1050",
+        "friday": true,
+        "hoursWeek": 2.5,
+        "meetingScheduleType": "AFF",
+        "meetingType": "FF",
+        "meetingTypeDescription": "Traditional in-person",
+        "monday": true,
+        "room": "1.238",
+        "saturday": false,
+        "startDate": "01/16/2024",
+        "sunday": false,
+        "term": "202420",
+        "thursday": false,
+        "tuesday": false,
+        "wednesday": true
+      },
+      "term": "202420"
+    }
+  ]
+}

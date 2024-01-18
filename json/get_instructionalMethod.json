@@ -1,0 +1,35 @@
+
+[
+  {
+    "code": "HB",
+    "description": "Mix of in-person and online"
+  },
+  {
+    "code": "H2",
+    "description": "Mostly in-person, some online"
+  },
+  {
+    "code": "H1",
+    "description": "Mostly online, some in-person"
+  },
+  {
+    "code": "OS",
+    "description": "Online only, at set time"
+  },
+  {
+    "code": "OA",
+    "description": "Online only, no set time"
+  },
+  {
+    "code": "OH",
+    "description": "Online only, some set time"
+  },
+  {
+    "code": "ID",
+    "description": "To be arranged"
+  },
+  {
+    "code": "FF",
+    "description": "Traditional in-person"
+  }
+]
