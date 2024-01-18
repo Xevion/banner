@@ -13,7 +13,7 @@ A discord bot for executing queries & searches on the Ellucian Banner instance h
 - ICS Download (get a ICS download of your classes with location & timing perfectly - set for every class you're in)
 - Multi-term Querying (currently the backend for searching is kinda weird)
 - Full Autocomplete for Every Search Option
-- Metrics, Log Query, Priviledged Error Feedback
+- Metrics, Log Query, Privileged Error Feedback
 - Search for Classes
     - Major, Professor, Location, Name, Time of Day
 - Subscribe to Classes
@@ -30,3 +30,16 @@ A discord bot for executing queries & searches on the Ellucian Banner instance h
     - "ends by 2 PM" -> Ends within 12:00 AM to 2:00 PM
     - "after 2 PM" -> Start within 2:01 PM to 11:59 PM
     - "before 2 PM" -> Ends within 12:00 AM to 1:59 PM
+
+## Analysis Required
+
+Some of the features and architecture of Ellucian's Banner system are not clear.
+The follow features, JSON, and more require validation & analysis:
+
+- Struct Nullability
+  - Much of the responses provided by Ellucian contain nulls, and most of them are uncertain as to when and why they're null.
+  - Analysis must be conducted to be sure of when to use a string and when it should nillable (pointer).
+- Multiple Professors / Primary Indicator
+- Mulltiple Meeting Times
+- Meeting Schedule Types
+  - AFF vs AIN vs AHB etc.
