@@ -196,6 +196,21 @@ func main() {
 	}
 	log.Info().Msg("Command registration complete")
 
+	// Fetch terms on startup
+	terms, err := GetTerms("", 1, 10)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot get terms")
+	}
+	log.Debug().Interface("terms", terms).Msg("Terms")
+
+	// Term Select Pre-Search POST
+	currentTerm, nextTerm := GetCurrentTerm(time.Now())
+	if currentTerm == nil {
+		SelectTerm(nextTerm.ToString())
+	} else {
+		SelectTerm(currentTerm.ToString())
+	}
+
 	// Close session, ensure http client closes idle connections
 	defer session.Close()
 	defer client.CloseIdleConnections()

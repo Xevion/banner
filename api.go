@@ -55,6 +55,54 @@ func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 	return terms, nil
 }
 
+func SelectTerm(term string) {
+	form := url.Values{
+		"term":            {term},
+		"studyPath":       {""},
+		"studyPathText":   {""},
+		"startDatepicker": {""},
+		"endDatepicker":   {""},
+		"uniqueSessionId": {sessionID},
+	}
+
+	params := map[string]string{
+		"mode": "search",
+	}
+
+	req := BuildRequestWithBody("POST", "/term/search", params, bytes.NewBufferString(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	res, err := DoRequest(req)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to select term")
+	}
+
+	// Assert that the response is JSON
+	if !ContentTypeMatch(res, "application/json") {
+		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+	}
+
+	// Acquire fwdUrl
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	var redirectResponse struct {
+		FwdUrl string `json:"fwdUrl"`
+	}
+	json.Unmarshal(body, &redirectResponse)
+
+	// Make a GET request to the fwdUrl
+	req = BuildRequest("GET", redirectResponse.FwdUrl, nil)
+	res, err = DoRequest(req)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to make redirect request")
+	}
+
+	// Assert that the response is OK (200)
+	if res.StatusCode != 200 {
+		log.Fatal().Int("status", res.StatusCode).Msg("Unexpected status code from redirect request")
+	}
+}
+
 // GET /classSearch/get_partOfTerm?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070282288
 func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm, error) {
 	req := BuildRequest("GET", "/classSearch/get_partOfTerm", map[string]string{
