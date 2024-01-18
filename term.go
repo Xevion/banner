@@ -94,8 +94,8 @@ func GetCurrentTerm(now time.Time) (*Term, *Term) {
 	panic(fmt.Sprintf("Impossible Code Reached (dayOfYear: %d)", dayOfYear))
 }
 
-// BannerTermToTerm converts a Banner term code to a Term struct
-func BannerTermToTerm(code string) Term {
+// ParseTerm converts a Banner term code to a Term struct
+func ParseTerm(code string) Term {
 	year, _ := strconv.ParseUint(code[0:4], 10, 16)
 
 	var season uint8
@@ -116,7 +116,7 @@ func BannerTermToTerm(code string) Term {
 }
 
 // TermToBannerTerm converts a Term struct to a Banner term code
-func TermToBannerTerm(term Term) string {
+func (term Term) ToString() string {
 	var season string
 	switch term.Season {
 	case Fall:
