@@ -28,7 +28,7 @@ type Query struct {
 }
 
 func NewQuery() *Query {
-	return &Query{maxResults: 10, offset: 0}
+	return &Query{maxResults: 8, offset: 0}
 }
 
 // Subject sets the subject for the query
@@ -177,11 +177,11 @@ func (q *Query) Paramify() map[string]string {
 
 	if q.title != nil {
 		// Whitespace can prevent valid queries from succeeding
-		params["txt_title"] = strings.TrimSpace(*q.title)
+		params["txt_courseTitle"] = strings.TrimSpace(*q.title)
 	}
 
 	if q.keywords != nil {
-		params["txt_keyword"] = strings.Join(*q.keywords, " ")
+		params["txt_keywordlike"] = strings.Join(*q.keywords, " ")
 	}
 
 	if q.openOnly != nil {
