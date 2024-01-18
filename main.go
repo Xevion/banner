@@ -189,7 +189,6 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Cannot get existing commands")
 	}
-
 	newCommands, err := session.ApplicationCommandBulkOverwrite(session.State.User.ID, guildTarget, commandDefinitions)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Cannot register commands")
@@ -217,11 +216,10 @@ func main() {
 	log.Info().Msg("Command registration complete")
 
 	// Fetch terms on startup
-	terms, err := GetTerms("", 1, 10)
+	_, err = GetTerms("", 1, 10)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Cannot get terms")
 	}
-	log.Debug().Interface("terms", terms).Msg("Terms")
 
 	// Term Select Pre-Search POST
 	var termSelect string

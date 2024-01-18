@@ -192,32 +192,39 @@ func GetClassDetails(term int, crn int) *ClassDetails {
 	return &ClassDetails{}
 }
 
-type MeetingTimeInnerResponse struct {
-	Category               string  `json:"category"`
-	Class                  string  `json:"class"`
-	StartDate              string  `json:"startDate"`
-	EndDate                string  `json:"endDate"`
-	BeginTime              string  `json:"beginTime"`
-	EndTime                string  `json:"endTime"`
-	Room                   string  `json:"room"`
-	Term                   string  `json:"term"`
-	Building               string  `json:"building"`
-	BuildingDescription    string  `json:"buildingDescription"`
-	Campus                 string  `json:"campus"`
-	CampusDescription      string  `json:"campusDescription"`
-	CourseReferenceNumber  string  `json:"courseReferenceNumber"`
-	CreditHourSession      float64 `json:"creditHourSession"`
-	HoursWeek              float64 `json:"hoursWeek"`
-	MeetingScheduleType    string  `json:"meetingScheduleType"`
-	MeetingType            string  `json:"meetingType"`
-	MeetingTypeDescription string  `json:"meetingTypeDescription"`
-	Monday                 bool    `json:"monday"`
-	Tuesday                bool    `json:"tuesday"`
-	Wednesday              bool    `json:"wednesday"`
-	Thursday               bool    `json:"thursday"`
-	Friday                 bool    `json:"friday"`
-	Saturday               bool    `json:"saturday"`
-	Sunday                 bool    `json:"sunday"`
+type MeetingTimeResponse struct {
+	Category              *string `json:"category"`
+	Class                 string  `json:"class"`
+	CourseReferenceNumber string  `json:"courseReferenceNumber"`
+	Faculty               []struct{}
+	MeetingTime           struct {
+		Category               string  `json:"category"`
+		Class                  string  `json:"class"`
+		StartDate              string  `json:"startDate"`
+		EndDate                string  `json:"endDate"`
+		BeginTime              string  `json:"beginTime"`
+		EndTime                string  `json:"endTime"`
+		Room                   string  `json:"room"`
+		Term                   string  `json:"term"`
+		Building               string  `json:"building"`
+		BuildingDescription    string  `json:"buildingDescription"`
+		Campus                 string  `json:"campus"`
+		CampusDescription      string  `json:"campusDescription"`
+		CourseReferenceNumber  string  `json:"courseReferenceNumber"`
+		CreditHourSession      float64 `json:"creditHourSession"`
+		HoursWeek              float64 `json:"hoursWeek"`
+		MeetingScheduleType    string  `json:"meetingScheduleType"`
+		MeetingType            string  `json:"meetingType"`
+		MeetingTypeDescription string  `json:"meetingTypeDescription"`
+		Monday                 bool    `json:"monday"`
+		Tuesday                bool    `json:"tuesday"`
+		Wednesday              bool    `json:"wednesday"`
+		Thursday               bool    `json:"thursday"`
+		Friday                 bool    `json:"friday"`
+		Saturday               bool    `json:"saturday"`
+		Sunday                 bool    `json:"sunday"`
+	} `json:"meetingTime"`
+	Term string `json:"term"`
 }
 
 type SearchResult struct {
@@ -272,14 +279,7 @@ type SearchResult struct {
 			Primary     bool    `json:"primaryIndicator"`
 			Term        string  `json:"term"`
 		} `json:"faculty"`
-		MeetingsFaculty []struct {
-			Category              *string `json:"category"`
-			Class                 string  `json:"class"`
-			CourseReferenceNumber string  `json:"courseReferenceNumber"`
-			Faculty               []struct{}
-			MeetingTime           MeetingTimeInnerResponse `json:"meetingTime"`
-			Term                  string                   `json:"term"`
-		}
+		MeetingsFaculty []MeetingTimeResponse `json:"meetingsFaculty"`
 	} `json:"data"`
 }
 
@@ -404,7 +404,7 @@ func GetInstructionalMethods(search string, term int, offset int, max int) ([]In
 // GetCourseMeetingTime retrieves the meeting time information for a course based on the given term and course reference number (CRN).
 // It makes an HTTP GET request to the appropriate API endpoint and parses the response to extract the meeting time data.
 // The function returns a MeetingTimeResponse struct containing the extracted information.
-func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
+func GetCourseMeetingTime(term int, crn int) (*PrettyMeetingTimeResponse, error) {
 	req := BuildRequest("GET", "/searchResults/getFacultyMeetingTimes", map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
@@ -483,7 +483,7 @@ func GetCourseMeetingTime(term int, crn int) (*MeetingTimeResponse, error) {
 		})
 	}
 
-	return &MeetingTimeResponse{
+	return &PrettyMeetingTimeResponse{
 		faculty:                faculty,
 		weekdays:               weekdays,
 		campus:                 campus,

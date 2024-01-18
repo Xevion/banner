@@ -12,7 +12,7 @@ type MeetingTimeFaculty struct {
 	primary     bool
 }
 
-type MeetingTimeResponse struct {
+type PrettyMeetingTimeResponse struct {
 	faculty                []MeetingTimeFaculty
 	weekdays               map[time.Weekday]bool
 	campus                 string
