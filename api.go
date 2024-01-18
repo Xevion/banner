@@ -192,6 +192,34 @@ func GetClassDetails(term int, crn int) *ClassDetails {
 	return &ClassDetails{}
 }
 
+type MeetingTimeInnerResponse struct {
+	Category               string  `json:"category"`
+	Class                  string  `json:"class"`
+	StartDate              string  `json:"startDate"`
+	EndDate                string  `json:"endDate"`
+	BeginTime              string  `json:"beginTime"`
+	EndTime                string  `json:"endTime"`
+	Room                   string  `json:"room"`
+	Term                   string  `json:"term"`
+	Building               string  `json:"building"`
+	BuildingDescription    string  `json:"buildingDescription"`
+	Campus                 string  `json:"campus"`
+	CampusDescription      string  `json:"campusDescription"`
+	CourseReferenceNumber  string  `json:"courseReferenceNumber"`
+	CreditHourSession      float64 `json:"creditHourSession"`
+	HoursWeek              float64 `json:"hoursWeek"`
+	MeetingScheduleType    string  `json:"meetingScheduleType"`
+	MeetingType            string  `json:"meetingType"`
+	MeetingTypeDescription string  `json:"meetingTypeDescription"`
+	Monday                 bool    `json:"monday"`
+	Tuesday                bool    `json:"tuesday"`
+	Wednesday              bool    `json:"wednesday"`
+	Thursday               bool    `json:"thursday"`
+	Friday                 bool    `json:"friday"`
+	Saturday               bool    `json:"saturday"`
+	Sunday                 bool    `json:"sunday"`
+}
+
 type SearchResult struct {
 	Success             bool   `json:"success"`
 	TotalCount          int    `json:"totalCount"`
@@ -203,26 +231,55 @@ type SearchResult struct {
 		Display string `json:"display"`
 	} `json:"searchResultsConfig"`
 	Data []struct {
-		Id                      int     `json:"id"`
-		Term                    string  `json:"term"`
-		TermDesc                string  `json:"termDesc"`
-		CourseReferenceNumber   string  `json:"courseReferenceNumber"`
-		PartOfTerm              string  `json:"partOfTerm"`
-		CourseNumber            string  `json:"courseNumber"`
-		Subject                 string  `json:"subject"`
-		SubjectDescription      string  `json:"subjectDescription"`
-		SequenceNumber          string  `json:"sequenceNumber"`
-		CampusDescription       string  `json:"campusDescription"`
-		ScheduleTypeDescription string  `json:"scheduleTypeDescription"`
-		CourseTitle             string  `json:"courseTitle"`
-		CreditHours             int     `json:"creditHours"`
-		MaximumEnrollment       int     `json:"maximumEnrollment"`
-		Enrollment              int     `json:"enrollment"`
-		SeatsAvailable          int     `json:"seatsAvailable"`
-		WaitCapacity            int     `json:"waitCapacity"`
-		WaitCount               int     `json:"waitCount"`
-		CrossList               *string `json:"crossList"`
-		CrossListCapacity       *int    `json:"crossListCapacity"`
+		Id                             int     `json:"id"`
+		Term                           string  `json:"term"`
+		TermDesc                       string  `json:"termDesc"`
+		CourseReferenceNumber          string  `json:"courseReferenceNumber"`
+		PartOfTerm                     string  `json:"partOfTerm"`
+		CourseNumber                   string  `json:"courseNumber"`
+		Subject                        string  `json:"subject"`
+		SubjectDescription             string  `json:"subjectDescription"`
+		SequenceNumber                 string  `json:"sequenceNumber"`
+		CampusDescription              string  `json:"campusDescription"`
+		ScheduleTypeDescription        string  `json:"scheduleTypeDescription"`
+		CourseTitle                    string  `json:"courseTitle"`
+		CreditHours                    int     `json:"creditHours"`
+		MaximumEnrollment              int     `json:"maximumEnrollment"`
+		Enrollment                     int     `json:"enrollment"`
+		SeatsAvailable                 int     `json:"seatsAvailable"`
+		WaitCapacity                   int     `json:"waitCapacity"`
+		WaitCount                      int     `json:"waitCount"`
+		CrossList                      *string `json:"crossList"`
+		CrossListCapacity              *int    `json:"crossListCapacity"`
+		CrossListCount                 *int    `json:"crossListCount"`
+		CrossListAvailable             *int    `json:"crossListAvailable"`
+		CreditHourHigh                 *int    `json:"creditHourHigh"`
+		CreditHourLow                  *int    `json:"creditHourLow"`
+		CreditHourIndicator            *string `json:"creditHourIndicator"`
+		OpenSection                    bool    `json:"openSection"`
+		LinkIdentifier                 *string `json:"linkIdentifier"`
+		IsSectionLinked                bool    `json:"isSectionLinked"`
+		SubjectCourse                  string  `json:"subjectCourse"`
+		ReservedSeatSummary            *string `json:"reservedSeatSummary"`
+		InstructionalMethod            string  `json:"instructionalMethod"`
+		InstructionalMethodDescription string  `json:"instructionalMethodDescription"`
+		Faculty                        []struct {
+			BannerId    string  `json:"bannerId"`
+			Category    *string `json:"category"`
+			Class       string  `json:"class"`
+			DisplayName string  `json:"displayName"`
+			Email       string  `json:"emailAddress"`
+			Primary     bool    `json:"primaryIndicator"`
+			Term        string  `json:"term"`
+		} `json:"faculty"`
+		MeetingsFaculty []struct {
+			Category              *string `json:"category"`
+			Class                 string  `json:"class"`
+			CourseReferenceNumber string  `json:"courseReferenceNumber"`
+			Faculty               []struct{}
+			MeetingTime           MeetingTimeInnerResponse `json:"meetingTime"`
+			Term                  string                   `json:"term"`
+		}
 	} `json:"data"`
 }
 
