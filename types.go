@@ -9,11 +9,22 @@ import (
 
 const JsonContentType = "application/json"
 
+type FacultyItem struct {
+	BannerId              string  `json:"bannerId"`
+	Category              *string `json:"category"`
+	Class                 string  `json:"class"`
+	CourseReferenceNumber string  `json:"courseReferenceNumber"`
+	DisplayName           string  `json:"displayName"`
+	Email                 string  `json:"emailAddress"`
+	Primary               bool    `json:"primaryIndicator"`
+	Term                  string  `json:"term"`
+}
+
 type MeetingTimeResponse struct {
 	Category              *string `json:"category"`
 	Class                 string  `json:"class"`
 	CourseReferenceNumber string  `json:"courseReferenceNumber"`
-	Faculty               []struct{}
+	Faculty               []FacultyItem
 	MeetingTime           struct {
 		Category               string  `json:"category"`
 		Class                  string  `json:"class"`
@@ -144,16 +155,8 @@ type SearchResult struct {
 		ReservedSeatSummary            *string `json:"reservedSeatSummary"`
 		InstructionalMethod            string  `json:"instructionalMethod"`
 		InstructionalMethodDescription string  `json:"instructionalMethodDescription"`
-		Faculty                        []struct {
-			BannerId    string  `json:"bannerId"`
-			Category    *string `json:"category"`
-			Class       string  `json:"class"`
-			DisplayName string  `json:"displayName"`
-			Email       string  `json:"emailAddress"`
-			Primary     bool    `json:"primaryIndicator"`
-			Term        string  `json:"term"`
-		} `json:"faculty"`
-		MeetingsFaculty []MeetingTimeResponse `json:"meetingsFaculty"`
+		Faculty                        []FacultyItem
+		MeetingsFaculty                []MeetingTimeResponse `json:"meetingsFaculty"`
 	} `json:"data"`
 }
 
