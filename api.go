@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	log "github.com/rs/zerolog/log"
 )
@@ -313,7 +312,7 @@ func GetInstructionalMethods(search string, term int, offset int, max int) ([]In
 // GetCourseMeetingTime retrieves the meeting time information for a course based on the given term and course reference number (CRN).
 // It makes an HTTP GET request to the appropriate API endpoint and parses the response to extract the meeting time data.
 // The function returns a MeetingTimeResponse struct containing the extracted information.
-func GetCourseMeetingTime(term int, crn int) (*PrettyMeetingTimeResponse, error) {
+func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 	req := BuildRequest("GET", "/searchResults/getFacultyMeetingTimes", map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
@@ -331,83 +330,16 @@ func GetCourseMeetingTime(term int, crn int) (*PrettyMeetingTimeResponse, error)
 
 	// Read the response body into JSON
 	defer res.Body.Close()
-	var body map[string][]map[string]interface{}
-	err = json.NewDecoder(res.Body).Decode(&body)
+	body, _ := io.ReadAll(res.Body)
+
+	// Parse the JSON into a MeetingTimeResponse struct
+	var meetingTime struct {
+		Inner []MeetingTimeResponse `json:"fmt"`
+	}
+	err = json.Unmarshal(body, &meetingTime)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(body["fmt"]) > 1 {
-		log.Warn().Interface("fmt", body["fmt"]).Msg("Multiple meeting times found")
-	}
-
-	// Acquire & cast the meeting time data
-	meetingTimeMap := body["fmt"][0]["meetingTime"].(map[string]interface{})
-
-	// Extract weekdays
-	weekdays := make(map[time.Weekday]bool)
-	for i := int(time.Sunday); i <= int(time.Saturday); i++ {
-		day := time.Weekday(i)
-		dayActive := meetingTimeMap[strings.ToLower(day.String())].(bool)
-		weekdays[day] = dayActive
-	}
-
-	meetingScheduleType := meetingTimeMap["meetingScheduleType"].(string)
-	meetingType := meetingTimeMap["meetingType"].(string)
-	meetingTypeDescription := meetingTimeMap["meetingTypeDescription"].(string)
-
-	// Extract other data
-	campus := meetingTimeMap["campus"].(string)
-	campusDescription := meetingTimeMap["campusDescription"].(string)
-	building := meetingTimeMap["building"].(string)
-	buildingDescription := meetingTimeMap["buildingDescription"].(string)
-	room := "N/A"
-	if meetingTimeMap["room"] != nil {
-		room = meetingTimeMap["room"].(string)
-	}
-
-	creditHours := meetingTimeMap["creditHourSession"].(float64)
-	hoursPerWeek := meetingTimeMap["hoursWeek"].(float64)
-
-	// Parse dates & times
-	const layout = "01/02/2006"
-	dateStart, _ := time.Parse(layout, meetingTimeMap["startDate"].(string))
-	dateEnd, _ := time.Parse(layout, meetingTimeMap["endDate"].(string))
-	timeStartInt, _ := strconv.ParseUint(meetingTimeMap["beginTime"].(string), 10, 0)
-	timeStart := ParseNaiveTime(timeStartInt)
-	timeEndInt, _ := strconv.ParseUint(meetingTimeMap["endTime"].(string), 10, 0)
-	timeEnd := ParseNaiveTime(timeEndInt)
-
-	// Extract faculty data
-	faculty := make([]MeetingTimeFaculty, 0)
-	for _, facultyMap := range body["fmt"][0]["faculty"].([]interface{}) {
-		facultyMap := facultyMap.(map[string]interface{})
-		bannerId, _ := strconv.Atoi(facultyMap["bannerId"].(string))
-		faculty = append(faculty, MeetingTimeFaculty{
-			bannerId:    bannerId,
-			category:    facultyMap["category"].(string),
-			displayName: facultyMap["displayName"].(string),
-			email:       facultyMap["emailAddress"].(string),
-			primary:     facultyMap["primaryIndicator"].(bool),
-		})
-	}
-
-	return &PrettyMeetingTimeResponse{
-		faculty:                faculty,
-		weekdays:               weekdays,
-		campus:                 campus,
-		campusDescription:      campusDescription,
-		creditHours:            int(creditHours),
-		building:               building,
-		buildingDescription:    buildingDescription,
-		room:                   room,
-		timeStart:              timeStart,
-		timeEnd:                timeEnd,
-		dateStart:              dateStart,
-		dateEnd:                dateEnd,
-		hoursPerWeek:           float32(hoursPerWeek),
-		meetingScheduleType:    meetingScheduleType,
-		meetingType:            meetingType,
-		meetingTypeDescription: meetingTypeDescription,
-	}, nil
+	return meetingTime.Inner, nil
 }
