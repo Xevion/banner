@@ -3,3 +3,4 @@ cover.cov
 banner
 .*.go
 dumps/
+.vscode/
