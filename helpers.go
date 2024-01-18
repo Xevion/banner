@@ -51,13 +51,12 @@ func AddUserAgent(req *http.Request) {
 
 // ContentTypeMatch checks if the response has the given content type
 func ContentTypeMatch(response *http.Response, search string) bool {
-	// Split on commas, check if any of the types match
-	for _, content_type := range strings.Split(response.Header.Get("Content-Type"), ";") {
-		if content_type == search {
-			return true
-		}
+	contentType := response.Header.Get("Content-Type")
+	if contentType == "" {
+		return search == "application/octect-stream"
 	}
-	return false
+
+	return strings.HasPrefix(contentType, search)
 }
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -220,10 +219,71 @@ func GetPointer(value int) *int {
 	return &value
 }
 
-// DumpHtml dumps a response body to a file for debugging purposes
-func DumpHtml(res *http.Response) {
+// GuessExtension returns the extension of a file based on the given content type
+func GuessExtension(contentType string) string {
+	switch strings.ToLower(contentType) {
+	case "text/plain":
+		return "txt"
+	case "application/json":
+		return "json"
+	case "text/html":
+		return "html"
+	case "text/css":
+		return "css"
+	case "text/csv":
+		return "csv"
+	case "text/calendar":
+		return "ics"
+	case "text/markdown":
+		return "md"
+	case "text/xml":
+		return "xml"
+	case "text/yaml":
+		return "yaml"
+	case "text/javascript":
+		return "js"
+	case "text/vtt":
+		return "vtt"
+	case "image/jpeg":
+		return "jpg"
+	case "image/png":
+		return "png"
+	case "image/gif":
+		return "gif"
+	case "image/webp":
+		return "webp"
+	case "image/tiff":
+		return "tiff"
+	case "image/svg+xml":
+		return "svg"
+	case "image/bmp":
+		return "bmp"
+	case "image/vnd.microsoft.icon":
+		return "ico"
+	case "image/x-icon":
+		return "ico"
+	case "image/x-xbitmap":
+		return "xbm"
+	case "image/x-xpixmap":
+		return "xpm"
+	case "image/x-xwindowdump":
+		return "xwd"
+	case "image/avif":
+		return "avif"
+	case "image/apng":
+		return "apng"
+	case "image/jxl":
+		return "jxl"
+	}
+	return ""
+}
+// DumpResponse dumps a response body to a file for debugging purposes
+func DumpResponse(res *http.Response) {
+	contentType := res.Header.Get("Content-Type")
+	ext := GuessExtension(contentType)
+
 	// Use current time as filename + /dumps/ prefix
-	filename := fmt.Sprintf("dumps/%d.html", time.Now().Unix())
+	filename := fmt.Sprintf("dumps/%d.%s", time.Now().Unix(), ext)
 	file, err := os.Create(filename)
 
 	if err != nil {
