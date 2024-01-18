@@ -28,26 +28,41 @@ func NewQuery() *Query {
 	return &Query{}
 }
 
+// Subject sets the subject for the query
 func (q *Query) Subject(subject string) *Query {
 	q.subject = &subject
 	return q
 }
 
+// Title sets the title for the query
 func (q *Query) Title(title string) *Query {
 	q.title = &title
 	return q
 }
 
+// Keywords sets the keywords for the query
 func (q *Query) Keywords(keywords []string) *Query {
 	q.keywords = &keywords
 	return q
 }
 
+// Keyword adds a keyword to the query
+func (q *Query) Keyword(keyword string) *Query {
+	if q.keywords == nil {
+		q.keywords = &[]string{keyword}
+	} else {
+		*q.keywords = append(*q.keywords, keyword)
+	}
+	return q
+}
+
+// OpenOnly sets the open only flag for the query
 func (q *Query) OpenOnly(openOnly bool) *Query {
 	q.openOnly = &openOnly
 	return q
 }
 
+// TermPart sets the term part for the query
 func (q *Query) TermPart(termPart []string) *Query {
 	q.termPart = &termPart
 	return q
