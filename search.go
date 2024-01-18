@@ -28,7 +28,7 @@ type Query struct {
 }
 
 func NewQuery() *Query {
-	return &Query{}
+	return &Query{maxResults: 10, offset: 0}
 }
 
 // Subject sets the subject for the query
