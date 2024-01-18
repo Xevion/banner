@@ -87,9 +87,16 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 	fields := []*discordgo.MessageEmbedField{}
 
 	for _, course := range courses.Data {
+		displayName := course.Faculty[0].DisplayName
+		categoryLink := fmt.Sprintf("[%s](https://catalog.utsa.edu/undergraduate/coursedescriptions/%s/)", course.Subject, strings.ToLower(course.Subject))
+		classLink := fmt.Sprintf("[%s-%s](https://catalog.utsa.edu/search/?P=%s%%20%s)", course.CourseNumber, course.SequenceNumber, course.Subject, course.CourseNumber)
+		professorLink := fmt.Sprintf("[%s](https://google.com)", displayName)
+
+		identifierText := fmt.Sprintf("%s %s (CRN %s)\n%s", categoryLink, classLink, course.CourseReferenceNumber, professorLink)
+
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:   "Identifier",
-			Value:  fmt.Sprintf("%s %s-%s [%s]", course.Subject, course.CourseNumber, course.SequenceNumber, course.CourseReferenceNumber),
+			Value:  identifierText,
 			Inline: true,
 		}, &discordgo.MessageEmbedField{
 			Name:   "Name",
@@ -99,7 +106,8 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 			Name:   "Meeting Time",
 			Value:  "MWF 11AM-12:15PM",
 			Inline: true,
-		})
+		},
+		)
 	}
 
 	err = session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
@@ -107,11 +115,9 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer: &discordgo.MessageEmbedFooter{
-						Text: fmt.Sprintf("Fetched at %s", fetch_time.Format("Monday, January 2, 2006 at 3:04:05PM")),
-					},
-					Description: "",
-					Fields:      fields,
+					Footer:      GetFooter(fetch_time),
+					Description: fmt.Sprintf("%d Classes", courses.TotalCount),
+					Fields:      fields[:min(25, len(fields))],
 				},
 			},
 			AllowedMentions: &discordgo.MessageAllowedMentions{},
@@ -202,9 +208,7 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) er
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer: &discordgo.MessageEmbedFooter{
-						Text: fmt.Sprintf("Fetched at %s", fetch_time.Format("Monday, January 2, 2006 at 3:04:05PM")),
-					},
+					Footer:      GetFooter(fetch_time),
 					Description: "",
 					Fields: []*discordgo.MessageEmbedField{
 						{

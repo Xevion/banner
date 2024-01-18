@@ -318,3 +318,9 @@ func RespondError(session *discordgo.Session, interaction *discordgo.Interaction
 		},
 	})
 }
+
+func GetFooter(time time.Time) *discordgo.MessageEmbedFooter {
+	return &discordgo.MessageEmbedFooter{
+		Text: fmt.Sprintf("Fetched at %s", time.Format("Monday, January 2, 2006 at 3:04:05PM")),
+	}
+}
