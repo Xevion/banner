@@ -277,6 +277,7 @@ func GuessExtension(contentType string) string {
 	}
 	return ""
 }
+
 // DumpResponse dumps a response body to a file for debugging purposes
 func DumpResponse(res *http.Response) {
 	contentType := res.Header.Get("Content-Type")
@@ -297,4 +298,6 @@ func DumpResponse(res *http.Response) {
 		log.Err(err).Msg("Error copying response body")
 		return
 	}
+
+	log.Info().Str("filename", filename).Str("content-type", contentType).Msg("Dumped response body")
 }
