@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -14,7 +15,6 @@ var (
 		TermCommandDefinition.Name:   TermCommandHandler,
 		SearchCommandDefinition.Name: SearchCommandHandler,
 	}
-	minLength = 0
 )
 
 var SearchCommandDefinition = &discordgo.ApplicationCommand{
@@ -23,35 +23,63 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 	Options: []*discordgo.ApplicationCommandOption{
 		{
 			Type:        discordgo.ApplicationCommandOptionString,
-			MinLength:   &minLength,
-			MaxLength:   8,
-			Name:        "query",
-			Description: "Search query",
-			Required:    true,
+			MinLength:   GetPointer(0),
+			MaxLength:   16,
+			Name:        "name",
+			Description: "Course Name",
+			Required:    false,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "code",
+			MinLength:   GetPointer(2),
+			Description: "Course Code (e.g. 3743, 3000-3999, 3xxx, 3000-)",
+			Required:    false,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "max",
+			Description: "Maximum number of results",
+			Required:    false,
 		},
 	},
 }
 
 func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
-	query := Query{
-		keywords: &[]string{"Computer Science"},
+	data := interaction.ApplicationCommandData()
+	query := NewQuery().Credits(3, 6)
+
+	countOption := data.Options[2]
+	if countOption.Value != nil {
+		query.MaxResults(int(countOption.IntValue()))
 	}
-	courses := Search(query, 0, 5, "", false)
+
+	courses, err := Search(query, "", false)
+	if err != nil {
+		session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Error searching for courses",
+			},
+		})
+		return
+	}
+
 	fetch_time := time.Now()
 	fields := []*discordgo.MessageEmbedField{}
 
-	for _, course := range courses.Data {
+	for i, course := range courses.Data {
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:   "Name",
-			Value:  course.CourseTitle,
+			Value:  fmt.Sprintf("%s %d", course.CourseTitle, i),
 			Inline: true,
 		}, &discordgo.MessageEmbedField{
 			Name:   "CRN",
-			Value:  "12345",
+			Value:  course.CourseReferenceNumber,
 			Inline: true,
 		}, &discordgo.MessageEmbedField{
 			Name:   "Credits",
-			Value:  "3",
+			Value:  strconv.Itoa(course.CreditHours),
 			Inline: true,
 		})
 	}
@@ -79,7 +107,7 @@ var TermCommandDefinition = &discordgo.ApplicationCommand{
 	Options: []*discordgo.ApplicationCommandOption{
 		{
 			Type:        discordgo.ApplicationCommandOptionString,
-			MinLength:   &minLength,
+			MinLength:   GetPointer(0),
 			MaxLength:   8,
 			Name:        "term",
 			Description: "Term to search for",
