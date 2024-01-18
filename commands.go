@@ -171,7 +171,23 @@ func TermCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 		})
 	}
 
-	return nil
+	fetch_time := time.Now()
+
+	err = session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Footer:      GetFooter(fetch_time),
+					Description: fmt.Sprintf("%d Terms", len(terms)),
+					Fields:      fields[:min(25, len(fields))],
+				},
+			},
+			AllowedMentions: &discordgo.MessageAllowedMentions{},
+		},
+	})
+
+	return err
 }
 
 var TimeCommandDefinition = &discordgo.ApplicationCommand{
@@ -190,7 +206,8 @@ var TimeCommandDefinition = &discordgo.ApplicationCommand{
 func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	fetch_time := time.Now()
 	crn := i.ApplicationCommandData().Options[0].IntValue()
-	courseMeetingTime, err := GetCourseMeetingTime(202420, int(crn))
+
+	meetingTimes, err := GetCourseMeetingTime(202420, int(crn))
 	if err != nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -201,7 +218,8 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) er
 		return err
 	}
 
-	duration := courseMeetingTime.timeEnd.Sub(courseMeetingTime.timeStart)
+	meetingTime := meetingTimes[0]
+	duration := meetingTime.EndTime().Sub(meetingTime.StartTime())
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -213,19 +231,19 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) er
 					Fields: []*discordgo.MessageEmbedField{
 						{
 							Name:  "Start Date",
-							Value: courseMeetingTime.dateStart.Format("Monday, January 2, 2006"),
+							Value: meetingTime.StartDay().Format("Monday, January 2, 2006"),
 						},
 						{
 							Name:  "End Date",
-							Value: courseMeetingTime.dateEnd.Format("Monday, January 2, 2006"),
+							Value: meetingTime.EndDay().Format("Monday, January 2, 2006"),
 						},
 						{
 							Name:  "Start/End Time",
-							Value: fmt.Sprintf("%s - %s (%d min)", courseMeetingTime.timeStart.String(), courseMeetingTime.timeEnd.String(), int64(duration.Minutes())),
+							Value: fmt.Sprintf("%s - %s (%d min)", meetingTime.StartTime().String(), meetingTime.EndTime().String(), int64(duration.Minutes())),
 						},
 						{
 							Name:  "Days of Week",
-							Value: WeekdaysToString(courseMeetingTime.weekdays),
+							Value: WeekdaysToString(meetingTime.Days()),
 						},
 					},
 				},
