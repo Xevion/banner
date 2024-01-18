@@ -224,12 +224,15 @@ func main() {
 	log.Debug().Interface("terms", terms).Msg("Terms")
 
 	// Term Select Pre-Search POST
+	var termSelect string
 	currentTerm, nextTerm := GetCurrentTerm(time.Now())
 	if currentTerm == nil {
-		SelectTerm(nextTerm.ToString())
+		termSelect = nextTerm.ToString()
 	} else {
-		SelectTerm(currentTerm.ToString())
+		termSelect = currentTerm.ToString()
 	}
+	log.Info().Str("term", termSelect).Str("sessionID", sessionID).Msg("Setting selected term")
+	SelectTerm(termSelect)
 
 	// Close session, ensure http client closes idle connections
 	defer session.Close()
