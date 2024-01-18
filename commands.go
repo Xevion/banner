@@ -49,9 +49,13 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 	data := interaction.ApplicationCommandData()
 	query := NewQuery().Credits(3, 6)
 
-	countOption := data.Options[2]
-	if countOption.Value != nil {
-		query.MaxResults(int(countOption.IntValue()))
+	for _, option := range data.Options {
+		switch option.Name {
+		case "name":
+		case "code":
+		case "max":
+			query.MaxResults(int(option.IntValue()))
+		}
 	}
 
 	courses, err := Search(query, "", false)
@@ -68,10 +72,10 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 	fetch_time := time.Now()
 	fields := []*discordgo.MessageEmbedField{}
 
-	for i, course := range courses.Data {
+	for _, course := range courses.Data {
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:   "Name",
-			Value:  fmt.Sprintf("%s %d", course.CourseTitle, i),
+			Value:  course.CourseTitle,
 			Inline: true,
 		}, &discordgo.MessageEmbedField{
 			Name:   "CRN",
