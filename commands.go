@@ -93,6 +93,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		professorLink := fmt.Sprintf("[%s](https://google.com)", displayName)
 
 		identifierText := fmt.Sprintf("%s %s (CRN %s)\n%s", categoryLink, classLink, course.CourseReferenceNumber, professorLink)
+		meetings := course.MeetingsFaculty[0]
 
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:   "Identifier",
@@ -104,7 +105,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 			Inline: true,
 		}, &discordgo.MessageEmbedField{
 			Name:   "Meeting Time",
-			Value:  "MWF 11AM-12:15PM",
+			Value:  meetings.String(),
 			Inline: true,
 		},
 		)

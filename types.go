@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -53,6 +54,49 @@ type MeetingTimeResponse struct {
 		Sunday                 bool    `json:"sunday"`
 	} `json:"meetingTime"`
 	Term string `json:"term"`
+}
+
+func (m *MeetingTimeResponse) String() string {
+	switch m.MeetingTime.MeetingType {
+	case "HB":
+		return fmt.Sprintf("%s\nHybrid %s", m.TimeString(), m.PlaceString())
+	case "H2":
+		return fmt.Sprintf("%s\nHybrid %s", m.TimeString(), m.PlaceString())
+	case "H1":
+		return fmt.Sprintf("%s\nHybrid %s", m.TimeString(), m.PlaceString())
+	case "OS":
+		return fmt.Sprintf("%s\nOnline Only", m.TimeString())
+	case "OA":
+		return "No Time\nOnline Asynchronous"
+	case "OH":
+		return fmt.Sprintf("%s\nOnline Partial", m.TimeString())
+	case "ID":
+		return "TBA"
+	case "FF":
+		return fmt.Sprintf("%s\n%s", m.TimeString(), m.PlaceString())
+	}
+
+	// TODO: Add error log
+	return "Unknown"
+}
+
+func (m *MeetingTimeResponse) TimeString() string {
+	startTime := m.StartTime()
+	endTime := m.EndTime()
+
+	if startTime == nil || endTime == nil {
+		return "???"
+	}
+
+	return fmt.Sprintf("%s %s-%s", WeekdaysToString(m.Days()), m.StartTime().String(), m.EndTime().String())
+}
+
+func (m *MeetingTimeResponse) PlaceString() string {
+	if m.MeetingTime.Room == "" {
+		return "???"
+	}
+
+	return fmt.Sprintf("%s %s", m.MeetingTime.Building, m.MeetingTime.Room)
 }
 
 func (m *MeetingTimeResponse) Days() map[time.Weekday]bool {
