@@ -158,11 +158,18 @@ func main() {
 			// Call handler
 			err := handler(internalSession, interaction)
 
-			// Log error
+			// Log & respond error
 			if err != nil {
 				// TODO: Find a way to merge the response with the handler's error
 				log.Error().Str("commandName", name).Err(err).Msg("Command Handler Error")
+
+				// Respond with error
+				err = RespondError(internalSession, interaction.Interaction, fmt.Sprintf("Unexpected Error: %s", err.Error()), nil)
+				if err != nil {
+					log.Error().Str("commandName", name).Err(err).Msg("Failed to respond with error feedback")
+				}
 			}
+
 		} else {
 			log.Error().Str("commandName", name).Msg("Command Interaction Has No Handler")
 

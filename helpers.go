@@ -307,18 +307,19 @@ func DumpResponse(res *http.Response) {
 
 // ResponseError responds to an interaction with an error message
 // TODO: Improve with a proper embed and colors
-func RespondError(session *discordgo.Session, interaction *discordgo.Interaction, message string, err error) {
+func RespondError(session *discordgo.Session, interaction *discordgo.Interaction, message string, err error) error {
 	// Optional: log the error
 	if err != nil {
 		log.Err(err).Msg(message)
 	}
 
-	session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+	return session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: message,
 		},
 	})
+
 }
 
 func GetFooter(time time.Time) *discordgo.MessageEmbedFooter {
