@@ -9,11 +9,12 @@ import (
 )
 
 var (
-	commandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition, SearchCommandDefinition}
+	commandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition, SearchCommandDefinition, IcsCommandDefinition}
 	commandHandlers    = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error{
 		TimeCommandDefinition.Name:   TimeCommandHandler,
 		TermCommandDefinition.Name:   TermCommandHandler,
 		SearchCommandDefinition.Name: SearchCommandHandler,
+		IcsCommandDefinition.Name:    IcsCommandHandler,
 	}
 )
 
@@ -247,6 +248,68 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) er
 							Value: WeekdaysToString(meetingTime.Days()),
 						},
 					},
+				},
+			},
+			AllowedMentions: &discordgo.MessageAllowedMentions{},
+		},
+	})
+	return nil
+}
+
+var IcsCommandDefinition = &discordgo.ApplicationCommand{
+	Name:        "ics",
+	Description: "Generate an ICS file for a course",
+	Options: []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "crn",
+			Description: "Course Reference Number",
+			Required:    true,
+		},
+	},
+}
+
+func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	crn := i.ApplicationCommandData().Options[0].IntValue()
+
+	meetingTimes, err := GetCourseMeetingTime(202420, int(crn))
+	if err != nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Error getting meeting time",
+			},
+		})
+		return err
+	}
+
+	cal := NewCalendar()
+	cal.SetTimezoneId("America/Chicago")
+
+	for _, meeting := range meetingTimes {
+		event := cal.AddEvent(fmt.Sprintf("%s@UTSA.EDU", meeting.CourseReferenceNumber))
+		event.SetSummary(meeting.CourseReferenceNumber)
+		event.SetDtStampTime(time.Now())
+
+		startDay := meeting.StartDay()
+		startTime := meeting.StartTime()
+		endTime := meeting.EndTime()
+
+		event.SetStartAt(time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(startTime.Hours), int(startTime.Minutes), 0, 0, time.UTC))
+		event.SetEndAt(time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(endTime.Hours), int(endTime.Minutes), 0, 0, time.UTC))
+
+		event.AddRrule(meeting.RRule())
+		event.SetLocation(meeting.PlaceString())
+	}
+
+	session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Files: []*discordgo.File{
+				{
+					Name:        fmt.Sprintf("%d.ics", crn),
+					ContentType: "text/calendar",
+					Reader:      strings.NewReader(cal.Serialize()),
 				},
 			},
 			AllowedMentions: &discordgo.MessageAllowedMentions{},
