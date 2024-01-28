@@ -31,8 +31,10 @@ var (
 	centralTime   *time.Location
 )
 
-const Version = "0.0.1"
-const CentralTimezone = "America/Chicago"
+const (
+	ICalTimestampFormatUtc = "20060102T150405Z"
+	CentralTimezone        = "America/Chicago"
+)
 
 func init() {
 	// Load environment variables

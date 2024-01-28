@@ -334,7 +334,7 @@ func NewCalendar() *ics.Calendar {
 		Components:         []ics.Component{},
 		CalendarProperties: []ics.CalendarProperty{},
 	}
-	c.SetVersion(Version)
+	c.SetVersion("2.0")
 	c.SetProductId("-//xevion//Banner Discord Bot//EN")
 	return c
 }
