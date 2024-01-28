@@ -4,13 +4,21 @@ A discord bot for executing queries & searches on the Ellucian Banner instance h
 
 ## Feature Wishlist
 
+- Commands
+  - ICS Download (get a ICS download of your classes with location & timing perfectly - set for every class you're in)
+  - Classes Now (find classes happening)
+- Autocomplete
+  - Class Title
+  - Course Number
+  - Term/Part of Term
+  - Professor
+  - Attribute
 - Component Pagination
 - RateMyProfessor Integration (Linked/Embedded)
 - Smart term selection (i.e. Summer 2024 will be selected automatically when opened)
 - Rate Limiting (bursting with global/user limits)
 - DMs Integration (allow usage of the bot in DMs)
 - Class Change Notifications (get notified when details about a class change)
-- ICS Download (get a ICS download of your classes with location & timing perfectly - set for every class you're in)
 - Multi-term Querying (currently the backend for searching is kinda weird)
 - Full Autocomplete for Every Search Option
 - Metrics, Log Query, Privileged Error Feedback
@@ -43,3 +51,5 @@ The follow features, JSON, and more require validation & analysis:
 - Mulltiple Meeting Times
 - Meeting Schedule Types
   - AFF vs AIN vs AHB etc.
+- Do CRNs repeat between years?
+- Check whether partOfTerm is always filled in, and it's meaning for various class results.

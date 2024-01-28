@@ -213,7 +213,6 @@ func main() {
 				Msg("Command Updated")
 		}
 	}
-	log.Info().Msg("Command registration complete")
 
 	// Fetch terms on startup
 	_, err = GetTerms("", 1, 10)
