@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	log "github.com/rs/zerolog/log"
@@ -113,6 +114,32 @@ func (m *MeetingTimeResponse) Days() map[time.Weekday]bool {
 	return days
 }
 
+// Returns the BYDAY value for the iCalendar RRule format
+func (m *MeetingTimeResponse) ByDay() string {
+	sb := strings.Builder{}
+
+	if m.MeetingTime.Sunday {
+		sb.WriteString("SU,")
+	}
+	if m.MeetingTime.Monday {
+		sb.WriteString("MO,")
+	}
+	if m.MeetingTime.Tuesday {
+		sb.WriteString("TU,")
+	}
+	if m.MeetingTime.Wednesday {
+		sb.WriteString("WE,")
+	}
+	if m.MeetingTime.Thursday {
+		sb.WriteString("TH,")
+	}
+	if m.MeetingTime.Friday {
+		sb.WriteString("FR")
+	}
+
+	return sb.String()
+}
+
 const layout = "01/02/2006"
 
 // StartDay returns the start date of the meeting time as a time.Time object
@@ -165,6 +192,17 @@ func (m *MeetingTimeResponse) EndTime() *NaiveTime {
 	}
 
 	return ParseNaiveTime(value)
+}
+
+// Converts the meeting time to a string that satisfies the iCalendar RRule format
+func (m *MeetingTimeResponse) RRule() string {
+	sb := strings.Builder{}
+
+	sb.WriteString("FREQ=WEEKLY;")
+	sb.WriteString(fmt.Sprintf("UNTIL=%s;", m.EndDay().Format("20060102")))
+	sb.WriteString(fmt.Sprintf("BYDAY=%s;", m.ByDay()))
+
+	return sb.String()
 }
 
 type SearchResult struct {
