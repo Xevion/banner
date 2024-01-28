@@ -28,31 +28,53 @@ type MeetingTimeResponse struct {
 	CourseReferenceNumber string  `json:"courseReferenceNumber"`
 	Faculty               []FacultyItem
 	MeetingTime           struct {
-		Category               string  `json:"category"`
-		Class                  string  `json:"class"`
-		StartDate              string  `json:"startDate"`
-		EndDate                string  `json:"endDate"`
-		BeginTime              string  `json:"beginTime"`
-		EndTime                string  `json:"endTime"`
-		Room                   string  `json:"room"`
-		Term                   string  `json:"term"`
-		Building               string  `json:"building"`
-		BuildingDescription    string  `json:"buildingDescription"`
-		Campus                 string  `json:"campus"`
-		CampusDescription      string  `json:"campusDescription"`
-		CourseReferenceNumber  string  `json:"courseReferenceNumber"`
-		CreditHourSession      float64 `json:"creditHourSession"`
-		HoursWeek              float64 `json:"hoursWeek"`
-		MeetingScheduleType    string  `json:"meetingScheduleType"`
-		MeetingType            string  `json:"meetingType"`
-		MeetingTypeDescription string  `json:"meetingTypeDescription"`
-		Monday                 bool    `json:"monday"`
-		Tuesday                bool    `json:"tuesday"`
-		Wednesday              bool    `json:"wednesday"`
-		Thursday               bool    `json:"thursday"`
-		Friday                 bool    `json:"friday"`
-		Saturday               bool    `json:"saturday"`
-		Sunday                 bool    `json:"sunday"`
+		Category string `json:"category"`
+		// Some sort of metadata used internally by Banner (net.hedtech.banner.student.schedule.SectionSessionDecorator)
+		Class string `json:"class"`
+		// The start date of the meeting time in MM/DD/YYYY format (e.g. 01/16/2024)
+		StartDate string `json:"startDate"`
+		// The end date of the meeting time in MM/DD/YYYY format (e.g. 05/10/2024)
+		EndDate string `json:"endDate"`
+		// The start time of the meeting time in 24-hour format, hours & minutes, digits only (e.g. 1630)
+		BeginTime string `json:"beginTime"`
+		// The end time of the meeting time in 24-hour format, hours & minutes, digits only (e.g. 1745)
+		EndTime string `json:"endTime"`
+		// The room number within the building this course takes place at (e.g. 3.01.08, 200A)
+		Room string `json:"room"`
+		// The internal identifier for the term this course takes place in (e.g. 202420)
+		Term string `json:"term"`
+		// The internal identifier for the building this course takes place at (e.g. SP1)
+		Building string `json:"building"`
+		// The long name of the building this course takes place at (e.g. San Pedro I - Data Science)
+		BuildingDescription string `json:"buildingDescription"`
+		// The internal identifier for the campus this course takes place at (e.g. 1DT)
+		Campus string `json:"campus"`
+		// The long name of the campus this course takes place at (e.g. Main Campus, Downtown Campus)
+		CampusDescription     string `json:"campusDescription"`
+		CourseReferenceNumber string `json:"courseReferenceNumber"`
+		// The number of credit hours this class is worth (assumably)
+		CreditHourSession float64 `json:"creditHourSession"`
+		// The number of hours per week this class meets (e.g. 2.5)
+		HoursWeek           float64 `json:"hoursWeek"`
+		MeetingScheduleType string  `json:"meetingScheduleType"`
+		// The short identifier for the meeting type (e.g. FF, HB, OS, OA)
+		MeetingType string `json:"meetingType"`
+		// The long name of the meeting type (e.g. Traditional in-person)
+		MeetingTypeDescription string `json:"meetingTypeDescription"`
+		// A boolean indicating if the class will meet on each Monday of the term
+		Monday bool `json:"monday"`
+		// A boolean indicating if the class will meet on each Tuesday of the term
+		Tuesday bool `json:"tuesday"`
+		// A boolean indicating if the class will meet on each Wednesday of the term
+		Wednesday bool `json:"wednesday"`
+		// A boolean indicating if the class will meet on each Thursday of the term
+		Thursday bool `json:"thursday"`
+		// A boolean indicating if the class will meet on each Friday of the term
+		Friday bool `json:"friday"`
+		// A boolean indicating if the class will meet on each Saturday of the term
+		Saturday bool `json:"saturday"`
+		// A boolean indicating if the class will meet on each Sunday of the term
+		Sunday bool `json:"sunday"`
 	} `json:"meetingTime"`
 	Term string `json:"term"`
 }
@@ -152,7 +174,7 @@ func (m *MeetingTimeResponse) StartDay() time.Time {
 	return t
 }
 
-// EndDay returns the end date of the meeting time as a time.Time object
+// EndDay returns the end date of the meeting time as a time.Time object.
 // This is not cached and is parsed on each invocation. It may also panic without handling.
 func (m *MeetingTimeResponse) EndDay() time.Time {
 	t, err := time.Parse(layout, m.MeetingTime.EndDate)
@@ -199,7 +221,7 @@ func (m *MeetingTimeResponse) RRule() string {
 	sb := strings.Builder{}
 
 	sb.WriteString("FREQ=WEEKLY;")
-	sb.WriteString(fmt.Sprintf("UNTIL=%s;", m.EndDay().Format("20060102")))
+	sb.WriteString(fmt.Sprintf("UNTIL=%s;", m.EndDay().UTC().Format(ICalTimestampFormatUtc)))
 	sb.WriteString(fmt.Sprintf("BYDAY=%s;", m.ByDay()))
 
 	return sb.String()
