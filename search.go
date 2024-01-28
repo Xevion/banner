@@ -8,6 +8,29 @@ import (
 	"github.com/samber/lo"
 )
 
+const (
+	paramSubject           = "txt_subject"
+	paramTitle             = "txt_courseTitle"
+	paramKeywords          = "txt_keywordlike"
+	paramOpenOnly          = "chk_open_only"
+	paramTermPart          = "txt_partOfTerm"
+	paramCampus            = "txt_campus"
+	paramAttributes        = "txt_attribute"
+	paramInstructor        = "txt_instructor"
+	paramStartTimeHour     = "select_start_hour"
+	paramStartTimeMinute   = "select_start_min"
+	paramStartTimeMeridiem = "select_start_ampm"
+	paramEndTimeHour       = "select_end_hour"
+	paramEndTimeMinute     = "select_end_min"
+	paramEndTimeMeridiem   = "select_end_ampm"
+	paramMinCredits        = "txt_credithourlow"
+	paramMaxCredits        = "txt_credithourhigh"
+	paramCourseNumberLow   = "txt_course_number_range"
+	paramCourseNumberHigh  = "txt_course_number_range_to"
+	paramOffset            = "pageOffset"
+	paramMaxResults        = "pageMaxSize"
+)
+
 type Query struct {
 	subject             *string
 	title               *string
@@ -172,69 +195,69 @@ func (q *Query) Paramify() map[string]string {
 	params := map[string]string{}
 
 	if q.subject != nil {
-		params["txt_subject"] = *q.subject
+		params[paramSubject] = *q.subject
 	}
 
 	if q.title != nil {
 		// Whitespace can prevent valid queries from succeeding
-		params["txt_courseTitle"] = strings.TrimSpace(*q.title)
+		params[paramTitle] = strings.TrimSpace(*q.title)
 	}
 
 	if q.keywords != nil {
-		params["txt_keywordlike"] = strings.Join(*q.keywords, " ")
+		params[paramKeywords] = strings.Join(*q.keywords, " ")
 	}
 
 	if q.openOnly != nil {
-		params["chk_open_only"] = "true"
+		params[paramOpenOnly] = "true"
 	}
 
 	if q.termPart != nil {
-		params["txt_partOfTerm"] = strings.Join(*q.termPart, ",")
+		params[paramTermPart] = strings.Join(*q.termPart, ",")
 	}
 
 	if q.campus != nil {
-		params["txt_campus"] = strings.Join(*q.campus, ",")
+		params[paramCampus] = strings.Join(*q.campus, ",")
 	}
 
 	if q.attributes != nil {
-		params["txt_attribute"] = strings.Join(*q.attributes, ",")
+		params[paramAttributes] = strings.Join(*q.attributes, ",")
 	}
 
 	if q.instructor != nil {
-		params["txt_instructor"] = strings.Join(lo.Map(*q.instructor, func(i uint64, _ int) string {
+		params[paramInstructor] = strings.Join(lo.Map(*q.instructor, func(i uint64, _ int) string {
 			return strconv.FormatUint(i, 10)
 		}), ",")
 	}
 
 	if q.startTime != nil {
 		hour, minute, meridiem := FormatTimeParameter(*q.startTime)
-		params["select_start_hour"] = hour
-		params["select_start_min"] = minute
-		params["select_start_ampm"] = meridiem
+		params[paramStartTimeHour] = hour
+		params[paramStartTimeMinute] = minute
+		params[paramStartTimeMeridiem] = meridiem
 	}
 
 	if q.endTime != nil {
 		hour, minute, meridiem := FormatTimeParameter(*q.endTime)
-		params["select_end_hour"] = hour
-		params["select_end_min"] = minute
-		params["select_end_ampm"] = meridiem
+		params[paramEndTimeHour] = hour
+		params[paramEndTimeMinute] = minute
+		params[paramEndTimeMeridiem] = meridiem
 	}
 
 	if q.minCredits != nil {
-		params["txt_credithourlow"] = strconv.Itoa(*q.minCredits)
+		params[paramMinCredits] = strconv.Itoa(*q.minCredits)
 	}
 
 	if q.maxCredits != nil {
-		params["txt_credithourhigh"] = strconv.Itoa(*q.maxCredits)
+		params[paramMaxCredits] = strconv.Itoa(*q.maxCredits)
 	}
 
 	if q.courseNumberRange != nil {
-		params["txt_course_number_range"] = strconv.Itoa(q.courseNumberRange.Low)
-		params["txt_course_number_range_to"] = strconv.Itoa(q.courseNumberRange.High)
+		params[paramCourseNumberLow] = strconv.Itoa(q.courseNumberRange.Low)
+		params[paramCourseNumberHigh] = strconv.Itoa(q.courseNumberRange.High)
 	}
 
-	params["pageOffset"] = strconv.Itoa(q.offset)
-	params["pageMaxSize"] = strconv.Itoa(q.maxResults)
+	params[paramOffset] = strconv.Itoa(q.offset)
+	params[paramMaxResults] = strconv.Itoa(q.maxResults)
 
 	return params
 }
