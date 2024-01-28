@@ -91,6 +91,7 @@ func (m *MeetingTimeResponse) TimeString() string {
 	return fmt.Sprintf("%s %s-%s", WeekdaysToString(m.Days()), m.StartTime().String(), m.EndTime().String())
 }
 
+// PlaceString returns a formatted string best representing the place of the meeting time
 func (m *MeetingTimeResponse) PlaceString() string {
 	if m.MeetingTime.Room == "" {
 		return "???"
@@ -177,39 +178,62 @@ type SearchResult struct {
 		Display string `json:"display"`
 	} `json:"searchResultsConfig"`
 	Data []struct {
-		Id                             int     `json:"id"`
-		Term                           string  `json:"term"`
-		TermDesc                       string  `json:"termDesc"`
-		CourseReferenceNumber          string  `json:"courseReferenceNumber"`
-		PartOfTerm                     string  `json:"partOfTerm"`
-		CourseNumber                   string  `json:"courseNumber"`
-		Subject                        string  `json:"subject"`
-		SubjectDescription             string  `json:"subjectDescription"`
-		SequenceNumber                 string  `json:"sequenceNumber"`
-		CampusDescription              string  `json:"campusDescription"`
-		ScheduleTypeDescription        string  `json:"scheduleTypeDescription"`
-		CourseTitle                    string  `json:"courseTitle"`
-		CreditHours                    int     `json:"creditHours"`
-		MaximumEnrollment              int     `json:"maximumEnrollment"`
-		Enrollment                     int     `json:"enrollment"`
-		SeatsAvailable                 int     `json:"seatsAvailable"`
-		WaitCapacity                   int     `json:"waitCapacity"`
-		WaitCount                      int     `json:"waitCount"`
-		CrossList                      *string `json:"crossList"`
-		CrossListCapacity              *int    `json:"crossListCapacity"`
-		CrossListCount                 *int    `json:"crossListCount"`
-		CrossListAvailable             *int    `json:"crossListAvailable"`
-		CreditHourHigh                 *int    `json:"creditHourHigh"`
-		CreditHourLow                  *int    `json:"creditHourLow"`
-		CreditHourIndicator            *string `json:"creditHourIndicator"`
-		OpenSection                    bool    `json:"openSection"`
-		LinkIdentifier                 *string `json:"linkIdentifier"`
-		IsSectionLinked                bool    `json:"isSectionLinked"`
+		// A internal identifier not used outside of the Banner system
+		Id int `json:"id"`
+		// The internal identifier for the term this class is in (e.g. 202420)
+		Term string `json:"term"`
+		// The human-readable name of the term this class is in (e.g. Fall 2021)
+		TermDesc string `json:"termDesc"`
+		// The specific identifier that describes this individual course. CRNs are unique to a term. (TODO: Verify this is true)
+		CourseReferenceNumber string `json:"courseReferenceNumber"`
+		PartOfTerm            string `json:"partOfTerm"`
+		CourseNumber          string `json:"courseNumber"`
+		// The short acronym of the course subject (e.g. CS, AEPI)
+		Subject string `json:"subject"`
+		// The full name of the course subject (e.g. Computer Science, Academic English Program-Intl.)
+		SubjectDescription string `json:"subjectDescription"`
+		// The specific section of the course (e.g. 001, 002)
+		SequenceNumber string `json:"sequenceNumber"`
+		// The long name of the campus this course takes place at (e.g. Main Campus, Downtown Campus)
+		CampusDescription       string `json:"campusDescription"`
+		ScheduleTypeDescription string `json:"scheduleTypeDescription"`
+		// The long name of the course (generally)
+		CourseTitle string `json:"courseTitle"`
+		CreditHours int    `json:"creditHours"`
+		// The maximum number of students that can enroll in this course
+		MaximumEnrollment int `json:"maximumEnrollment"`
+		// The number of students currently enrolled in this course
+		Enrollment int `json:"enrollment"`
+		// The number of seats available in this course (MaximumEnrollment - Enrollment)
+		SeatsAvailable int `json:"seatsAvailable"`
+		// The number of students that could waitlist for this course
+		WaitCapacity int `json:"waitCapacity"`
+		// The number of students currently on the waitlist for this course
+		WaitCount           int     `json:"waitCount"`
+		CrossList           *string `json:"crossList"`
+		CrossListCapacity   *int    `json:"crossListCapacity"`
+		CrossListCount      *int    `json:"crossListCount"`
+		CrossListAvailable  *int    `json:"crossListAvailable"`
+		CreditHourHigh      *int    `json:"creditHourHigh"`
+		CreditHourLow       *int    `json:"creditHourLow"`
+		CreditHourIndicator *string `json:"creditHourIndicator"`
+		OpenSection         bool    `json:"openSection"`
+		LinkIdentifier      *string `json:"linkIdentifier"`
+		IsSectionLinked     bool    `json:"isSectionLinked"`
+		// A combination of the subject and course number (e.g. subject=CS, courseNumber=3443 => "CS3443")
 		SubjectCourse                  string  `json:"subjectCourse"`
 		ReservedSeatSummary            *string `json:"reservedSeatSummary"`
 		InstructionalMethod            string  `json:"instructionalMethod"`
 		InstructionalMethodDescription string  `json:"instructionalMethodDescription"`
-		Faculty                        []FacultyItem
-		MeetingsFaculty                []MeetingTimeResponse `json:"meetingsFaculty"`
+		SectionAttributes              []struct {
+			Class                 string `json:"class"`
+			Code                  string `json:"code"`
+			CourseReferenceNumber string `json:"courseReferenceNumber"`
+			Description           string `json:"description"`
+			IsZtcAttribute        bool   `json:"isZTCAttribute"`
+			TermCode              string `json:"termCode"`
+		} `json:"sectionAttributes"`
+		Faculty         []FacultyItem         `json:"faculty"`
+		MeetingsFaculty []MeetingTimeResponse `json:"meetingsFaculty"`
 	} `json:"data"`
 }
