@@ -31,6 +31,9 @@ var (
 	centralTime   *time.Location
 )
 
+const Version = "0.0.1"
+const CentralTimezone = "America/Chicago"
+
 func init() {
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
@@ -40,7 +43,7 @@ func init() {
 	ctx = context.Background()
 
 	var err error
-	centralTime, err = time.LoadLocation("America/Chicago")
+	centralTime, err = time.LoadLocation(CentralTimezone)
 	if err != nil {
 		panic(err)
 	}

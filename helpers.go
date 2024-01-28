@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	ics "github.com/arran4/golang-ical"
 	"github.com/bwmarrin/discordgo"
 	"github.com/rs/zerolog"
 	log "github.com/rs/zerolog/log"
@@ -326,4 +327,14 @@ func GetFooter(time time.Time) *discordgo.MessageEmbedFooter {
 	return &discordgo.MessageEmbedFooter{
 		Text: fmt.Sprintf("Fetched at %s", time.Format("Monday, January 2, 2006 at 3:04:05PM")),
 	}
+}
+
+func NewCalendar() *ics.Calendar {
+	c := &ics.Calendar{
+		Components:         []ics.Component{},
+		CalendarProperties: []ics.CalendarProperty{},
+	}
+	c.SetVersion(Version)
+	c.SetProductId("-//xevion//Banner Discord Bot//EN")
+	return c
 }
