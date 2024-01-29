@@ -243,6 +243,8 @@ func GetCourseDetails(term int, crn int) *ClassDetails {
 
 // Search invokes a search on the Banner system with the given query and returns the results.
 func Search(query *Query, sort string, sortDescending bool) (*SearchResult, error) {
+	ResetDataForm()
+
 	params := query.Paramify()
 
 	params["txt_term"] = "202420" // TODO: Make this automatic but dynamically specifiable
@@ -446,4 +448,13 @@ func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 	}
 
 	return meetingTime.Inner, nil
+}
+
+// ResetDataForm makes a POST request that needs to be made upon before new search requests can be made.
+func ResetDataForm() {
+	req := BuildRequest("POST", "/classSearch/resetDataForm", nil)
+	_, err := DoRequest(req)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to reset data form")
+	}
 }
