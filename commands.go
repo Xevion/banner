@@ -283,24 +283,70 @@ func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) err
 		return err
 	}
 
-	cal := NewCalendar()
-	cal.SetTimezoneId("America/Chicago")
+	events := []string{}
 
 	for _, meeting := range meetingTimes {
-		event := cal.AddEvent(fmt.Sprintf("%s@UTSA.EDU", meeting.CourseReferenceNumber))
-		event.SetSummary(meeting.CourseReferenceNumber)
-		event.SetDtStampTime(time.Now())
+		now := time.Now().In(CentralTimeLocation)
+		uid := fmt.Sprintf("%d-%s@ical.banner.xevion.dev", now.Unix(), meeting.CourseReferenceNumber)
 
 		startDay := meeting.StartDay()
 		startTime := meeting.StartTime()
 		endTime := meeting.EndTime()
+		dtStart := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(startTime.Hours), int(startTime.Minutes), 0, 0, CentralTimeLocation)
+		dtEnd := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(endTime.Hours), int(endTime.Minutes), 0, 0, CentralTimeLocation)
 
-		event.SetStartAt(time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(startTime.Hours), int(startTime.Minutes), 0, 0, time.UTC))
-		event.SetEndAt(time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(endTime.Hours), int(endTime.Minutes), 0, 0, time.UTC))
+		endDay := meeting.EndDay()
+		until := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 23, 59, 59, 0, CentralTimeLocation)
 
-		event.AddRrule(meeting.RRule())
-		event.SetLocation(meeting.PlaceString())
+		summary := fmt.Sprintf("{Insert Classname Here} (CRN %s)", meeting.CourseReferenceNumber)
+		description := fmt.Sprintf(`Instructor: {Insert Instructor Here}
+Section: {Insert Section Here}
+CRN: %s`, meeting.CourseReferenceNumber)
+		location := meeting.PlaceString()
+
+		event := fmt.Sprintf(`BEGIN:VEVENT
+DTSTAMP:%s
+UID:%s
+DTSTART;TZID=America/Chicago:%s
+RRULE:FREQ=WEEKLY;BYDAY=%s;UNTIL=%s
+DTEND;TZID=America/Chicago:%s
+SUMMARY:%s
+DESCRIPTION:%s
+LOCATION:%s
+END:VEVENT`, now.Format(ICalTimestampFormatLocal), uid, dtStart.Format(ICalTimestampFormatLocal), meeting.ByDay(), until.Format(ICalTimestampFormatLocal), dtEnd.Format(ICalTimestampFormatLocal), summary, strings.Replace(description, "\n", `\n`, -1), location)
+
+		events = append(events, event)
 	}
+
+	// TODO: Make this dynamically requested, parsed & cached from tzurl.org
+	vTimezone := `BEGIN:VTIMEZONE
+TZID:America/Chicago
+LAST-MODIFIED:20231222T233358Z
+TZURL:https://www.tzurl.org/zoneinfo-outlook/America/Chicago
+X-LIC-LOCATION:America/Chicago
+BEGIN:DAYLIGHT
+TZNAME:CDT
+TZOFFSETFROM:-0600
+TZOFFSETTO:-0500
+DTSTART:19700308T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZNAME:CST
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0600
+DTSTART:19701101T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+END:STANDARD
+END:VTIMEZONE`
+
+	ics := fmt.Sprintf(`BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//xevion//Banner Discord Bot//EN
+CALSCALE:GREGORIAN
+%s
+%s
+END:VCALENDAR`, vTimezone, strings.Join(events, "\n"))
 
 	session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -309,7 +355,7 @@ func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) err
 				{
 					Name:        fmt.Sprintf("%d.ics", crn),
 					ContentType: "text/calendar",
-					Reader:      strings.NewReader(cal.Serialize()),
+					Reader:      strings.NewReader(ics),
 				},
 			},
 			AllowedMentions: &discordgo.MessageAllowedMentions{},
