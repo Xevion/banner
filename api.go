@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
 var sessionID string = RandomString(5) + Nonce()

@@ -41,7 +41,7 @@ type YearDayRange struct {
 }
 
 // GetYearDayRange returns the start and end day of each term for the given year.
-// This could technichally introduce race conditions, but it's more likely confusion from UTC will be a greater issue.
+// This could technically introduce race conditions, but it's more likely confusion from UTC will be a greater issue.
 // Spring: January 14th to May
 // Summer: May 25th - August 15th
 // Fall: August 18th - December 10th

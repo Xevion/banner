@@ -53,6 +53,7 @@ The follow features, JSON, and more require validation & analysis:
   - AFF vs AIN vs AHB etc.
 - Do CRNs repeat between years?
 - Check whether partOfTerm is always filled in, and it's meaning for various class results.
+- Check which API calls are affected by change in term/sessionID term select
 
 ## Real-time Suggestions
 
