@@ -20,20 +20,21 @@ import (
 )
 
 var (
-	ctx           context.Context
-	kv            *redis.Client
-	session       *discordgo.Session
-	client        http.Client
-	cookies       http.CookieJar
-	isDevelopment bool
-	baseURL       string // Base URL for all requests to the banner system
-	environment   string
-	centralTime   *time.Location
+	ctx                 context.Context
+	kv                  *redis.Client
+	session             *discordgo.Session
+	client              http.Client
+	cookies             http.CookieJar
+	isDevelopment       bool
+	baseURL             string // Base URL for all requests to the banner system
+	environment         string
+	CentralTimeLocation *time.Location
 )
 
 const (
-	ICalTimestampFormatUtc = "20060102T150405Z"
-	CentralTimezone        = "America/Chicago"
+	ICalTimestampFormatUtc   = "20060102T150405Z"
+	ICalTimestampFormatLocal = "20060102T150405"
+	CentralTimezoneName      = "America/Chicago"
 )
 
 func init() {
@@ -45,14 +46,14 @@ func init() {
 	ctx = context.Background()
 
 	var err error
-	centralTime, err = time.LoadLocation(CentralTimezone)
+	CentralTimeLocation, err = time.LoadLocation(CentralTimezoneName)
 	if err != nil {
 		panic(err)
 	}
 
 	// Set zerolog's timestamp function to use the central timezone
 	zerolog.TimestampFunc = func() time.Time {
-		return time.Now().In(centralTime)
+		return time.Now().In(CentralTimeLocation)
 	}
 
 	// Try to grab the environment variable, or default to development
