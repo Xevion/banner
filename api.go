@@ -15,11 +15,13 @@ import (
 
 var sessionID string = RandomString(5) + Nonce()
 
-// BannerTerm represents a term in the Banner system
-type BannerTerm struct {
+type Pair struct {
 	Code        string `json:"code"`
 	Description string `json:"description"`
 }
+
+type BannerTerm Pair
+type Instructor Pair
 
 // GetTerms retrieves and parses the term information for a given search term.
 // Ensure that the offset is greater than 0.
@@ -42,7 +44,7 @@ func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get terms: %w", err)
 	}
 
 	// Assert that the response is JSON
@@ -55,13 +57,16 @@ func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 
 	// print the response body
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	terms := make([]BannerTerm, 0, 10)
 	json.Unmarshal(body, &terms)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse terms: %w", err)
 	}
 
 	return terms, nil
@@ -98,7 +103,11 @@ func SelectTerm(term string) {
 
 	// Acquire fwdUrl
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to read response body")
+	}
+
 	var redirectResponse struct {
 		FwdUrl string `json:"fwdUrl"`
 	}
@@ -145,7 +154,10 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 	}
 
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	terms := make([]BannerTerm, 0, 10)
 	err = json.Unmarshal(body, &terms)
@@ -154,11 +166,6 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 	}
 
 	return terms, nil
-}
-
-type Instructor struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
 }
 
 // GetInstructors retrieves and parses the instructor information for a given search term.
@@ -191,7 +198,10 @@ func GetInstructors(search string, term string, offset int, max int) ([]Instruct
 	}
 
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	instructors := make([]Instructor, 0, 10)
 	err = json.Unmarshal(body, &instructors)
@@ -208,11 +218,14 @@ type ClassDetails struct {
 }
 
 func GetCourseDetails(term int, crn int) *ClassDetails {
-	body, _ := json.Marshal(map[string]string{
+	body, err := json.Marshal(map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
 		"first":                 "first", // TODO: What is this?
 	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to marshal body")
+	}
 	req := BuildRequestWithBody("GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
 
 	res, err := DoRequest(req)
@@ -245,7 +258,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 
 	res, err := DoRequest(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to search: %w", err)
 	}
 
 	// Assert that the response is JSON
@@ -253,7 +266,10 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 		log.Error().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	var result SearchResult
 	err = json.Unmarshal(body, &result)
@@ -265,15 +281,10 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 	return &result, nil
 }
 
-type Subject struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
-}
-
 // GetSubjects retrieves and parses the subject information for a given search term.
 // The results of this response shouldn't change much, but technically could as new majors are developed, or old ones are removed.
 // Ensure that the offset is greater than 0.
-func GetSubjects(search string, term string, offset int, max int) ([]Subject, error) {
+func GetSubjects(search string, term string, offset int, max int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -299,9 +310,12 @@ func GetSubjects(search string, term string, offset int, max int) ([]Subject, er
 	}
 
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
-	subjects := make([]Subject, 0, 10)
+	subjects := make([]Pair, 0, 10)
 	err = json.Unmarshal(body, &subjects)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subjects: %w", err)
@@ -310,16 +324,11 @@ func GetSubjects(search string, term string, offset int, max int) ([]Subject, er
 	return subjects, nil
 }
 
-type Campus struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
-}
-
 // GetCampuses retrieves and parses the campus information for a given search term.
 // In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
 // This function is included for completeness, but probably isn't useful.
 // Ensure that the offset is greater than 0.
-func GetCampuses(search string, term int, offset int, max int) ([]Campus, error) {
+func GetCampuses(search string, term int, offset int, max int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -345,9 +354,12 @@ func GetCampuses(search string, term int, offset int, max int) ([]Campus, error)
 	}
 
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
-	campuses := make([]Campus, 0, 10)
+	campuses := make([]Pair, 0, 10)
 	err = json.Unmarshal(body, &campuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse campuses: %w", err)
@@ -356,16 +368,11 @@ func GetCampuses(search string, term int, offset int, max int) ([]Campus, error)
 	return campuses, nil
 }
 
-type InstructionalMethod struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
-}
-
 // GetInstructionalMethods retrieves and parses the instructional method information for a given search term.
 // In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
 // This function is included for completeness, but probably isn't useful.
 // Ensure that the offset is greater than 0.
-func GetInstructionalMethods(search string, term string, offset int, max int) ([]InstructionalMethod, error) {
+func GetInstructionalMethods(search string, term string, offset int, max int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -383,7 +390,7 @@ func GetInstructionalMethods(search string, term string, offset int, max int) ([
 	res, err := DoRequest(req)
 	if err != nil {
 		log.Err(err).Msg("Failed to get instructional methods")
-		return nil, err
+		return nil, fmt.Errorf("failed to get instructional methods: %w", err)
 	}
 
 	// Assert that the response is JSON
@@ -394,7 +401,7 @@ func GetInstructionalMethods(search string, term string, offset int, max int) ([
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
 
-	methods := make([]InstructionalMethod, 0, 10)
+	methods := make([]Pair, 0, 10)
 	err = json.Unmarshal(body, &methods)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse instructional methods: %w", err)
@@ -424,7 +431,10 @@ func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 
 	// Read the response body into JSON
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	// Parse the JSON into a MeetingTimeResponse struct
 	var meetingTime struct {
