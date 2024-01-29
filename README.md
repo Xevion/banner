@@ -89,6 +89,10 @@ For now, all majors will be scraped fully every 4 hours with at least 5 minutes 
 - CRNs will be the Primary Key within SQLite
   - If CRNs are duplicated between terms, then the primary key will be (CRN, Term)
 
+Considerations
+- Change in metadata should decrease the interval
+- The number of courses scraped should change the interval (2 hours per 500 courses involved)
+
 ## Rate Limiting, Costs & Bursting
 
 Ideally, this application would implement dynamic rate limiting to ensure overload on the server does not occur.
