@@ -129,3 +129,12 @@ func (term Term) ToString() string {
 
 	return fmt.Sprintf("%d%s", term.Year, season)
 }
+
+// Default chooses the default term, which is the current term if it exists, otherwise the next term.
+func Default(t time.Time) Term {
+	currentTerm, nextTerm := GetCurrentTerm(t)
+	if currentTerm == nil {
+		return *nextTerm
+	}
+	return *currentTerm
+}

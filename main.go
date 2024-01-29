@@ -270,15 +270,9 @@ func main() {
 	}
 
 	// Term Select Pre-Search POST
-	var termSelect string
-	currentTerm, nextTerm := GetCurrentTerm(time.Now())
-	if currentTerm == nil {
-		termSelect = nextTerm.ToString()
-	} else {
-		termSelect = currentTerm.ToString()
-	}
-	log.Info().Str("term", termSelect).Str("sessionID", sessionID).Msg("Setting selected term")
-	SelectTerm(termSelect)
+	term := Default(time.Now()).ToString()
+	log.Info().Str("term", term).Str("sessionID", sessionID).Msg("Setting selected term")
+	SelectTerm(term)
 
 	// Close session, ensure http client closes idle connections
 	defer session.Close()
