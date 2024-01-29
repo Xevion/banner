@@ -158,6 +158,27 @@ func main() {
 				options.Str(option.Name, fmt.Sprintf("%v", option.Value))
 			}
 
+			event := log.Info().Str("name", name).Str("user", interaction.Member.User.Username).Dict("options", options)
+
+			// If the command was invoked in a guild, add guild & channel info to the log
+			if interaction.Member != nil {
+				guild := zerolog.Dict()
+				guild.Str("id", interaction.GuildID)
+				guild.Str("name", GetGuildName(interaction.GuildID))
+				event.Dict("guild", guild)
+
+				channel := zerolog.Dict()
+				channel.Str("id", interaction.ChannelID)
+				guild.Str("name", GetChannelName(interaction.ChannelID))
+				event.Dict("channel", channel)
+			} else {
+				// If the command was invoked in a DM, add the user info to the log
+				user := zerolog.Dict()
+				user.Str("id", interaction.User.ID)
+				user.Str("name", interaction.User.Username)
+				event.Dict("user", user)
+			}
+
 			// Log command invocation
 			log.Info().Str("name", name).Str("user", GetUsername(interaction)).Dict("options", options).Msg("Command Invoked")
 
