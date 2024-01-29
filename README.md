@@ -88,3 +88,14 @@ For now, all majors will be scraped fully every 4 hours with at least 5 minutes 
 - Scrape timing will be stored in Redis.
 - CRNs will be the Primary Key within SQLite
   - If CRNs are duplicated between terms, then the primary key will be (CRN, Term)
+
+## Rate Limiting, Costs & Bursting
+
+Ideally, this application would implement dynamic rate limiting to ensure overload on the server does not occur.
+Better, it would also ensure that priority requests (commands) are dispatched faster than background processes (scraping), while making sure different requests are weighted differently.
+For example, a recent scrape of 350 classes should be weighted 5x more than a search for 8 classes by a user.
+Still, even if the cap does not normally allow for this request to be processed immediately, the small user search should procede with a small bursting cap.
+
+The requirements to this hypothetical system would be:
+- Conditional Bursting: background processes or other requests deemed "low priority" are not allowed to use bursting.
+- Arbitrary Costs: rate limiting is considered in the form of the request size/speed more or less, such that small simple requests can be made more frequently, unlike large requests.
