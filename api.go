@@ -22,7 +22,13 @@ type BannerTerm struct {
 }
 
 // GetTerms retrieves and parses the term information for a given search term.
+// Ensure that the offset is greater than 0.
 func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
+	// Ensure offset is valid
+	if offset <= 0 {
+		return nil, errors.New("offset must be greater than 0")
+	}
+
 	req := BuildRequest("GET", "/classSearch/getTerms", map[string]string{
 		"searchTerm": search,
 		"offset":     strconv.Itoa(offset),
@@ -112,7 +118,13 @@ func SelectTerm(term string) {
 }
 
 // GetPartOfTerms retrieves and parses the part of term information for a given term.
+// Ensure that the offset is greater than 0.
 func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm, error) {
+	// Ensure offset is valid
+	if offset <= 0 {
+		return nil, errors.New("offset must be greater than 0")
+	}
+
 	req := BuildRequest("GET", "/classSearch/get_partOfTerm", map[string]string{
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
@@ -150,6 +162,9 @@ type Instructor struct {
 }
 
 // GetInstructors retrieves and parses the instructor information for a given search term.
+// In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
+// This function is included for completeness, but probably isn't useful.
+// Ensure that the offset is greater than 0.
 func GetInstructors(search string, term string, offset int, max int) ([]Instructor, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
@@ -188,10 +203,11 @@ func GetInstructors(search string, term string, offset int, max int) ([]Instruct
 }
 
 // TODO: Finish this struct & function
+// ClassDetails represents
 type ClassDetails struct {
 }
 
-func GetClassDetails(term int, crn int) *ClassDetails {
+func GetCourseDetails(term int, crn int) *ClassDetails {
 	body, _ := json.Marshal(map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
@@ -249,13 +265,23 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 	return &result, nil
 }
 
-// TODO: Finish this struct & function
-type Subject struct{}
+type Subject struct {
+	Code        string `json:"code"`
+	Description string `json:"description"`
+}
 
-func GetSubjects(search string, term int, offset int, max int) []Subject {
+// GetSubjects retrieves and parses the subject information for a given search term.
+// The results of this response shouldn't change much, but technically could as new majors are developed, or old ones are removed.
+// Ensure that the offset is greater than 0.
+func GetSubjects(search string, term string, offset int, max int) ([]Subject, error) {
+	// Ensure offset is valid
+	if offset <= 0 {
+		return nil, errors.New("offset must be greater than 0")
+	}
+
 	req := BuildRequest("GET", "/classSearch/get_subject", map[string]string{
 		"searchTerm":      search,
-		"term":            strconv.Itoa(term),
+		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
@@ -264,7 +290,7 @@ func GetSubjects(search string, term int, offset int, max int) []Subject {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to get subjects: %w", err)
 	}
 
 	// Assert that the response is JSON
@@ -272,13 +298,33 @@ func GetSubjects(search string, term int, offset int, max int) []Subject {
 		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
-	return make([]Subject, 0)
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	subjects := make([]Subject, 0, 10)
+	err = json.Unmarshal(body, &subjects)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse subjects: %w", err)
+	}
+
+	return subjects, nil
 }
 
-// TODO: Finish this struct & function
-type Campus struct{}
+type Campus struct {
+	Code        string `json:"code"`
+	Description string `json:"description"`
+}
 
-func GetCampuses(search string, term int, offset int, max int) []Campus {
+// GetCampuses retrieves and parses the campus information for a given search term.
+// In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
+// This function is included for completeness, but probably isn't useful.
+// Ensure that the offset is greater than 0.
+func GetCampuses(search string, term int, offset int, max int) ([]Campus, error) {
+	// Ensure offset is valid
+	if offset <= 0 {
+		return nil, errors.New("offset must be greater than 0")
+	}
+
 	req := BuildRequest("GET", "/classSearch/get_campus", map[string]string{
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
@@ -290,8 +336,7 @@ func GetCampuses(search string, term int, offset int, max int) []Campus {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		log.Err(err)
-		return nil
+		return nil, fmt.Errorf("failed to get campuses: %w", err)
 	}
 
 	// Assert that the response is JSON
@@ -299,16 +344,36 @@ func GetCampuses(search string, term int, offset int, max int) []Campus {
 		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
-	return make([]Campus, 0)
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	campuses := make([]Campus, 0, 10)
+	err = json.Unmarshal(body, &campuses)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse campuses: %w", err)
+	}
+
+	return campuses, nil
 }
 
-// TODO: Finish this struct & function
-type InstructionalMethod struct{}
+type InstructionalMethod struct {
+	Code        string `json:"code"`
+	Description string `json:"description"`
+}
 
-func GetInstructionalMethods(search string, term int, offset int, max int) ([]InstructionalMethod, error) {
+// GetInstructionalMethods retrieves and parses the instructional method information for a given search term.
+// In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
+// This function is included for completeness, but probably isn't useful.
+// Ensure that the offset is greater than 0.
+func GetInstructionalMethods(search string, term string, offset int, max int) ([]InstructionalMethod, error) {
+	// Ensure offset is valid
+	if offset <= 0 {
+		return nil, errors.New("offset must be greater than 0")
+	}
+
 	req := BuildRequest("GET", "/classSearch/get_instructionalMethod", map[string]string{
 		"searchTerm":      search,
-		"term":            strconv.Itoa(term),
+		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
@@ -326,7 +391,16 @@ func GetInstructionalMethods(search string, term int, offset int, max int) ([]In
 		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
-	return make([]InstructionalMethod, 0), nil
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	methods := make([]InstructionalMethod, 0, 10)
+	err = json.Unmarshal(body, &methods)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse instructional methods: %w", err)
+	}
+
+	return methods, nil
 }
 
 // GetCourseMeetingTime retrieves the meeting time information for a course based on the given term and course reference number (CRN).
@@ -340,7 +414,7 @@ func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get meeting time: %w", err)
 	}
 
 	// Assert that the response is JSON
@@ -358,7 +432,7 @@ func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 	}
 	err = json.Unmarshal(body, &meetingTime)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse meeting time: %w", err)
 	}
 
 	return meetingTime.Inner, nil
