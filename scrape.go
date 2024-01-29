@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -90,12 +91,13 @@ func CanScrape(subject string) bool {
 // ScrapeMajor is the scraping invocation for a specific major.
 // This function does not check whether scraping is required at this time, it is assumed that the caller has already done so.
 func ScrapeMajor(subject string) error {
-	offset := 1
+	offset := 0
 	totalClassCount := 0
+	log.Info().Str("subject", subject).Msg("Scraping Major")
 
 	for {
-		query := NewQuery().Offset(offset).MaxResults(MaxPageSize)
-		result, err := Search(query, "", false)
+		query := NewQuery().Offset(offset).MaxResults(MaxPageSize).Subject(subject)
+		result, err := Search(query, "subjectDescription", false)
 		if err != nil {
 			return fmt.Errorf("failed to search for classes on page %d: %w", offset, err)
 		}
@@ -105,17 +107,19 @@ func ScrapeMajor(subject string) error {
 			return fmt.Errorf("search for classes on page %d was not successful", offset)
 		}
 
+		classCount := len(result.Data)
+		totalClassCount += classCount
+		log.Debug().Str("subject", subject).Int("count", classCount).Int("offset", offset).Msg("Placing classes in Redis")
+
 		// Process each class and store it in Redis
 		for _, class := range result.Data {
+			// TODO: Move this into a separate function to allow future comparison/SQLite intake
 			// Store class in Redis
 			err := kv.Set(ctx, fmt.Sprintf("class:%s", class.CourseReferenceNumber), class, 0).Err()
 			if err != nil {
 				log.Error().Err(err).Msg("failed to store class in Redis")
 			}
 		}
-
-		classCount := len(result.Data)
-		totalClassCount += classCount
 
 		// Increment and continue if the results are full
 		if classCount >= MaxPageSize {
@@ -127,20 +131,42 @@ func ScrapeMajor(subject string) error {
 			offset += MaxPageSize
 
 			// TODO: Replace sleep with smarter rate limiting
-			time.Sleep(time.Second * 7)
+			log.Debug().Str("subject", subject).Int("nextOffset", offset).Msg("Sleeping before next page")
+			time.Sleep(time.Second * 3)
 			continue
 		} else {
 			// Log the number of classes scraped
-			log.Info().Str("subject", subject).Int("count", totalClassCount).Int("offset", offset).Int("finalOffset", offset+classCount).Msg("Scraped classes")
+			log.Info().Str("subject", subject).Int("total", totalClassCount).Msg("Major Scraped")
 			break
 		}
 	}
 
+	// Calculate the expiry time for the scrape (1 hour for every 500 classes, random +-15%) with a minimum of 1 hour
+	scrapeExpiry := time.Hour * time.Duration(totalClassCount/500)
+	partial := scrapeExpiry.Seconds() * 0.15
+	if rand.Intn(2) == 0 {
+		scrapeExpiry -= time.Duration(partial) * time.Second
+	} else {
+		scrapeExpiry += time.Duration(partial) * time.Second
+	}
+
+	// Ensure the expiry is at least 1 hour with up to 15 extra minutes
+	if scrapeExpiry < time.Hour {
+		scrapeExpiry = time.Hour + time.Duration(rand.Intn(60*15))*time.Second
+	}
+
+	// If the subject is a priority, then the expiry is halved
+	if lo.Contains(PriorityMajors, subject) {
+		scrapeExpiry /= 2
+	}
+
 	// Mark the major as scraped
 	term := Default(time.Now()).ToString()
-	err := kv.Set(ctx, fmt.Sprintf("scraped:%s:%s", subject, term), "1", 0).Err()
+	err := kv.Set(ctx, fmt.Sprintf("scraped:%s:%s", subject, term), "1", scrapeExpiry).Err()
 	if err != nil {
 		log.Error().Err(err).Msg("failed to mark major as scraped")
+	} else {
+		log.Debug().Str("subject", subject).Str("expiry", scrapeExpiry.String()).Msg("Marked major as scraped")
 	}
 
 	return nil

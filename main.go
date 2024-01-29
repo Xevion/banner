@@ -274,6 +274,12 @@ func main() {
 	log.Info().Str("term", term).Str("sessionID", sessionID).Msg("Setting selected term")
 	SelectTerm(term)
 
+	// Scrape on startup
+	err = Scrape()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Startup Scrape Failed")
+	}
+
 	// Close session, ensure http client closes idle connections
 	defer session.Close()
 	defer client.CloseIdleConnections()
