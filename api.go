@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"strconv"
@@ -20,7 +21,7 @@ type BannerTerm struct {
 	Description string `json:"description"`
 }
 
-// GetTerms
+// GetTerms retrieves and parses the term information for a given search term.
 func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 	req := BuildRequest("GET", "/classSearch/getTerms", map[string]string{
 		"searchTerm": search,
@@ -60,6 +61,8 @@ func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
 	return terms, nil
 }
 
+// SelectTerm selects the given term in the Banner system.
+// This function completes the initial term selection process, which is required before any other API calls can be made with the session ID.
 func SelectTerm(term string) {
 	form := url.Values{
 		"term":            {term},
@@ -99,7 +102,7 @@ func SelectTerm(term string) {
 	req = BuildRequest("GET", redirectResponse.FwdUrl, nil)
 	res, err = DoRequest(req)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to make redirect request")
+		log.Fatal().Err(err).Msg("Redirect request failed")
 	}
 
 	// Assert that the response is OK (200)
@@ -108,7 +111,7 @@ func SelectTerm(term string) {
 	}
 }
 
-// GET /classSearch/get_partOfTerm?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070282288
+// GetPartOfTerms retrieves and parses the part of term information for a given term.
 func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm, error) {
 	req := BuildRequest("GET", "/classSearch/get_partOfTerm", map[string]string{
 		"searchTerm":      search,
@@ -121,7 +124,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 
 	res, err := DoRequest(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get part of terms: %w", err)
 	}
 
 	// Assert that the response is JSON
@@ -129,26 +132,33 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
-	// print the response body
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
 
 	terms := make([]BannerTerm, 0, 10)
 	err = json.Unmarshal(body, &terms)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse part of terms: %w", err)
 	}
 
 	return terms, nil
 }
 
-type Instructor struct{}
+type Instructor struct {
+	Code        string `json:"code"`
+	Description string `json:"description"`
+}
 
-// GET /classSearch/get_instructor?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1701951338584
-func GetInstructor(search string, term int, offset int, max int) []Instructor {
+// GetInstructors retrieves and parses the instructor information for a given search term.
+func GetInstructors(search string, term string, offset int, max int) ([]Instructor, error) {
+	// Ensure offset is valid
+	if offset <= 0 {
+		return nil, errors.New("offset must be greater than 0")
+	}
+
 	req := BuildRequest("GET", "/classSearch/get_instructor", map[string]string{
 		"searchTerm":      search,
-		"term":            strconv.Itoa(term),
+		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": sessionID,
@@ -157,7 +167,7 @@ func GetInstructor(search string, term int, offset int, max int) []Instructor {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to get instructors: %w", err)
 	}
 
 	// Assert that the response is JSON
@@ -165,10 +175,21 @@ func GetInstructor(search string, term int, offset int, max int) []Instructor {
 		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
-	return make([]Instructor, 0)
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	instructors := make([]Instructor, 0, 10)
+	err = json.Unmarshal(body, &instructors)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse instructors: %w", err)
+	}
+
+	return instructors, nil
 }
 
-type ClassDetails struct{}
+// TODO: Finish this struct & function
+type ClassDetails struct {
+}
 
 func GetClassDetails(term int, crn int) *ClassDetails {
 	body, _ := json.Marshal(map[string]string{
@@ -191,8 +212,7 @@ func GetClassDetails(term int, crn int) *ClassDetails {
 	return &ClassDetails{}
 }
 
-// GET /searchResults/searchResults?txt_instructor=77521&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
-// GET /searchResults/searchResults?txt_subject=CS&txt_keywordlike=Application&txt_term=202420&startDatepicker=&endDatepicker=&uniqueSessionId=4bzai1701944879219&pageOffset=0&pageMaxSize=10&sortColumn=subjectDescription&sortDirection=asc
+// Search invokes a search on the Banner system with the given query and returns the results.
 func Search(query *Query, sort string, sortDescending bool) (*SearchResult, error) {
 	params := query.Paramify()
 
@@ -223,15 +243,15 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 	err = json.Unmarshal(body, &result)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse search results: %w", err)
 	}
 
 	return &result, nil
 }
 
+// TODO: Finish this struct & function
 type Subject struct{}
 
-// GET /classSearch/get_subject?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702069787420
 func GetSubjects(search string, term int, offset int, max int) []Subject {
 	req := BuildRequest("GET", "/classSearch/get_subject", map[string]string{
 		"searchTerm":      search,
@@ -255,9 +275,9 @@ func GetSubjects(search string, term int, offset int, max int) []Subject {
 	return make([]Subject, 0)
 }
 
+// TODO: Finish this struct & function
 type Campus struct{}
 
-// /classSearch/get_campus?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070341071
 func GetCampuses(search string, term int, offset int, max int) []Campus {
 	req := BuildRequest("GET", "/classSearch/get_campus", map[string]string{
 		"searchTerm":      search,
@@ -282,9 +302,9 @@ func GetCampuses(search string, term int, offset int, max int) []Campus {
 	return make([]Campus, 0)
 }
 
+// TODO: Finish this struct & function
 type InstructionalMethod struct{}
 
-// / classSearch/get_instructionalMethod?searchTerm=&term=202420&offset=1&max=10&uniqueSessionId=4bzai1701944879219&_=1702070364082
 func GetInstructionalMethods(search string, term int, offset int, max int) ([]InstructionalMethod, error) {
 	req := BuildRequest("GET", "/classSearch/get_instructionalMethod", map[string]string{
 		"searchTerm":      search,
