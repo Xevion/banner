@@ -138,28 +138,31 @@ func (m *MeetingTimeResponse) Days() map[time.Weekday]bool {
 
 // Returns the BYDAY value for the iCalendar RRule format
 func (m *MeetingTimeResponse) ByDay() string {
-	sb := strings.Builder{}
+	days := []string{}
 
 	if m.MeetingTime.Sunday {
-		sb.WriteString("SU,")
+		days = append(days, "SU")
 	}
 	if m.MeetingTime.Monday {
-		sb.WriteString("MO,")
+		days = append(days, "MO")
 	}
 	if m.MeetingTime.Tuesday {
-		sb.WriteString("TU,")
+		days = append(days, "TU")
 	}
 	if m.MeetingTime.Wednesday {
-		sb.WriteString("WE,")
+		days = append(days, "WE")
 	}
 	if m.MeetingTime.Thursday {
-		sb.WriteString("TH,")
+		days = append(days, "TH")
 	}
 	if m.MeetingTime.Friday {
-		sb.WriteString("FR")
+		days = append(days, "FR")
+	}
+	if m.MeetingTime.Saturday {
+		days = append(days, "SA")
 	}
 
-	return sb.String()
+	return strings.Join(days, ",")
 }
 
 const layout = "01/02/2006"
