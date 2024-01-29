@@ -158,7 +158,7 @@ func main() {
 				options.Str(option.Name, fmt.Sprintf("%v", option.Value))
 			}
 
-			event := log.Info().Str("name", name).Str("user", interaction.Member.User.Username).Dict("options", options)
+			event := log.Info().Str("name", name).Str("user", GetUsername(interaction)).Dict("options", options)
 
 			// If the command was invoked in a guild, add guild & channel info to the log
 			if interaction.Member != nil {
@@ -180,7 +180,7 @@ func main() {
 			}
 
 			// Log command invocation
-			log.Info().Str("name", name).Str("user", GetUsername(interaction)).Dict("options", options).Msg("Command Invoked")
+			event.Msg("Command Invoked")
 
 			// Call handler
 			err := handler(internalSession, interaction)
