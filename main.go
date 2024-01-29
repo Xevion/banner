@@ -29,6 +29,7 @@ var (
 	baseURL             string // Base URL for all requests to the banner system
 	environment         string
 	CentralTimeLocation *time.Location
+	isClosing           bool = false
 )
 
 const (
@@ -77,7 +78,7 @@ func init() {
 	baseURL = os.Getenv("BANNER_BASE_URL")
 }
 
-func main() {
+func initRedis() {
 	// Setup redis
 	redisUrl := GetFirstEnv("REDIS_URL", "REDIS_PRIVATE_URL")
 	if redisUrl == "" {
@@ -122,8 +123,13 @@ func main() {
 		log.Debug().Str("ping", pong).Msg("Redis connection successful")
 		break
 	}
+}
+
+func main() {
+	initRedis()
 
 	// Create cookie jar
+	var err error
 	cookies, err = cookiejar.New(nil)
 	if err != nil {
 		log.Err(err).Msg("Cannot create cookie jar")
@@ -150,6 +156,15 @@ func main() {
 
 	// Setup command handlers
 	session.AddHandler(func(internalSession *discordgo.Session, interaction *discordgo.InteractionCreate) {
+		// Handle commands during restart (highly unlikely, but just in case)
+		if isClosing {
+			err := RespondError(internalSession, interaction.Interaction, "Bot is currently restarting, try again later.", nil)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to respond with restart error feedback")
+			}
+			return
+		}
+
 		name := interaction.ApplicationCommandData().Name
 		if handler, ok := commandHandlers[name]; ok {
 			// Build dict of options for the log
@@ -276,6 +291,8 @@ func main() {
 
 	// Wait for signal (indefinite)
 	<-stop
+
+	isClosing = true
 
 	// Defers are called after this
 	log.Warn().Msg("Gracefully shutting down")
