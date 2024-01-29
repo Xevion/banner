@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -301,4 +302,8 @@ type Course struct {
 	} `json:"sectionAttributes"`
 	Faculty         []FacultyItem         `json:"faculty"`
 	MeetingsFaculty []MeetingTimeResponse `json:"meetingsFaculty"`
+}
+
+func (course Course) MarshalBinary() ([]byte, error) {
+	return json.Marshal(course)
 }
