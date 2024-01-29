@@ -159,7 +159,7 @@ func main() {
 			}
 
 			// Log command invocation
-			log.Info().Str("name", name).Str("user", interaction.Member.User.Username).Dict("options", options).Msg("Command Invoked")
+			log.Info().Str("name", name).Str("user", GetUsername(interaction)).Dict("options", options).Msg("Command Invoked")
 
 			// Call handler
 			err := handler(internalSession, interaction)

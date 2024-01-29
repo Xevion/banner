@@ -338,3 +338,11 @@ func NewCalendar() *ics.Calendar {
 	c.SetProductId("-//xevion//Banner Discord Bot//EN")
 	return c
 }
+
+func GetUsername(interaction *discordgo.InteractionCreate) string {
+	if interaction.Member != nil {
+		return interaction.Member.User.Username
+	}
+
+	return interaction.User.Username
+}
