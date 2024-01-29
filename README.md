@@ -53,3 +53,37 @@ The follow features, JSON, and more require validation & analysis:
   - AFF vs AIN vs AHB etc.
 - Do CRNs repeat between years?
 - Check whether partOfTerm is always filled in, and it's meaning for various class results.
+
+## Real-time Suggestions
+
+Various commands arguments have the ability to have suggestions appear.
+
+- They must be fast. As ephemeral suggestions that are only relevant for seconds or less, they need to be delivered in less than a second.
+- They need to be easy to acquire. With as many commands & arguments to search as I do, it is paramount that the API be easy to understand & use.
+- It cannot be complicated. I only have so much time to develop this.
+- It does not need to be persistent. Since the data is scraped and rolled periodically from the Banner system, the data used will be deleted and re-requested occasionally.
+
+For these reasons, I believe SQLite to be the ideal place for this data to be stored.
+It is exceptionally fast, works well in-memory, and is less complicated compared to most other solutions.
+
+- Only required data about the class will be stored, along with the JSON-encoded string.
+  - For now, this would only be the CRN (and possibly the Term).
+  - Potentially, a binary encoding could be used for performance, but it is unlikely to be better.
+- Database dumping into R2 would be good to ensure that over-scraping of the Banner system does not occur.
+  - Upon a safe close requested
+    - Must be done quickly (<8 seconds)
+  - Every 30 minutes, if any scraping ocurred.
+    - May cause locking of commands.
+
+## Scraping
+
+In order to keep the in-memory database of the bot up-to-date with the Banner system, the API must be scraped.
+Scraping will be separated by major to allow for priority majors (namely, Computer Science) to be scraped more often compared to others.
+This will lower the overall load on the Banner system while ensuring that data presented by the app is still relevant.
+
+For now, all majors will be scraped fully every 4 hours with at least 5 minutes between each one.
+- On startup, priority majors will be scraped first (if required).
+- Other majors will be scraped in arbitrary order (if required).
+- Scrape timing will be stored in Redis.
+- CRNs will be the Primary Key within SQLite
+  - If CRNs are duplicated between terms, then the primary key will be (CRN, Term)
