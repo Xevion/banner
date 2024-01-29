@@ -41,7 +41,7 @@ A discord bot for executing queries & searches on the Ellucian Banner instance h
 
 ## Analysis Required
 
-Some of the features and architecture of Elluc;lglgian's Banner system are not clear.
+Some of the features and architecture of Ellucian's Banner system are not clear.
 The follow features, JSON, and more require validation & analysis:
 
 - Struct Nullability
