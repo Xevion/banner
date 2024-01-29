@@ -1,0 +1,75 @@
+
+[
+  {
+    "code": "060",
+    "description": "Core-American History"
+  },
+  {
+    "code": "010",
+    "description": "Core-Communication"
+  },
+  {
+    "code": "090",
+    "description": "Core-Component Area Option"
+  },
+  {
+    "code": "050",
+    "description": "Core-Creative Arts"
+  },
+  {
+    "code": "070",
+    "description": "Core-Government-Political Sci"
+  },
+  {
+    "code": "040",
+    "description": "Core-Lang, Philosophy&amp;Culture"
+  },
+  {
+    "code": "030",
+    "description": "Core-Life &amp; Physical Sciences"
+  },
+  {
+    "code": "020",
+    "description": "Core-Mathematics"
+  },
+  {
+    "code": "080",
+    "description": "Core-Social &amp; Behavioral Sci"
+  },
+  {
+    "code": "DEVL",
+    "description": "Developmental"
+  },
+  {
+    "code": "ZZTC",
+    "description": "Finish at UT Courses"
+  },
+  {
+    "code": "NCTB",
+    "description": "Free Textbooks"
+  },
+  {
+    "code": "GRAD",
+    "description": "Grad Doctoral level course"
+  },
+  {
+    "code": "HNRS",
+    "description": "Honors College Course"
+  },
+  {
+    "code": "LCTB",
+    "description": "Low Cost Textbooks"
+  },
+  {
+    "code": "LWER",
+    "description": "Lower Division course"
+  },
+  {
+    "code": "ZZSL",
+    "description": "Service Learning Course"
+  },
+  {
+    "code": "UPPR",
+    "description": "Upper Division course"
+  }
+]

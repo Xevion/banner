@@ -1,0 +1,43 @@
+
+[
+  {
+    "code": "B5",
+    "description": "Fall/Spring First 8 week term"
+  },
+  {
+    "code": "1",
+    "description": "Fall/Spring Full Term"
+  },
+  {
+    "code": "B6",
+    "description": "Fall/Spring Second 8 week Term"
+  },
+  {
+    "code": "T",
+    "description": "Summer 10 Week Term"
+  },
+  {
+    "code": "8",
+    "description": "Summer 8 Week Term"
+  },
+  {
+    "code": "J",
+    "description": "Summer First 4 Week Term"
+  },
+  {
+    "code": "F",
+    "description": "Summer First 5 Week Term"
+  },
+  {
+    "code": "M",
+    "description": "Summer May 3 Week Term"
+  },
+  {
+    "code": "L",
+    "description": "Summer Second 4 Week Term"
+  },
+  {
+    "code": "S",
+    "description": "Summer Second 5 Week Term"
+  }
+]

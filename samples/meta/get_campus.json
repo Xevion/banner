@@ -1,0 +1,27 @@
+
+[
+  {
+    "code": "1DT",
+    "description": "Downtown Campus"
+  },
+  {
+    "code": "9",
+    "description": "Internet"
+  },
+  {
+    "code": "1LR",
+    "description": "Laredo Education Center"
+  },
+  {
+    "code": "11",
+    "description": "Main Campus"
+  },
+  {
+    "code": "ONL",
+    "description": "Online Programs"
+  },
+  {
+    "code": "1SW",
+    "description": "Southwest Campus"
+  }
+]

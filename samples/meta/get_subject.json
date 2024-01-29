@@ -1,0 +1,503 @@
+
+[
+  {
+    "code": "AEPI",
+    "description": "Academic English Program-Int&#39;l"
+  },
+  {
+    "code": "AIS",
+    "description": "Academic Inquiry &amp; Scholarship"
+  },
+  {
+    "code": "ACC",
+    "description": "Accounting"
+  },
+  {
+    "code": "MATE",
+    "description": "Advanced Materials Engineering"
+  },
+  {
+    "code": "ASC",
+    "description": "Aerospace Studies"
+  },
+  {
+    "code": "AFS",
+    "description": "Affiliated Studies"
+  },
+  {
+    "code": "AAS",
+    "description": "African American Studies"
+  },
+  {
+    "code": "AMS",
+    "description": "American Studies"
+  },
+  {
+    "code": "ANT",
+    "description": "Anthropology"
+  },
+  {
+    "code": "AIM",
+    "description": "Applied-Industrial Mathematics"
+  },
+  {
+    "code": "ARC",
+    "description": "Architecture"
+  },
+  {
+    "code": "ART",
+    "description": "Art"
+  },
+  {
+    "code": "AHC",
+    "description": "Art History and Criticism"
+  },
+  {
+    "code": "AST",
+    "description": "Astronomy"
+  },
+  {
+    "code": "BBL",
+    "description": "Bicultural Bilingual Studies"
+  },
+  {
+    "code": "BIO",
+    "description": "Biology"
+  },
+  {
+    "code": "BME",
+    "description": "Biomedical Engineering"
+  },
+  {
+    "code": "BLW",
+    "description": "Business Law"
+  },
+  {
+    "code": "CME",
+    "description": "Chemical Engineering"
+  },
+  {
+    "code": "CHE",
+    "description": "Chemistry"
+  },
+  {
+    "code": "CHN",
+    "description": "Chinese"
+  },
+  {
+    "code": "CE",
+    "description": "Civil Engineering"
+  },
+  {
+    "code": "CLA",
+    "description": "Classics"
+  },
+  {
+    "code": "COM",
+    "description": "Communication"
+  },
+  {
+    "code": "CSH",
+    "description": "Comparative Studies-Humanities"
+  },
+  {
+    "code": "CPE",
+    "description": "Computer Engineering"
+  },
+  {
+    "code": "CS",
+    "description": "Computer Science"
+  },
+  {
+    "code": "CSM",
+    "description": "Construction Sci &amp; Management"
+  },
+  {
+    "code": "COU",
+    "description": "Counseling"
+  },
+  {
+    "code": "CRJ",
+    "description": "Criminal Justice"
+  },
+  {
+    "code": "CI",
+    "description": "Curriculum and Instruction"
+  },
+  {
+    "code": "DAN",
+    "description": "Dance"
+  },
+  {
+    "code": "DA",
+    "description": "Data Analytics"
+  },
+  {
+    "code": "DS",
+    "description": "Data Science"
+  },
+  {
+    "code": "DEM",
+    "description": "Demography"
+  },
+  {
+    "code": "ECE",
+    "description": "Early Childhood"
+  },
+  {
+    "code": "ECO",
+    "description": "Economics"
+  },
+  {
+    "code": "EDU",
+    "description": "Education"
+  },
+  {
+    "code": "EDL",
+    "description": "Educational Leadership"
+  },
+  {
+    "code": "EDP",
+    "description": "Educational Psychology"
+  },
+  {
+    "code": "EE",
+    "description": "Electrical Engineering"
+  },
+  {
+    "code": "EGR",
+    "description": "Engineering"
+  },
+  {
+    "code": "EID",
+    "description": "Engineering/Integrated Design"
+  },
+  {
+    "code": "ENG",
+    "description": "English"
+  },
+  {
+    "code": "ESL",
+    "description": "English as a Second Language"
+  },
+  {
+    "code": "ENT",
+    "description": "Entrepreneurship"
+  },
+  {
+    "code": "ES",
+    "description": "Environmental Sciences"
+  },
+  {
+    "code": "EED",
+    "description": "Equity and Education"
+  },
+  {
+    "code": "FM",
+    "description": "Facility Management"
+  },
+  {
+    "code": "FIN",
+    "description": "Finance"
+  },
+  {
+    "code": "FL",
+    "description": "Foreign Languages"
+  },
+  {
+    "code": "FRN",
+    "description": "French"
+  },
+  {
+    "code": "GBA",
+    "description": "General Business Admin"
+  },
+  {
+    "code": "GRG",
+    "description": "Geography"
+  },
+  {
+    "code": "GES",
+    "description": "Geography &amp; Env Sustainability"
+  },
+  {
+    "code": "GEO",
+    "description": "Geology"
+  },
+  {
+    "code": "GER",
+    "description": "German"
+  },
+  {
+    "code": "GLA",
+    "description": "Global Affairs"
+  },
+  {
+    "code": "GPWY",
+    "description": "Graduate Pathway"
+  },
+  {
+    "code": "GRK",
+    "description": "Greek"
+  },
+  {
+    "code": "HTH",
+    "description": "Health"
+  },
+  {
+    "code": "HCP",
+    "description": "Health, Community and Policy"
+  },
+  {
+    "code": "HSA",
+    "description": "Higher Ed Stdnt Affairs Admin"
+  },
+  {
+    "code": "HIS",
+    "description": "History"
+  },
+  {
+    "code": "HON",
+    "description": "Honors"
+  },
+  {
+    "code": "HUM",
+    "description": "Humanities"
+  },
+  {
+    "code": "IS",
+    "description": "Information Systems"
+  },
+  {
+    "code": "ILR",
+    "description": "Instructional Leadership"
+  },
+  {
+    "code": "ILT",
+    "description": "Interdisciplinary Learn/Teach"
+  },
+  {
+    "code": "IDS",
+    "description": "Interdisciplinary Studies"
+  },
+  {
+    "code": "IDE",
+    "description": "Interior Design"
+  },
+  {
+    "code": "IRS",
+    "description": "Interntl Research Studyabroad"
+  },
+  {
+    "code": "ITL",
+    "description": "Italian"
+  },
+  {
+    "code": "JPN",
+    "description": "Japanese"
+  },
+  {
+    "code": "KIN",
+    "description": "Kinesiology"
+  },
+  {
+    "code": "KOR",
+    "description": "Korean"
+  },
+  {
+    "code": "LAT",
+    "description": "Latin"
+  },
+  {
+    "code": "LDR",
+    "description": "Leadership"
+  },
+  {
+    "code": "LDT",
+    "description": "Learning, Design &amp; Technology"
+  },
+  {
+    "code": "LNG",
+    "description": "Linguistics"
+  },
+  {
+    "code": "LTED",
+    "description": "Literacy Education"
+  },
+  {
+    "code": "MGT",
+    "description": "Management"
+  },
+  {
+    "code": "MS",
+    "description": "Management Science"
+  },
+  {
+    "code": "MOT",
+    "description": "Management of Technology"
+  },
+  {
+    "code": "MKT",
+    "description": "Marketing"
+  },
+  {
+    "code": "MBA",
+    "description": "Master of Business Admin"
+  },
+  {
+    "code": "MAT",
+    "description": "Mathematics"
+  },
+  {
+    "code": "ME",
+    "description": "Mechanical Engineering"
+  },
+  {
+    "code": "MES",
+    "description": "Media Studies"
+  },
+  {
+    "code": "MHU",
+    "description": "Medical Humanities"
+  },
+  {
+    "code": "MAS",
+    "description": "Mexican American Studies"
+  },
+  {
+    "code": "MSC",
+    "description": "Military Science"
+  },
+  {
+    "code": "MMI",
+    "description": "Molecular Microbio/Immunology"
+  },
+  {
+    "code": "MDS",
+    "description": "Multidisciplinary Studies"
+  },
+  {
+    "code": "MSM",
+    "description": "Museum Studies"
+  },
+  {
+    "code": "MUS",
+    "description": "Music"
+  },
+  {
+    "code": "NS",
+    "description": "National Security"
+  },
+  {
+    "code": "NXC",
+    "description": "National Student Exchange"
+  },
+  {
+    "code": "NDRB",
+    "description": "Neuroscience/Dev &amp; Regen Bio"
+  },
+  {
+    "code": "NCB",
+    "description": "Non-course Based Instruction"
+  },
+  {
+    "code": "NTR",
+    "description": "Nutrition"
+  },
+  {
+    "code": "NDT",
+    "description": "Nutrition and Dietetics"
+  },
+  {
+    "code": "PLGL",
+    "description": "Paralegal Certificate Program"
+  },
+  {
+    "code": "PHI",
+    "description": "Philosophy"
+  },
+  {
+    "code": "PHY",
+    "description": "Physics"
+  },
+  {
+    "code": "POL",
+    "description": "Political Science"
+  },
+  {
+    "code": "PAL",
+    "description": "Politics and Law"
+  },
+  {
+    "code": "PSY",
+    "description": "Psychology"
+  },
+  {
+    "code": "PAD",
+    "description": "Public Administration"
+  },
+  {
+    "code": "REGS",
+    "description": "Race, Ethn, Gender &amp; Sexuality"
+  },
+  {
+    "code": "RFD",
+    "description": "Real Estate"
+  },
+  {
+    "code": "RUS",
+    "description": "Russian"
+  },
+  {
+    "code": "SWK",
+    "description": "Social Work"
+  },
+  {
+    "code": "SOC",
+    "description": "Sociology"
+  },
+  {
+    "code": "SPN",
+    "description": "Spanish"
+  },
+  {
+    "code": "SPE",
+    "description": "Special Education"
+  },
+  {
+    "code": "SET",
+    "description": "Sport, Event, and Tourism MGT"
+  },
+  {
+    "code": "STA",
+    "description": "Statistics"
+  },
+  {
+    "code": "TIS",
+    "description": "Translation &amp; Interpreting St"
+  },
+  {
+    "code": "UTE",
+    "description": "UTeachSA"
+  },
+  {
+    "code": "UCS",
+    "description": "University College Studies"
+  },
+  {
+    "code": "UPM",
+    "description": "University Peer Mentorship"
+  },
+  {
+    "code": "URP",
+    "description": "Urban &amp; Regional Planning"
+  },
+  {
+    "code": "WGSS",
+    "description": "Women&#39;s, Gender &amp; Sexuality St"
+  },
+  {
+    "code": "WRC",
+    "description": "Writing Program"
+  }
+]
