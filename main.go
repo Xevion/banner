@@ -274,11 +274,18 @@ func main() {
 	log.Info().Str("term", term).Str("sessionID", sessionID).Msg("Setting selected term")
 	SelectTerm(term)
 
-	// Scrape on startup
-	err = Scrape()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Startup Scrape Failed")
-	}
+	// Launch a goroutine to scrape the banner system periodically
+	go func() {
+		for {
+			err := Scrape()
+			if err != nil {
+				log.Fatal().Err(err).Msg("Periodic Scrape Failed")
+			}
+
+			// Wait 5 minutes
+			time.Sleep(3 * time.Minute)
+		}
+	}()
 
 	// Close session, ensure http client closes idle connections
 	defer session.Close()
