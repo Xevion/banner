@@ -141,8 +141,8 @@ func ScrapeMajor(subject string) error {
 		}
 	}
 
-	// Calculate the expiry time for the scrape (1 hour for every 500 classes, random +-15%) with a minimum of 1 hour
-	scrapeExpiry := time.Hour * time.Duration(totalClassCount/500)
+	// Calculate the expiry time for the scrape (1 hour for every 200 classes, random +-15%) with a minimum of 1 hour
+	scrapeExpiry := time.Hour * time.Duration(totalClassCount/200)
 	partial := scrapeExpiry.Seconds() * 0.15
 	if rand.Intn(2) == 0 {
 		scrapeExpiry -= time.Duration(partial) * time.Second
@@ -157,7 +157,7 @@ func ScrapeMajor(subject string) error {
 
 	// If the subject is a priority, then the expiry is halved
 	if lo.Contains(PriorityMajors, subject) {
-		scrapeExpiry /= 2
+		scrapeExpiry /= 3
 	}
 
 	// Mark the major as scraped
