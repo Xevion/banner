@@ -48,7 +48,7 @@ The follow features, JSON, and more require validation & analysis:
   - Much of the responses provided by Ellucian contain nulls, and most of them are uncertain as to when and why they're null.
   - Analysis must be conducted to be sure of when to use a string and when it should nillable (pointer).
 - Multiple Professors / Primary Indicator
-- Mulltiple Meeting Times
+- Multiple Meeting Times
 - Meeting Schedule Types
   - AFF vs AIN vs AHB etc.
 - Do CRNs repeat between years?
@@ -98,7 +98,7 @@ Considerations
 Ideally, this application would implement dynamic rate limiting to ensure overload on the server does not occur.
 Better, it would also ensure that priority requests (commands) are dispatched faster than background processes (scraping), while making sure different requests are weighted differently.
 For example, a recent scrape of 350 classes should be weighted 5x more than a search for 8 classes by a user.
-Still, even if the cap does not normally allow for this request to be processed immediately, the small user search should procede with a small bursting cap.
+Still, even if the cap does not normally allow for this request to be processed immediately, the small user search should proceed with a small bursting cap.
 
 The requirements to this hypothetical system would be:
 - Conditional Bursting: background processes or other requests deemed "low priority" are not allowed to use bursting.
