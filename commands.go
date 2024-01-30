@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -272,15 +273,14 @@ var IcsCommandDefinition = &discordgo.ApplicationCommand{
 func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	crn := i.ApplicationCommandData().Options[0].IntValue()
 
+	course, err := GetCourse(strconv.Itoa(int(crn)))
+	if err != nil {
+		return fmt.Errorf("Error retrieving course data: %w", err)
+	}
+
 	meetingTimes, err := GetCourseMeetingTime(202420, int(crn))
 	if err != nil {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Error getting meeting time",
-			},
-		})
-		return err
+		return fmt.Errorf("Error requesting meeting time: %w", err)
 	}
 
 	events := []string{}
@@ -298,10 +298,8 @@ func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) err
 		endDay := meeting.EndDay()
 		until := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 23, 59, 59, 0, CentralTimeLocation)
 
-		summary := fmt.Sprintf("{Insert Classname Here} (CRN %s)", meeting.CourseReferenceNumber)
-		description := fmt.Sprintf(`Instructor: {Insert Instructor Here}
-Section: {Insert Section Here}
-CRN: %s`, meeting.CourseReferenceNumber)
+		summary := fmt.Sprintf("%s (CRN %s)", course.CourseTitle, meeting.CourseReferenceNumber)
+		description := fmt.Sprintf("Instructor: %s\nSection: %s\nCRN: %s", course.Faculty[0].DisplayName, course.SequenceNumber, meeting.CourseReferenceNumber)
 		location := meeting.PlaceString()
 
 		event := fmt.Sprintf(`BEGIN:VEVENT

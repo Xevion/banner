@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
 
@@ -457,4 +458,26 @@ func ResetDataForm() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to reset data form")
 	}
+}
+
+// GetCourse retrieves the course information.
+// This course does not retrieve directly from the API, but rather uses scraped data stored in Redis.
+func GetCourse(crn string) (*Course, error) {
+	// Retrieve raw data
+	result, err := kv.Get(ctx, fmt.Sprintf("class:%s", crn)).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, fmt.Errorf("course not found: %w", err)
+		}
+		return nil, fmt.Errorf("failed to get course: %w", err)
+	}
+
+	// Unmarshal the raw data
+	var course Course
+	err = json.Unmarshal([]byte(result), &course)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal course: %w", err)
+	}
+
+	return &course, nil
 }
