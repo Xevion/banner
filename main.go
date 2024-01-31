@@ -279,7 +279,7 @@ func main() {
 		for {
 			err := Scrape()
 			if err != nil {
-				log.Fatal().Err(err).Msg("Periodic Scrape Failed")
+				log.Err(err).Msg("Periodic Scrape Failed")
 			}
 
 			// Wait 5 minutes
