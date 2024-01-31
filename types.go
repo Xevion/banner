@@ -173,7 +173,7 @@ const layout = "01/02/2006"
 func (m *MeetingTimeResponse) StartDay() time.Time {
 	t, err := time.Parse(layout, m.MeetingTime.StartDate)
 	if err != nil {
-		log.Fatal().Err(err).Str("raw", m.MeetingTime.StartDate).Msg("Cannot parse start date")
+		log.Fatal().Stack().Err(err).Str("raw", m.MeetingTime.StartDate).Msg("Cannot parse start date")
 	}
 	return t
 }
@@ -183,7 +183,7 @@ func (m *MeetingTimeResponse) StartDay() time.Time {
 func (m *MeetingTimeResponse) EndDay() time.Time {
 	t, err := time.Parse(layout, m.MeetingTime.EndDate)
 	if err != nil {
-		log.Fatal().Err(err).Str("raw", m.MeetingTime.EndDate).Msg("Cannot parse end date")
+		log.Fatal().Stack().Err(err).Str("raw", m.MeetingTime.EndDate).Msg("Cannot parse end date")
 	}
 	return t
 }
@@ -198,7 +198,7 @@ func (m *MeetingTimeResponse) StartTime() *NaiveTime {
 
 	value, err := strconv.ParseUint(raw, 10, 32)
 	if err != nil {
-		log.Fatal().Err(err).Str("raw", raw).Msg("Cannot parse start time integer")
+		log.Fatal().Stack().Err(err).Str("raw", raw).Msg("Cannot parse start time integer")
 	}
 
 	return ParseNaiveTime(value)
@@ -214,7 +214,7 @@ func (m *MeetingTimeResponse) EndTime() *NaiveTime {
 
 	value, err := strconv.ParseUint(raw, 10, 32)
 	if err != nil {
-		log.Fatal().Err(err).Str("raw", raw).Msg("Cannot parse end time integer")
+		log.Fatal().Stack().Err(err).Str("raw", raw).Msg("Cannot parse end time integer")
 	}
 
 	return ParseNaiveTime(value)

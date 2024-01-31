@@ -94,19 +94,19 @@ func SelectTerm(term string) {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to select term")
+		log.Fatal().Stack().Err(err).Msg("Failed to select term")
 	}
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	// Acquire fwdUrl
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to read response body")
+		log.Fatal().Stack().Err(err).Msg("Failed to read response body")
 	}
 
 	var redirectResponse struct {
@@ -118,12 +118,12 @@ func SelectTerm(term string) {
 	req = BuildRequest("GET", redirectResponse.FwdUrl, nil)
 	res, err = DoRequest(req)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Redirect request failed")
+		log.Fatal().Stack().Err(err).Msg("Redirect request failed")
 	}
 
 	// Assert that the response is OK (200)
 	if res.StatusCode != 200 {
-		log.Fatal().Int("status", res.StatusCode).Msg("Unexpected status code from redirect request")
+		log.Fatal().Stack().Int("status", res.StatusCode).Msg("Unexpected status code from redirect request")
 	}
 }
 
@@ -151,7 +151,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	defer res.Body.Close()
@@ -195,7 +195,7 @@ func GetInstructors(search string, term string, offset int, max int) ([]Instruct
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	defer res.Body.Close()
@@ -225,7 +225,7 @@ func GetCourseDetails(term int, crn int) *ClassDetails {
 		"first":                 "first", // TODO: What is this?
 	})
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to marshal body")
+		log.Fatal().Stack().Err(err).Msg("Failed to marshal body")
 	}
 	req := BuildRequestWithBody("GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
 
@@ -236,7 +236,7 @@ func GetCourseDetails(term int, crn int) *ClassDetails {
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	return &ClassDetails{}
@@ -266,7 +266,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Error().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Error().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	body, err := io.ReadAll(res.Body)
@@ -309,7 +309,7 @@ func GetSubjects(search string, term string, offset int, max int) ([]Pair, error
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	defer res.Body.Close()
@@ -353,7 +353,7 @@ func GetCampuses(search string, term int, offset int, max int) ([]Pair, error) {
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	defer res.Body.Close()
@@ -392,13 +392,12 @@ func GetInstructionalMethods(search string, term string, offset int, max int) ([
 
 	res, err := DoRequest(req)
 	if err != nil {
-		log.Err(err).Msg("Failed to get instructional methods")
 		return nil, fmt.Errorf("failed to get instructional methods: %w", err)
 	}
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	defer res.Body.Close()
@@ -429,7 +428,7 @@ func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	// Read the response body into JSON
@@ -456,7 +455,7 @@ func ResetDataForm() {
 	req := BuildRequest("POST", "/classSearch/resetDataForm", nil)
 	_, err := DoRequest(req)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to reset data form")
+		log.Fatal().Stack().Err(err).Msg("Failed to reset data form")
 	}
 }
 

@@ -12,7 +12,7 @@ func GetGuildName(guildID string) string {
 	// Check Redis for the guild name
 	guildName, err := kv.Get(ctx, "guild:"+guildID+":name").Result()
 	if err != nil && err != redis.Nil {
-		log.Error().Err(err).Msg("Error getting guild name from Redis")
+		log.Error().Stack().Err(err).Msg("Error getting guild name from Redis")
 		return "err"
 	}
 
@@ -24,12 +24,12 @@ func GetGuildName(guildID string) string {
 	// If the guild name isn't in Redis, get it from Discord and cache it
 	guild, err := session.Guild(guildID)
 	if err != nil {
-		log.Error().Err(err).Msg("Error getting guild name")
+		log.Error().Stack().Err(err).Msg("Error getting guild name")
 
 		// Store an invalid value in Redis so we  don't keep trying to get the guild name
 		_, err := kv.Set(ctx, "guild:"+guildID+":name", "x", time.Minute*5).Result()
 		if err != nil {
-			log.Error().Err(err).Msg("Error setting false guild name in Redis")
+			log.Error().Stack().Err(err).Msg("Error setting false guild name in Redis")
 		}
 
 		return "unknown"
@@ -46,7 +46,7 @@ func GetChannelName(channelID string) string {
 	// Check Redis for the channel name
 	channelName, err := kv.Get(ctx, "channel:"+channelID+":name").Result()
 	if err != nil && err != redis.Nil {
-		log.Error().Err(err).Msg("Error getting channel name from Redis")
+		log.Error().Stack().Err(err).Msg("Error getting channel name from Redis")
 		return "err"
 	}
 
@@ -58,12 +58,12 @@ func GetChannelName(channelID string) string {
 	// If the channel name isn't in Redis, get it from Discord and cache it
 	channel, err := session.Channel(channelID)
 	if err != nil {
-		log.Error().Err(err).Msg("Error getting channel name")
+		log.Error().Stack().Err(err).Msg("Error getting channel name")
 
 		// Store an invalid value in Redis so we  don't keep trying to get the channel name
 		_, err := kv.Set(ctx, "channel:"+channelID+":name", "x", time.Minute*5).Result()
 		if err != nil {
-			log.Error().Err(err).Msg("Error setting false channel name in Redis")
+			log.Error().Stack().Err(err).Msg("Error setting false channel name in Redis")
 		}
 
 		return "unknown"

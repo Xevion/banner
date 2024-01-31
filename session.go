@@ -23,7 +23,7 @@ func setup() {
 	// Validate that cookies were set
 	baseUrlParsed, err := url.Parse(baseURL)
 	if err != nil {
-		log.Fatal().Str("baseURL", baseURL).Err(err).Msg("Failed to parse baseURL")
+		log.Fatal().Stack().Str("baseURL", baseURL).Err(err).Msg("Failed to parse baseURL")
 	}
 
 	current_cookies := client.Jar.Cookies(baseUrlParsed)

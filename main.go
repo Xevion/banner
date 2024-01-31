@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/pkgerrors"
 	"github.com/samber/lo"
 )
 
@@ -57,6 +58,8 @@ func init() {
 		return time.Now().In(CentralTimeLocation)
 	}
 
+	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
+
 	// Try to grab the environment variable, or default to development
 	environment = GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
 	if environment == "" {
@@ -82,13 +85,13 @@ func initRedis() {
 	// Setup redis
 	redisUrl := GetFirstEnv("REDIS_URL", "REDIS_PRIVATE_URL")
 	if redisUrl == "" {
-		log.Fatal().Msg("REDIS_URL/REDIS_PRIVATE_URL not set")
+		log.Fatal().Stack().Msg("REDIS_URL/REDIS_PRIVATE_URL not set")
 	}
 
 	// Parse URL and create client
 	options, err := redis.ParseURL(redisUrl)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Cannot parse redis url")
+		log.Fatal().Stack().Err(err).Msg("Cannot parse redis url")
 	}
 	kv = redis.NewClient(options)
 
@@ -105,7 +108,7 @@ func initRedis() {
 	for {
 		pingCount++
 		if pingCount > totalPings {
-			log.Fatal().Err(lastPingErr).Msg("Reached ping limit while trying to connect")
+			log.Fatal().Stack().Err(lastPingErr).Msg("Reached ping limit while trying to connect")
 		}
 
 		// Ping redis
@@ -151,7 +154,7 @@ func main() {
 	})
 	err = session.Open()
 	if err != nil {
-		log.Fatal().Err(err).Msg("Cannot open the session")
+		log.Fatal().Stack().Err(err).Msg("Cannot open the session")
 	}
 
 	// Setup command handlers
@@ -208,12 +211,12 @@ func main() {
 				// Respond with error
 				err = RespondError(internalSession, interaction.Interaction, fmt.Sprintf("Unexpected Error: %s", err.Error()), nil)
 				if err != nil {
-					log.Error().Str("commandName", name).Err(err).Msg("Failed to respond with error feedback")
+					log.Error().Stack().Str("commandName", name).Err(err).Msg("Failed to respond with error feedback")
 				}
 			}
 
 		} else {
-			log.Error().Str("commandName", name).Msg("Command Interaction Has No Handler")
+			log.Error().Stack().Str("commandName", name).Msg("Command Interaction Has No Handler")
 
 			// Respond with error
 			RespondError(internalSession, interaction.Interaction, "Unexpected Error: interaction has no handler", nil)
@@ -236,11 +239,11 @@ func main() {
 	// Register commands
 	existingCommands, err := session.ApplicationCommands(session.State.User.ID, guildTarget)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Cannot get existing commands")
+		log.Fatal().Stack().Err(err).Msg("Cannot get existing commands")
 	}
 	newCommands, err := session.ApplicationCommandBulkOverwrite(session.State.User.ID, guildTarget, commandDefinitions)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Cannot register commands")
+		log.Fatal().Stack().Err(err).Msg("Cannot register commands")
 	}
 
 	// Compare existing commands with new commands
@@ -266,7 +269,7 @@ func main() {
 	// Fetch terms on startup
 	_, err = GetTerms("", 1, 10)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Cannot get terms")
+		log.Fatal().Stack().Err(err).Msg("Cannot get terms")
 	}
 
 	// Term Select Pre-Search POST
@@ -279,7 +282,7 @@ func main() {
 		for {
 			err := Scrape()
 			if err != nil {
-				log.Err(err).Msg("Periodic Scrape Failed")
+				log.Err(err).Stack().Msg("Periodic Scrape Failed")
 			}
 
 			// Wait 5 minutes

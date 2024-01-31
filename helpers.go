@@ -123,7 +123,7 @@ func DoRequest(req *http.Request) (*http.Response, error) {
 	res, err := client.Do(req)
 
 	if err != nil {
-		log.Err(err).Str("method", req.Method).Msg("Request Failed")
+		log.Err(err).Stack().Str("method", req.Method).Msg("Request Failed")
 	} else {
 		contentLengthHeader := res.Header.Get("Content-Length")
 		contentLength := int64(-1)
@@ -284,14 +284,14 @@ func DumpResponse(res *http.Response) {
 	file, err := os.Create(filename)
 
 	if err != nil {
-		log.Err(err).Msg("Error creating file")
+		log.Err(err).Stack().Msg("Error creating file")
 		return
 	}
 	defer file.Close()
 
 	_, err = io.Copy(file, res.Body)
 	if err != nil {
-		log.Err(err).Msg("Error copying response body")
+		log.Err(err).Stack().Msg("Error copying response body")
 		return
 	}
 
@@ -303,7 +303,7 @@ func DumpResponse(res *http.Response) {
 func RespondError(session *discordgo.Session, interaction *discordgo.Interaction, message string, err error) error {
 	// Optional: log the error
 	if err != nil {
-		log.Err(err).Msg(message)
+		log.Err(err).Stack().Msg(message)
 	}
 
 	return session.InteractionRespond(interaction, &discordgo.InteractionResponse{
