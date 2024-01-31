@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -112,7 +113,13 @@ func Nonce() string {
 
 // DoRequest performs & logs the request, logging and returning the response
 func DoRequest(req *http.Request) (*http.Response, error) {
-	log.Debug().Str("method", strings.TrimRight(req.Method, " ")).Str("url", req.URL.String()).Str("query", req.URL.RawQuery).Str("content-type", req.Header.Get("Content-Type")).Msg("Request")
+	log.Debug().
+		Str("method", strings.TrimRight(req.Method, " ")).
+		Str("url", req.URL.String()).
+		Str("query", req.URL.RawQuery).
+		Str("content-type", req.Header.Get("Content-Type")).
+		Msg("Request")
+
 	res, err := client.Do(req)
 
 	if err != nil {
@@ -324,10 +331,51 @@ func NewCalendar() *ics.Calendar {
 	return c
 }
 
-func GetUsername(interaction *discordgo.InteractionCreate) string {
+// GetUser returns the user from the interaction.
+// This helper method is useful as depending on where the message was sent (guild or DM), the user is in a different field.
+func GetUser(interaction *discordgo.InteractionCreate) *discordgo.User {
+	// If the interaction is in a guild, the user is kept in the Member field
 	if interaction.Member != nil {
-		return interaction.Member.User.Username
+		return interaction.Member.User
 	}
 
-	return interaction.User.Username
+	// If the interaction is in a DM, the user is kept in the User field
+	return interaction.User
+}
+
+// Encode encodes the values into “URL encoded” form
+// ("bar=baz&foo=quux") sorted by key.
+func EncodeParams(params map[string][]string) string {
+	// Escape hatch for nil
+	if params == nil {
+		return ""
+	}
+
+	// Sort the keys
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var buf strings.Builder
+	for _, k := range keys {
+		// Multiple values are allowed, so extract the slice & prepare the key
+		values := params[k]
+		keyEscaped := url.QueryEscape(k)
+
+		for _, v := range values {
+			// If any parameters have been written, add the ampersand
+			if buf.Len() > 0 {
+				buf.WriteByte('&')
+			}
+
+			// Write the key and value
+			buf.WriteString(keyEscaped)
+			buf.WriteByte('=')
+			buf.WriteString(url.QueryEscape(v))
+		}
+	}
+
+	return buf.String()
 }

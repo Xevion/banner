@@ -173,7 +173,7 @@ func main() {
 				options.Str(option.Name, fmt.Sprintf("%v", option.Value))
 			}
 
-			event := log.Info().Str("name", name).Str("user", GetUsername(interaction)).Dict("options", options)
+			event := log.Info().Str("name", name).Str("user", GetUser(interaction).Username).Dict("options", options)
 
 			// If the command was invoked in a guild, add guild & channel info to the log
 			if interaction.Member != nil {
