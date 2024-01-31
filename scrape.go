@@ -141,9 +141,9 @@ func ScrapeMajor(subject string) error {
 	}
 
 	// Calculate the expiry time for the scrape (1 hour for every 200 classes, random +-15%) with a minimum of 1 hour
-	scrapeExpiry := time.Hour * time.Duration(totalClassCount/200)
-	partial := scrapeExpiry.Seconds() * 0.15
-	if rand.Intn(2) == 0 {
+	scrapeExpiry := time.Hour * time.Duration(totalClassCount/100)
+	partial := scrapeExpiry.Seconds() * (rand.Float64() * 0.15) // Between 0 and 15% of the total
+	if rand.Intn(2) == 0 {                                      // Randomly add or subtract the partial (delta between -15% and 15%)
 		scrapeExpiry -= time.Duration(partial) * time.Second
 	} else {
 		scrapeExpiry += time.Duration(partial) * time.Second
