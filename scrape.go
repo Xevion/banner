@@ -99,12 +99,11 @@ func ScrapeMajor(subject string) error {
 		query := NewQuery().Offset(offset).MaxResults(MaxPageSize).Subject(subject)
 		result, err := Search(query, "subjectDescription", false)
 		if err != nil {
-			return fmt.Errorf("failed to search for classes on page %d: %w", offset, err)
+			return fmt.Errorf("search failed: %w (%s)", err, query.String())
 		}
 
 		if !result.Success {
-			// TODO: Improve error log details
-			return fmt.Errorf("search for classes on page %d was not successful", offset)
+			return fmt.Errorf("result marked unsuccessful when searching for classes (%s)", query.String())
 		}
 
 		classCount := len(result.Data)

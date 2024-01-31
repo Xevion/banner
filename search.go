@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -261,3 +262,75 @@ func (q *Query) Paramify() map[string]string {
 
 	return params
 }
+
+// String returns a string representation of the query, ideal for debugging & logging.
+func (q *Query) String() string {
+	var sb strings.Builder
+
+	if q.subject != nil {
+		fmt.Fprintf(&sb, "subject=%s, ", *q.subject)
+	}
+
+	if q.title != nil {
+		// Whitespace can prevent valid queries from succeeding
+		fmt.Fprintf(&sb, "title=%s, ", strings.TrimSpace(*q.title))
+	}
+
+	if q.keywords != nil {
+		fmt.Fprintf(&sb, "keywords=%s, ", strings.Join(*q.keywords, " "))
+	}
+
+	if q.openOnly != nil {
+		fmt.Fprintf(&sb, "openOnly=%t, ", *q.openOnly)
+	}
+
+	if q.termPart != nil {
+		fmt.Fprintf(&sb, "termPart=%s, ", strings.Join(*q.termPart, ","))
+	}
+
+	if q.campus != nil {
+		fmt.Fprintf(&sb, "campus=%s, ", strings.Join(*q.campus, ","))
+	}
+
+	if q.attributes != nil {
+		fmt.Fprintf(&sb, "attributes=%s, ", strings.Join(*q.attributes, ","))
+	}
+
+	if q.instructor != nil {
+		fmt.Fprintf(&sb, "instructor=%s, ", strings.Join(lo.Map(*q.instructor, func(i uint64, _ int) string {
+			return strconv.FormatUint(i, 10)
+		}), ","))
+	}
+
+	if q.startTime != nil {
+		hour, minute, meridiem := FormatTimeParameter(*q.startTime)
+		fmt.Fprintf(&sb, "startTime=%s:%s%s, ", hour, minute, meridiem)
+	}
+
+	if q.endTime != nil {
+		hour, minute, meridiem := FormatTimeParameter(*q.endTime)
+		fmt.Fprintf(&sb, "endTime=%s:%s%s, ", hour, minute, meridiem)
+	}
+
+	if q.minCredits != nil {
+		fmt.Fprintf(&sb, "minCredits=%d, ", *q.minCredits)
+	}
+
+	if q.maxCredits != nil {
+		fmt.Fprintf(&sb, "maxCredits=%d, ", *q.maxCredits)
+	}
+
+	if q.courseNumberRange != nil {
+		fmt.Fprintf(&sb, "courseNumberRange=%d-%d, ", q.courseNumberRange.Low, q.courseNumberRange.High)
+	}
+
+	fmt.Fprintf(&sb, "offset=%d, ", q.offset)
+	fmt.Fprintf(&sb, "maxResults=%d", q.maxResults)
+
+	return sb.String()
+}
+
+// Dict returns a map representation of the query, ideal for debugging & logging.
+// This dict is represented with zerolog's Event type.
+// func (q *Query) Dict() *zerolog.Event {
+// }
