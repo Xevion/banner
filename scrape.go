@@ -85,7 +85,7 @@ func CanScrape(subject string) bool {
 		return false
 	}
 
-	return scraped == "1"
+	return scraped == "0"
 }
 
 // ScrapeMajor is the scraping invocation for a specific major.
