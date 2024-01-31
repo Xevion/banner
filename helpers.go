@@ -118,9 +118,10 @@ func DoRequest(req *http.Request) (*http.Response, error) {
 		log.Err(err).Str("method", req.Method).Msg("Request Failed")
 	} else {
 		// Get the content length
-		contentLength := res.ContentLength
-		if contentLength == -1 {
-			contentLength, _ = strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
+		contentLength, err := strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
+		if err != nil {
+			log.Err(err).Msg("Failed to parse content length")
+			contentLength = -1
 		}
 
 		log.Debug().Int("status", res.StatusCode).Int64("content-length", contentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
