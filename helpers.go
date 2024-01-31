@@ -114,14 +114,19 @@ func Nonce() string {
 func DoRequest(req *http.Request) (*http.Response, error) {
 	log.Debug().Str("method", strings.TrimRight(req.Method, " ")).Str("url", req.URL.String()).Str("query", req.URL.RawQuery).Str("content-type", req.Header.Get("Content-Type")).Msg("Request")
 	res, err := client.Do(req)
+
 	if err != nil {
 		log.Err(err).Str("method", req.Method).Msg("Request Failed")
 	} else {
+		contentLengthHeader := res.Header.Get("Content-Length")
+		contentLength := int64(-1)
+
 		// Get the content length
-		contentLength, err := strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
-		if err != nil {
-			log.Err(err).Msg("Failed to parse content length")
-			contentLength = -1
+		if contentLengthHeader != "" {
+			contentLength, err = strconv.ParseInt(contentLengthHeader, 10, 64)
+			if err != nil {
+				contentLength = -1
+			}
 		}
 
 		log.Debug().Int("status", res.StatusCode).Int64("content-length", contentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
@@ -129,6 +134,7 @@ func DoRequest(req *http.Request) (*http.Response, error) {
 	return res, err
 }
 
+// Plural is a simple helper function that returns an empty string if n is 1, and "s" otherwise.
 func Plural(n int) string {
 	if n == 1 {
 		return ""
@@ -224,63 +230,41 @@ func GetPointer(value int) *int {
 	return &value
 }
 
-// GuessExtension returns the extension of a file based on the given content type
+var extensionMap = map[string]string{
+	"text/plain":               "txt",
+	"application/json":         "json",
+	"text/html":                "html",
+	"text/css":                 "css",
+	"text/csv":                 "csv",
+	"text/calendar":            "ics",
+	"text/markdown":            "md",
+	"text/xml":                 "xml",
+	"text/yaml":                "yaml",
+	"text/javascript":          "js",
+	"text/vtt":                 "vtt",
+	"image/jpeg":               "jpg",
+	"image/png":                "png",
+	"image/gif":                "gif",
+	"image/webp":               "webp",
+	"image/tiff":               "tiff",
+	"image/svg+xml":            "svg",
+	"image/bmp":                "bmp",
+	"image/vnd.microsoft.icon": "ico",
+	"image/x-icon":             "ico",
+	"image/x-xbitmap":          "xbm",
+	"image/x-xpixmap":          "xpm",
+	"image/x-xwindowdump":      "xwd",
+	"image/avif":               "avif",
+	"image/apng":               "apng",
+	"image/jxl":                "jxl",
+}
+
 func GuessExtension(contentType string) string {
-	switch strings.ToLower(contentType) {
-	case "text/plain":
-		return "txt"
-	case "application/json":
-		return "json"
-	case "text/html":
-		return "html"
-	case "text/css":
-		return "css"
-	case "text/csv":
-		return "csv"
-	case "text/calendar":
-		return "ics"
-	case "text/markdown":
-		return "md"
-	case "text/xml":
-		return "xml"
-	case "text/yaml":
-		return "yaml"
-	case "text/javascript":
-		return "js"
-	case "text/vtt":
-		return "vtt"
-	case "image/jpeg":
-		return "jpg"
-	case "image/png":
-		return "png"
-	case "image/gif":
-		return "gif"
-	case "image/webp":
-		return "webp"
-	case "image/tiff":
-		return "tiff"
-	case "image/svg+xml":
-		return "svg"
-	case "image/bmp":
-		return "bmp"
-	case "image/vnd.microsoft.icon":
-		return "ico"
-	case "image/x-icon":
-		return "ico"
-	case "image/x-xbitmap":
-		return "xbm"
-	case "image/x-xpixmap":
-		return "xpm"
-	case "image/x-xwindowdump":
-		return "xwd"
-	case "image/avif":
-		return "avif"
-	case "image/apng":
-		return "apng"
-	case "image/jxl":
-		return "jxl"
+	ext, ok := extensionMap[strings.ToLower(contentType)]
+	if !ok {
+		return ""
 	}
-	return ""
+	return ext
 }
 
 // DumpResponse dumps a response body to a file for debugging purposes
