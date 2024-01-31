@@ -54,6 +54,12 @@ The follow features, JSON, and more require validation & analysis:
 - Do CRNs repeat between years?
 - Check whether partOfTerm is always filled in, and it's meaning for various class results.
 - Check which API calls are affected by change in term/sessionID term select
+- SessionIDs
+  - How long does a session ID work?
+  - Do I really require a separate one per term?
+  - How many can I activate, are there any restrictions?
+  - How should session IDs be checked as 'invalid'?
+  - What action(s) keep a session ID 'active', if any?
 
 ## Real-time Suggestions
 
