@@ -298,7 +298,7 @@ func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) err
 		endDay := meeting.EndDay()
 		until := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 23, 59, 59, 0, CentralTimeLocation)
 
-		summary := fmt.Sprintf("%s (CRN %s)", course.CourseTitle, meeting.CourseReferenceNumber)
+		summary := fmt.Sprintf("%s %s %s", course.Subject, course.CourseNumber, course.CourseTitle)
 		description := fmt.Sprintf("Instructor: %s\nSection: %s\nCRN: %s", course.Faculty[0].DisplayName, course.SequenceNumber, meeting.CourseReferenceNumber)
 		location := meeting.PlaceString()
 

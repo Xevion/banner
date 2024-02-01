@@ -117,11 +117,13 @@ func (m *MeetingTimeResponse) TimeString() string {
 
 // PlaceString returns a formatted string best representing the place of the meeting time
 func (m *MeetingTimeResponse) PlaceString() string {
-	if m.MeetingTime.Room == "" {
-		return "???"
+	mt := m.MeetingTime
+
+	if mt.Room == "" {
+		return "Online"
 	}
 
-	return fmt.Sprintf("%s %s", m.MeetingTime.Building, m.MeetingTime.Room)
+	return fmt.Sprintf("%s | %s | %s %s", mt.CampusDescription, mt.BuildingDescription, mt.Building, mt.Room)
 }
 
 func (m *MeetingTimeResponse) Days() map[time.Weekday]bool {
