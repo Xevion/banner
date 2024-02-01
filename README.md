@@ -38,6 +38,9 @@ A discord bot for executing queries & searches on the Ellucian Banner instance h
     - "ends by 2 PM" -> Ends within 12:00 AM to 2:00 PM
     - "after 2 PM" -> Start within 2:01 PM to 11:59 PM
     - "before 2 PM" -> Ends within 12:00 AM to 1:59 PM
+- Get By Section Command
+  - CS 4393 001 =>
+  - Will require SQL to be able to search for a class by its section number
 
 ## Analysis Required
 
@@ -60,6 +63,7 @@ The follow features, JSON, and more require validation & analysis:
   - How many can I activate, are there any restrictions?
   - How should session IDs be checked as 'invalid'?
   - What action(s) keep a session ID 'active', if any?
+- Are there any courses with multiple meeting times?
 
 ## Real-time Suggestions
 
