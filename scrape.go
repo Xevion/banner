@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 )
@@ -18,7 +17,9 @@ var (
 	// PriorityMajors is a list of majors that are considered to be high priority for scraping. This list is used to determine which majors to scrape first/most often.
 	PriorityMajors = []string{"CS", "CPE", "MAT", "EE", "IS"}
 	// AncillaryMajors is a list of majors that are considered to be low priority for scraping. This list will not contain any majors that are in PriorityMajors.
-	AncillaryMajors = []string{}
+	AncillaryMajors []string
+	// AllMajors is a list of all majors that are available in the Banner system.
+	AllMajors []string
 )
 
 // Scrape is the general scraping invocation (best called within/as a goroutine) that should be called regularly to initiate scraping of the Banner system.
@@ -43,6 +44,8 @@ func Scrape() error {
 				AncillaryMajors = append(AncillaryMajors, subject.Code)
 			}
 		}
+
+		AllMajors = lo.Flatten([][]string{PriorityMajors, AncillaryMajors})
 	}
 
 	expiredSubjects, err := GetExpiredSubjects()
@@ -67,39 +70,26 @@ func GetExpiredSubjects() ([]string, error) {
 	subjects := make([]string, 0)
 
 	// Get all subjects
-	for _, major := range lo.Flatten([][]string{PriorityMajors, AncillaryMajors}) {
-		expired, err := IsSubjectExpired(major, term)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check if major %s is expired: %w", major, err)
-		}
+	values, err := kv.MGet(ctx, lo.Map(AllMajors, func(major string, _ int) string {
+		return fmt.Sprintf("scraped:%s:%s", major, term)
+	})...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all subjects: %w", err)
+	}
 
-		if expired {
-			subjects = append(subjects, major)
+	// Extract expired subjects
+	for i, value := range values {
+		subject := AllMajors[i]
+
+		// If the value is nil or "0", then the subject is expired
+		if value == nil || value == "0" {
+			subjects = append(subjects, subject)
 		}
 	}
+
+	log.Debug().Strs("majors", subjects).Msg("Expired Subjects")
 
 	return subjects, nil
-}
-
-// IsSubjectExpired returns true if the subject is expired and should be scraped.
-func IsSubjectExpired(subject string, term string) (bool, error) {
-	// Check if the major has been scraped
-	scraped, err := kv.Get(ctx, fmt.Sprintf("scraped:%s:%s", subject, term)).Result()
-	if err != nil {
-		// If the key is not found, then the major has not been scraped
-		if err == redis.Nil {
-			return true, nil
-		}
-
-		return false, fmt.Errorf("failed to get scraped key for %s: %w", subject, err)
-	}
-
-	// If the key is found, then the major has been scraped
-	if scraped != "0" {
-		return false, nil
-	}
-
-	return true, nil
 }
 
 // ScrapeMajor is the scraping invocation for a specific major.
