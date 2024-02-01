@@ -171,24 +171,24 @@ func ScrapeMajor(subject string) error {
 // count is the number of courses that were scraped.
 // priority is a boolean indicating whether the major is a priority major.
 func CalculateExpiry(term string, count int, priority bool) time.Duration {
+	// An hour for every 100 classes
+	baseExpiry := time.Hour * time.Duration(count/100)
+
 	// Subjects with less than 50 classes have a reversed expiry (less classes, longer interval)
 	// 1 class => 12 hours, 49 classes => 1 hour
 	if count < 50 {
 		hours := Slope(Point{1, 12}, Point{49, 1}, float64(count)).Y
-		return time.Duration(hours * float64(time.Hour))
+		baseExpiry = time.Duration(hours * float64(time.Hour))
 	}
-
-	// An hour for every 100 classes
-	baseExpiry := time.Hour * time.Duration(count/100)
 
 	// If the subject is a priority, then the expiry is halved without variance
 	if priority {
 		return baseExpiry / 3
 	}
 
-	// If the term is considered "view only", then the expiry is multipled by 5
+	// If the term is considered "view only" or "archived", then the expiry is multiplied by 5
 	var expiry = baseExpiry
-	if IsViewOnlyTerm(term) {
+	if IsTermArchived(term) {
 		expiry *= 5
 	}
 

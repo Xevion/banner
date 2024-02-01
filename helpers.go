@@ -370,7 +370,7 @@ func EncodeParams(params map[string]*[]string) string {
 }
 
 // TODO: Add a function to check if a term is view-only
-func IsViewOnlyTerm(term string) bool {
+func IsTermArchived(term string) bool {
 	return false
 }
 
