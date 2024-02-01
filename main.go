@@ -285,7 +285,6 @@ func main() {
 				log.Err(err).Stack().Msg("Periodic Scrape Failed")
 			}
 
-			// Wait 5 minutes
 			time.Sleep(3 * time.Minute)
 		}
 	}()

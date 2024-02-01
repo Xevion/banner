@@ -45,12 +45,13 @@ func Scrape() error {
 		}
 	}
 
-	subjects, err := GetExpiredSubjects()
+	expiredSubjects, err := GetExpiredSubjects()
 	if err != nil {
 		return fmt.Errorf("failed to get scrapable majors: %w", err)
 	}
 
-	for _, subject := range subjects {
+	log.Info().Strs("majors", expiredSubjects).Msg("Scraping majors")
+	for _, subject := range expiredSubjects {
 		err := ScrapeMajor(subject)
 		if err != nil {
 			return fmt.Errorf("failed to scrape major %s: %w", subject, err)
@@ -104,7 +105,6 @@ func IsSubjectExpired(subject string, term string) (bool, error) {
 // ScrapeMajor is the scraping invocation for a specific major.
 // This function does not check whether scraping is required at this time, it is assumed that the caller has already done so.
 func ScrapeMajor(subject string) error {
-	log.Debug().Str("subject", subject).Msg("Scraping Major")
 	offset := 0
 	totalClassCount := 0
 
@@ -149,7 +149,7 @@ func ScrapeMajor(subject string) error {
 			continue
 		} else {
 			// Log the number of classes scraped
-			log.Info().Str("subject", subject).Int("total", totalClassCount).Msg("Major Scraped")
+			log.Info().Str("subject", subject).Int("total", totalClassCount).Msgf("Subject %s Scraped", subject)
 			break
 		}
 	}
