@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 )
 
 var (
@@ -283,8 +285,27 @@ func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) err
 		return fmt.Errorf("Error requesting meeting time: %w", err)
 	}
 
-	events := []string{}
+	if len(meetingTimes) == 0 {
+		return fmt.Errorf("unexpected - no meeting time data found for course")
+	}
 
+	// Check if the course has any meeting times
+	_, exists := lo.Find(meetingTimes, func(mt MeetingTimeResponse) bool {
+		switch mt.MeetingTime.MeetingType {
+		case "ID", "OA":
+			return false
+		default:
+			return true
+		}
+	})
+
+	if !exists {
+		log.Warn().Str("crn", course.CourseReferenceNumber).Msg("Non-meeting course requested for ICS file")
+		RespondError(s, i.Interaction, "The course requested does not meet at a defined moment in time.", nil)
+		return nil
+	}
+
+	events := []string{}
 	for _, meeting := range meetingTimes {
 		now := time.Now().In(CentralTimeLocation)
 		uid := fmt.Sprintf("%d-%s@ical.banner.xevion.dev", now.Unix(), meeting.CourseReferenceNumber)

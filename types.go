@@ -56,8 +56,9 @@ type MeetingTimeResponse struct {
 		// The number of credit hours this class is worth (assumably)
 		CreditHourSession float64 `json:"creditHourSession"`
 		// The number of hours per week this class meets (e.g. 2.5)
-		HoursWeek           float64 `json:"hoursWeek"`
-		MeetingScheduleType string  `json:"meetingScheduleType"`
+		HoursWeek float64 `json:"hoursWeek"`
+		// Unknown meaning - e.g. AFF, AIN, AHB, FFF, AFF, EFF, DFF, IFF, EHB, JFF, KFF, BFF, BIN
+		MeetingScheduleType string `json:"meetingScheduleType"`
 		// The short identifier for the meeting type (e.g. FF, HB, OS, OA)
 		MeetingType string `json:"meetingType"`
 		// The long name of the meeting type (e.g. Traditional in-person)
@@ -95,7 +96,7 @@ func (m *MeetingTimeResponse) String() string {
 	case "OH":
 		return fmt.Sprintf("%s\nOnline Partial", m.TimeString())
 	case "ID":
-		return "TBA"
+		return "To Be Arranged"
 	case "FF":
 		return fmt.Sprintf("%s\n%s", m.TimeString(), m.PlaceString())
 	}
@@ -119,6 +120,7 @@ func (m *MeetingTimeResponse) TimeString() string {
 func (m *MeetingTimeResponse) PlaceString() string {
 	mt := m.MeetingTime
 
+	// TODO: ADd format case for partial online classes
 	if mt.Room == "" {
 		return "Online"
 	}
@@ -195,7 +197,7 @@ func (m *MeetingTimeResponse) EndDay() time.Time {
 func (m *MeetingTimeResponse) StartTime() *NaiveTime {
 	raw := m.MeetingTime.BeginTime
 	if raw == "" {
-		return nil
+		log.Fatal().Stack().Msg("Start time is empty")
 	}
 
 	value, err := strconv.ParseUint(raw, 10, 32)
