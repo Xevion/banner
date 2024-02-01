@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	ics "github.com/arran4/golang-ical"
 	"github.com/bwmarrin/discordgo"
 	"github.com/rs/zerolog"
 	log "github.com/rs/zerolog/log"
@@ -321,16 +320,6 @@ func GetFooter(time time.Time) *discordgo.MessageEmbedFooter {
 	}
 }
 
-func NewCalendar() *ics.Calendar {
-	c := &ics.Calendar{
-		Components:         []ics.Component{},
-		CalendarProperties: []ics.CalendarProperty{},
-	}
-	c.SetVersion("2.0")
-	c.SetProductId("-//xevion//Banner Discord Bot//EN")
-	return c
-}
-
 // GetUser returns the user from the interaction.
 // This helper method is useful as depending on where the message was sent (guild or DM), the user is in a different field.
 func GetUser(interaction *discordgo.InteractionCreate) *discordgo.User {
@@ -345,7 +334,7 @@ func GetUser(interaction *discordgo.InteractionCreate) *discordgo.User {
 
 // Encode encodes the values into “URL encoded” form
 // ("bar=baz&foo=quux") sorted by key.
-func EncodeParams(params map[string][]string) string {
+func EncodeParams(params map[string]*[]string) string {
 	// Escape hatch for nil
 	if params == nil {
 		return ""
@@ -364,7 +353,7 @@ func EncodeParams(params map[string][]string) string {
 		values := params[k]
 		keyEscaped := url.QueryEscape(k)
 
-		for _, v := range values {
+		for _, v := range *values {
 			// If any parameters have been written, add the ampersand
 			if buf.Len() > 0 {
 				buf.WriteByte('&')
@@ -378,4 +367,20 @@ func EncodeParams(params map[string][]string) string {
 	}
 
 	return buf.String()
+}
+
+// TODO: Add a function to check if a term is view-only
+func IsViewOnlyTerm(term string) bool {
+	return false
+}
+
+// Point represents a point in 2D space
+type Point struct {
+	X, Y float64
+}
+
+func Slope(p1 Point, p2 Point, x float64) Point {
+	slope := (p2.Y - p1.Y) / (p2.X - p1.X)
+	newY := slope*(x-p1.X) + p1.Y
+	return Point{X: x, Y: newY}
 }
