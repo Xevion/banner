@@ -145,10 +145,18 @@ func ScrapeMajor(subject string) error {
 	}
 
 	// Calculate the expiry time for the scrape (1 hour for every 200 classes, random +-15%) with a minimum of 1 hour
-	scrapeExpiry := CalculateExpiry(totalClassCount, lo.Contains(PriorityMajors, subject))
+	var scrapeExpiry time.Duration
+	if totalClassCount == 0 {
+		scrapeExpiry = time.Hour * 12
+	} else {
+		scrapeExpiry = CalculateExpiry(totalClassCount, lo.Contains(PriorityMajors, subject))
+	}
 
 	// Mark the major as scraped
 	term := Default(time.Now()).ToString()
+	if totalClassCount == 0 {
+		totalClassCount = -1
+	}
 	err := kv.Set(ctx, fmt.Sprintf("scraped:%s:%s", subject, term), totalClassCount, scrapeExpiry).Err()
 	if err != nil {
 		log.Error().Err(err).Msg("failed to mark major as scraped")
