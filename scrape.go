@@ -21,7 +21,7 @@ var (
 	AncillaryMajors = []string{}
 )
 
-// Scrape is the general scraping invocation (best called as a goroutine) that should be called regularly to initiate scraping of the Banner system.
+// Scrape is the general scraping invocation (best called within/as a goroutine) that should be called regularly to initiate scraping of the Banner system.
 func Scrape() error {
 	// Populate AllMajors if it is empty
 	if len(AncillaryMajors) == 0 {
@@ -45,63 +45,78 @@ func Scrape() error {
 		}
 	}
 
-	for _, subject := range PriorityMajors {
-		if !CanScrape(subject) {
-			continue
-		}
-
-		err := ScrapeMajor(subject)
-		if err != nil {
-			return fmt.Errorf("failed to scrape priority major %s: %w", subject, err)
-		}
+	subjects, err := GetExpiredSubjects()
+	if err != nil {
+		return fmt.Errorf("failed to get scrapable majors: %w", err)
 	}
 
-	for _, subject := range AncillaryMajors {
-		if !CanScrape(subject) {
-			continue
-		}
-
+	for _, subject := range subjects {
 		err := ScrapeMajor(subject)
 		if err != nil {
-			return fmt.Errorf("failed to scrape ancillary major %s: %w", subject, err)
+			return fmt.Errorf("failed to scrape major %s: %w", subject, err)
 		}
 	}
 
 	return nil
 }
 
-// CanScrape returns true if scraping is suggested for a given major at this time.
-func CanScrape(subject string) bool {
+// GetExpiredSubjects returns a list of subjects that are expired and should be scraped.
+func GetExpiredSubjects() ([]string, error) {
 	term := Default(time.Now()).ToString()
-	scraped, err := kv.Get(ctx, fmt.Sprintf("scraped:%s:%s", subject, term)).Result()
+	subjects := make([]string, 0)
 
-	if err != nil {
-		// If the key does not exist, then it was never scraped or the scrape needs to be redone (it expired)
-		if err == redis.Nil {
-			return true
+	// Get all subjects
+	for _, major := range lo.Flatten([][]string{PriorityMajors, AncillaryMajors}) {
+		expired, err := IsSubjectExpired(major, term)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check if major %s is expired: %w", major, err)
 		}
 
-		log.Error().Err(err).Msg("failed to check if scraping is required")
-		return false
+		if expired {
+			subjects = append(subjects, major)
+		}
 	}
 
-	return scraped == "0"
+	return subjects, nil
+}
+
+// IsSubjectExpired returns true if the subject is expired and should be scraped.
+func IsSubjectExpired(subject string, term string) (bool, error) {
+	// Check if the major has been scraped
+	scraped, err := kv.Get(ctx, fmt.Sprintf("scraped:%s:%s", subject, term)).Result()
+	if err != nil {
+		// If the key is not found, then the major has not been scraped
+		if err == redis.Nil {
+			return true, nil
+		}
+
+		return false, fmt.Errorf("failed to get scraped key for %s: %w", subject, err)
+	}
+
+	// If the key is found, then the major has been scraped
+	if scraped != "0" {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // ScrapeMajor is the scraping invocation for a specific major.
 // This function does not check whether scraping is required at this time, it is assumed that the caller has already done so.
 func ScrapeMajor(subject string) error {
+	log.Debug().Str("subject", subject).Msg("Scraping Major")
 	offset := 0
 	totalClassCount := 0
-	log.Info().Str("subject", subject).Msg("Scraping Major")
 
 	for {
-		query := NewQuery().Offset(offset).MaxResults(MaxPageSize).Subject(subject)
+		// Build & execute the query
+		query := NewQuery().Offset(offset).MaxResults(MaxPageSize * 2).Subject(subject)
 		result, err := Search(query, "subjectDescription", false)
 		if err != nil {
 			return fmt.Errorf("search failed: %w (%s)", err, query.String())
 		}
 
+		// Isn't it bullshit that they decided not to leave an actual 'reason' field for the failure?
 		if !result.Success {
 			return fmt.Errorf("result marked unsuccessful when searching for classes (%s)", query.String())
 		}
@@ -111,10 +126,9 @@ func ScrapeMajor(subject string) error {
 		log.Debug().Str("subject", subject).Int("count", classCount).Int("offset", offset).Msg("Placing classes in Redis")
 
 		// Process each class and store it in Redis
-		for _, class := range result.Data {
-			// TODO: Move this into a separate function to allow future comparison/SQLite intake
+		for _, course := range result.Data {
 			// Store class in Redis
-			err := kv.Set(ctx, fmt.Sprintf("class:%s", class.CourseReferenceNumber), class, 0).Err()
+			err := IntakeCourse(course)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to store class in Redis")
 			}
@@ -141,9 +155,25 @@ func ScrapeMajor(subject string) error {
 	}
 
 	// Calculate the expiry time for the scrape (1 hour for every 200 classes, random +-15%) with a minimum of 1 hour
-	scrapeExpiry := time.Hour * time.Duration(totalClassCount/100)
+	scrapeExpiry := CalculateExpiry(totalClassCount, lo.Contains(PriorityMajors, subject))
+
+	// Mark the major as scraped
+	term := Default(time.Now()).ToString()
+	err := kv.Set(ctx, fmt.Sprintf("scraped:%s:%s", subject, term), totalClassCount, scrapeExpiry).Err()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to mark major as scraped")
+	}
+
+	return nil
+}
+
+// CalculateExpiry calculates the expiry time until the next scrape for a major.
+func CalculateExpiry(count int, priority bool) time.Duration {
+	scrapeExpiry := time.Hour * time.Duration(count/100)
 	partial := scrapeExpiry.Seconds() * (rand.Float64() * 0.15) // Between 0 and 15% of the total
-	if rand.Intn(2) == 0 {                                      // Randomly add or subtract the partial (delta between -15% and 15%)
+
+	// Randomly add or subtract the partial (delta between -15% and 15%)
+	if rand.Intn(2) == 0 {
 		scrapeExpiry -= time.Duration(partial) * time.Second
 	} else {
 		scrapeExpiry += time.Duration(partial) * time.Second
@@ -155,18 +185,18 @@ func ScrapeMajor(subject string) error {
 	}
 
 	// If the subject is a priority, then the expiry is halved
-	if lo.Contains(PriorityMajors, subject) {
-		scrapeExpiry /= 3
+	if priority {
+		return scrapeExpiry / 3
 	}
+	return scrapeExpiry
+}
 
-	// Mark the major as scraped
-	term := Default(time.Now()).ToString()
-	err := kv.Set(ctx, fmt.Sprintf("scraped:%s:%s", subject, term), "1", scrapeExpiry).Err()
+// IntakeCourse stores a course in Redis.
+// This function is mostly a stub for now, but will be used to handle change identification, notifications, and SQLite upserts in the future.
+func IntakeCourse(course Course) error {
+	err := kv.Set(ctx, fmt.Sprintf("class:%s", course.CourseReferenceNumber), course, 0).Err()
 	if err != nil {
-		log.Error().Err(err).Msg("failed to mark major as scraped")
-	} else {
-		log.Debug().Str("subject", subject).Str("expiry", scrapeExpiry.String()).Msg("Marked major as scraped")
+		return fmt.Errorf("failed to store class in Redis: %w", err)
 	}
-
 	return nil
 }
