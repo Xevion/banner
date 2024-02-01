@@ -299,10 +299,10 @@ func main() {
 	signal.Notify(stop, syscall.SIGTERM) // Container stop signal
 
 	// Wait for signal (indefinite)
-	<-stop
+	closingSignal := <-stop
 
 	isClosing = true
 
 	// Defers are called after this
-	log.Warn().Msg("Gracefully shutting down")
+	log.Warn().Str("signal", closingSignal.String()).Msg("Gracefully shutting down")
 }
