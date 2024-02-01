@@ -64,6 +64,13 @@ The follow features, JSON, and more require validation & analysis:
   - How should session IDs be checked as 'invalid'?
   - What action(s) keep a session ID 'active', if any?
 - Are there any courses with multiple meeting times?
+- Google Calendar link generation, as an alternative to ICS file generation
+
+## Change Identification
+
+- Important attributes of a class will be parsed on both the old and new data.
+- These attributes will be compared and given identifiers that can be subscribed to.
+- When a user subscribes to one of these identifiers, any changes identified will be sent to the user.
 
 ## Real-time Suggestions
 
