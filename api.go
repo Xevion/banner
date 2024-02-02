@@ -24,6 +24,11 @@ type Pair struct {
 type BannerTerm Pair
 type Instructor Pair
 
+// Archived returns true if the term is in it's archival state (view only)
+func (term BannerTerm) Archived() bool {
+	return strings.Contains(term.Description, "View Only")
+}
+
 // GetTerms retrieves and parses the term information for a given search term.
 // Ensure that the offset is greater than 0.
 func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {

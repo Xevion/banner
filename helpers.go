@@ -16,6 +16,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/rs/zerolog"
 	log "github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 )
 
 // BuildRequestWithBody builds a request with the given method, path, parameters, and body
@@ -369,9 +370,36 @@ func EncodeParams(params map[string]*[]string) string {
 	return buf.String()
 }
 
-// TODO: Add a function to check if a term is view-only
+var terms []BannerTerm
+var lastTermUpdate time.Time
+
+// IsTermArchived checks if the given term is archived
+// TODO: Add error, switch missing term logic to error
 func IsTermArchived(term string) bool {
-	return false
+	// If the terms are not loaded, or the last update was more than 4 hours ago, update the terms
+	if len(terms) == 0 || time.Since(lastTermUpdate) > 4*time.Hour {
+		// Load the terms
+		var err error
+		terms, err = GetTerms("", 1, 10)
+		if err != nil {
+			log.Err(err).Msg("Failed to get terms")
+			return false
+		}
+
+		lastTermUpdate = time.Now()
+	}
+
+	// Check if the term is in the list of terms
+	bannerTerm, exists := lo.Find(terms, func(t BannerTerm) bool {
+		return t.Code == term
+	})
+
+	if !exists {
+		log.Warn().Str("term", term).Msg("Term does not exist")
+		return true
+	}
+
+	return bannerTerm.Archived()
 }
 
 // Point represents a point in 2D space
