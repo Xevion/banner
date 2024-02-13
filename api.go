@@ -274,6 +274,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 		log.Error().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
+	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
