@@ -5,3 +5,4 @@ banner
 dumps/
 js/
 .vscode/
+*.prof

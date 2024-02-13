@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/pprof"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -31,6 +35,8 @@ var (
 	environment         string
 	CentralTimeLocation *time.Location
 	isClosing           bool = false
+	cpuProfile               = flag.String("cpuprofile", "", "write cpu profile to `file`")
+	memoryProfile            = flag.String("memprofile", "", "write memory profile to `file`")
 )
 
 const (
@@ -129,6 +135,21 @@ func initRedis() {
 }
 
 func main() {
+	flag.Parse()
+
+	// CPU Profiling (if requested)
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatal().Stack().Err(err).Msg("could not create CPU profile")
+		}
+		defer f.Close() // error handling omitted for example
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal().Stack().Err(err).Msg("could not start CPU profile")
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	initRedis()
 
 	// Create cookie jar
@@ -302,6 +323,19 @@ func main() {
 	closingSignal := <-stop
 
 	isClosing = true
+
+	// Write memory profile if requested
+	if *memoryProfile != "" {
+		f, err := os.Create(*memoryProfile)
+		if err != nil {
+			log.Fatal().Stack().Err(err).Msg("could not create memory profile")
+		}
+		defer f.Close() // error handling omitted for example
+		runtime.GC()    // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal().Stack().Err(err).Msg("could not write memory profile")
+		}
+	}
 
 	// Defers are called after this
 	log.Warn().Str("signal", closingSignal.String()).Msg("Gracefully shutting down")
