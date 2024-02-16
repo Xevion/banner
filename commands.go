@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -190,7 +191,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		displayName := course.Faculty[0].DisplayName
 		categoryLink := fmt.Sprintf("[%s](https://catalog.utsa.edu/undergraduate/coursedescriptions/%s/)", course.Subject, strings.ToLower(course.Subject))
 		classLink := fmt.Sprintf("[%s-%s](https://catalog.utsa.edu/search/?P=%s%%20%s)", course.CourseNumber, course.SequenceNumber, course.Subject, course.CourseNumber)
-		professorLink := fmt.Sprintf("[%s](https://google.com)", displayName)
+		professorLink := fmt.Sprintf("[%s](https://www.ratemyprofessors.com/search/professors/1516?q=%s)", displayName, url.QueryEscape(displayName))
 
 		identifierText := fmt.Sprintf("%s %s (CRN %s)\n%s", categoryLink, classLink, course.CourseReferenceNumber, professorLink)
 		meetings := course.MeetingsFaculty[0]
