@@ -80,7 +80,10 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		case "title":
 			query.Title(option.StringValue())
 		case "code":
-			var low, high int
+			var (
+				low  = -1
+				high = -1
+			)
 			var err error
 			valueRaw := strings.TrimSpace(option.StringValue())
 
@@ -96,7 +99,11 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 
 			// Partially/fully specified range
 			if strings.Contains(valueRaw, "-") {
-				match := regexp.MustCompile(`(\d{4})-(\d{4})?`).FindSubmatch([]byte(valueRaw))
+				match := regexp.MustCompile(`(\d{1,4})-(\d{1,4})?`).FindSubmatch([]byte(valueRaw))
+
+				if match == nil {
+					return fmt.Errorf("invalid range format: %s", valueRaw)
+				}
 
 				// If not 2 or 3 matches, it's invalid
 				if len(match) != 3 && len(match) != 4 {
@@ -108,9 +115,9 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 					return errors.Wrap(err, "error parsing course code (low)")
 				}
 
-				// If there's not a high value, set it to the low value
+				// If there's not a high value, set it to max (open ended)
 				if len(match) == 2 || len(match[2]) == 0 {
-					high = low
+					high = 9999
 				} else {
 					high, err = strconv.Atoi(string(match[2]))
 					if err != nil {
@@ -120,6 +127,41 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 			}
 
 			// TODO: #xxx, ##xx, ###x format
+			if strings.Contains(valueRaw, "x") {
+				if len(valueRaw) != 4 {
+					return fmt.Errorf("code range format invalid: must be 1 or more digits followed by x's (%s)", valueRaw)
+				}
+
+				match := regexp.MustCompile(`\d{1,}([xX]{1,3})`).Match([]byte(valueRaw))
+				if !match {
+					return fmt.Errorf("code range format invalid: must be 1 or more digits followed by x's (%s)", valueRaw)
+				}
+
+				// Replace x's with 0's
+				low, err = strconv.Atoi(strings.Replace(valueRaw, "x", "0", -1))
+				if err != nil {
+					return errors.Wrap(err, "error parsing implied course code (low)")
+				}
+
+				// Replace x's with 9's
+				high, err = strconv.Atoi(strings.Replace(valueRaw, "x", "9", -1))
+				if err != nil {
+					return errors.Wrap(err, "error parsing implied course code (high)")
+				}
+			}
+
+			if low == -1 || high == -1 {
+				return fmt.Errorf("course code range was specified but was ignored silently (%s)", valueRaw)
+			}
+
+			if low > high {
+				return fmt.Errorf("course code range is invalid: low is greater than high (%d > %d)", low, high)
+			}
+
+			if low < 1000 || high < 1000 || low > 9999 || high > 9999 {
+				return fmt.Errorf("course code range is invalid: must be 1000-9999 (%d-%d)", low, high)
+			}
+
 			query.CourseNumbers(low, high)
 		case "keywords":
 			query.Keywords(
@@ -171,14 +213,21 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		)
 	}
 
+	// Blue if there are results, orange if there are none
+	color := 0x0073FF
+	if courses.TotalCount == 0 {
+		color = 0xFF6500
+	}
+
 	err = session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      GetFooter(fetch_time),
+					Footer:      GetFetchedFooter(fetch_time),
 					Description: fmt.Sprintf("%d Classes", courses.TotalCount),
 					Fields:      fields[:min(25, len(fields))],
+					Color:       color,
 				},
 			},
 			AllowedMentions: &discordgo.MessageAllowedMentions{},
@@ -239,7 +288,7 @@ func TermCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      GetFooter(fetch_time),
+					Footer:      GetFetchedFooter(fetch_time),
 					Description: fmt.Sprintf("%d Terms", len(terms)),
 					Fields:      fields[:min(25, len(fields))],
 				},
@@ -287,7 +336,7 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) er
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      GetFooter(fetch_time),
+					Footer:      GetFetchedFooter(fetch_time),
 					Description: "",
 					Fields: []*discordgo.MessageEmbedField{
 						{
