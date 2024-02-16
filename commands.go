@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 )
@@ -64,7 +66,47 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		case "title":
 			query.Title(option.StringValue())
 		case "code":
-			// TODO: Handle & parse course codes properly
+			var low, high int
+			var err error
+			valueRaw := option.StringValue()
+
+			// 4 digit code
+			if len(valueRaw) == 4 {
+				low, err = strconv.Atoi(valueRaw)
+				if err != nil {
+					return errors.Wrap(err, "error parsing course code")
+				}
+
+				high = low
+			}
+
+			// Partially/fully specified range
+			if strings.Contains(valueRaw, "-") {
+				match := regexp.MustCompile(`(\d{4})-(\d{4})?`).FindSubmatch([]byte(valueRaw))
+
+				// If not 2 or 3 matches, it's invalid
+				if len(match) != 3 && len(match) != 4 {
+					return fmt.Errorf("invalid range format: %s", match[0])
+				}
+
+				low, err = strconv.Atoi(string(match[1]))
+				if err != nil {
+					return errors.Wrap(err, "error parsing course code (low)")
+				}
+
+				// If there's not a high value, set it to the low value
+				if len(match) == 2 {
+					high = low
+				} else {
+					high, err = strconv.Atoi(string(match[2]))
+					if err != nil {
+						return errors.Wrap(err, "error parsing course code (high)")
+					}
+				}
+			}
+
+			// TODO: #xxx, ##xx, ###x format
+			query.CourseNumbers(low, high)
 		case "keywords":
 			query.Keywords(
 				strings.Split(option.StringValue(), " "),
