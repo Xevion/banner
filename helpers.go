@@ -311,7 +311,9 @@ func RespondError(session *discordgo.Session, interaction *discordgo.Interaction
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      GetFooter(time.Now()),
+					Footer: &discordgo.MessageEmbedFooter{
+						Text: fmt.Sprintf("Occurred at %s", time.Now().Format("Monday, January 2, 2006 at 3:04:05PM")),
+					},
 					Description: message,
 					Color:       0xff0000,
 				},
@@ -321,7 +323,7 @@ func RespondError(session *discordgo.Session, interaction *discordgo.Interaction
 	})
 }
 
-func GetFooter(time time.Time) *discordgo.MessageEmbedFooter {
+func GetFetchedFooter(time time.Time) *discordgo.MessageEmbedFooter {
 	return &discordgo.MessageEmbedFooter{
 		Text: fmt.Sprintf("Fetched at %s", time.Format("Monday, January 2, 2006 at 3:04:05PM")),
 	}
