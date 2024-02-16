@@ -30,21 +30,22 @@ func (term BannerTerm) Archived() bool {
 }
 
 // GetTerms retrieves and parses the term information for a given search term.
-// Ensure that the offset is greater than 0.
-func GetTerms(search string, offset int, max int) ([]BannerTerm, error) {
+// Page number must be at least 1.
+func GetTerms(search string, page int, max int) ([]BannerTerm, error) {
 	// Ensure offset is valid
-	if offset <= 0 {
+	if page <= 0 {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
 	req := BuildRequest("GET", "/classSearch/getTerms", map[string]string{
 		"searchTerm": search,
-		"offset":     strconv.Itoa(offset),
-		"max":        strconv.Itoa(max),
-		"_":          Nonce(),
+		// Page vs Offset is not a mistake here, the API uses "offset" as the page number
+		"offset": strconv.Itoa(page),
+		"max":    strconv.Itoa(max),
+		"_":      Nonce(),
 	})
 
-	if offset <= 0 {
+	if page <= 0 {
 		return nil, errors.New("Offset must be greater than 0")
 	}
 
