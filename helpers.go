@@ -150,6 +150,15 @@ func Plural(n int) string {
 	return "s"
 }
 
+// Plurale is a simple helper function that returns an empty string if n is 1, and "ess" otherwise.
+// This is for words that end in "es" when plural.
+func Plurale(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "es"
+}
+
 func WeekdaysToString(days map[time.Weekday]bool) string {
 	// If no days are present
 	numDays := len(days)

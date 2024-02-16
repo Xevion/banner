@@ -225,7 +225,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 			Embeds: []*discordgo.MessageEmbed{
 				{
 					Footer:      GetFetchedFooter(fetch_time),
-					Description: fmt.Sprintf("%d Classes", courses.TotalCount),
+					Description: p.Sprintf("%d Class%s", courses.TotalCount, Plurale(courses.TotalCount)),
 					Fields:      fields[:min(25, len(fields))],
 					Color:       color,
 				},
@@ -295,13 +295,17 @@ func TermCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 
 	fetch_time := time.Now()
 
+	if len(fields) > 25 {
+		log.Warn().Int("count", len(fields)).Msg("Too many fields in term command (trimmed)")
+	}
+
 	err = session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
 					Footer:      GetFetchedFooter(fetch_time),
-					Description: p.Sprintf("%d of %d terms (page %d)", len(termResult), len(terms), pageNumber),
+					Description: p.Sprintf("%d of %d term%s (page %d)", len(termResult), len(terms), Plural(len(terms)), pageNumber),
 					Fields:      fields[:min(25, len(fields))],
 				},
 			},
