@@ -150,7 +150,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 			}
 
 			if low == -1 || high == -1 {
-				return fmt.Errorf("course code range was specified but was ignored silently (%s)", valueRaw)
+				return fmt.Errorf("course code range invalid (%s)", valueRaw)
 			}
 
 			if low > high {
