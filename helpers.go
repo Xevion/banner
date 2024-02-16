@@ -309,10 +309,16 @@ func RespondError(session *discordgo.Session, interaction *discordgo.Interaction
 	return session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: message,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Footer:      GetFooter(time.Now()),
+					Description: message,
+					Color:       0xff0000,
+				},
+			},
+			AllowedMentions: &discordgo.MessageAllowedMentions{},
 		},
 	})
-
 }
 
 func GetFooter(time time.Time) *discordgo.MessageEmbedFooter {
