@@ -29,7 +29,7 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 	Options: []*discordgo.ApplicationCommandOption{
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
-			MinLength:    GetPointer(0),
+			MinLength:    GetIntPointer(0),
 			MaxLength:    48,
 			Name:         "title",
 			Description:  "Course Title (exact, use autocomplete)",
@@ -39,7 +39,7 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 		{
 			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "code",
-			MinLength:   GetPointer(4),
+			MinLength:   GetIntPointer(4),
 			Description: "Course Code (e.g. 3743, 3000-3999, 3xxx, 3000-)",
 			Required:    false,
 		},
@@ -243,11 +243,18 @@ var TermCommandDefinition = &discordgo.ApplicationCommand{
 	Options: []*discordgo.ApplicationCommandOption{
 		{
 			Type:        discordgo.ApplicationCommandOptionString,
-			MinLength:   GetPointer(0),
+			MinLength:   GetIntPointer(0),
 			MaxLength:   8,
 			Name:        "search",
 			Description: "Term to search for",
 			Required:    false,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "page",
+			Description: "Page Number",
+			Required:    false,
+			MinValue:    GetFloatPointer(1),
 		},
 	},
 }
@@ -255,12 +262,21 @@ var TermCommandDefinition = &discordgo.ApplicationCommand{
 func TermCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
 	data := interaction.ApplicationCommandData()
 
-	var searchTerm string
-	if len(data.Options) == 1 {
-		searchTerm = data.Options[0].StringValue()
+	searchTerm := ""
+	pageNumber := 1
+
+	for _, option := range data.Options {
+		switch option.Name {
+		case "search":
+			searchTerm = option.StringValue()
+		case "page":
+			pageNumber = int(option.IntValue())
+		default:
+			log.Warn().Str("option", option.Name).Msg("Unexpected option in term command")
+		}
 	}
 
-	terms, err := GetTerms(searchTerm, 1, 25)
+	termResult, err := GetTerms(searchTerm, pageNumber, 25)
 
 	if err != nil {
 		RespondError(session, interaction.Interaction, "Error while fetching terms", err)
@@ -269,14 +285,10 @@ func TermCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 
 	fields := []*discordgo.MessageEmbedField{}
 
-	for _, t := range terms {
+	for _, t := range termResult {
 		fields = append(fields, &discordgo.MessageEmbedField{
-			Name:   "ID",
+			Name:   t.Description,
 			Value:  t.Code,
-			Inline: true,
-		}, &discordgo.MessageEmbedField{
-			Name:   "Description",
-			Value:  t.Description,
 			Inline: true,
 		})
 	}
@@ -289,7 +301,7 @@ func TermCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 			Embeds: []*discordgo.MessageEmbed{
 				{
 					Footer:      GetFetchedFooter(fetch_time),
-					Description: fmt.Sprintf("%d Terms", len(terms)),
+					Description: p.Sprintf("%d of %d terms (page %d)", len(termResult), len(terms), pageNumber),
 					Fields:      fields[:min(25, len(fields))],
 				},
 			},

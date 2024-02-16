@@ -22,6 +22,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/rs/zerolog/pkgerrors"
 	"github.com/samber/lo"
+	"golang.org/x/text/message"
 )
 
 var (
@@ -33,6 +34,7 @@ var (
 	isDevelopment       bool
 	baseURL             string // Base URL for all requests to the banner system
 	environment         string
+	p                   *message.Printer = message.NewPrinter(message.MatchLanguage("en"))
 	CentralTimeLocation *time.Location
 	isClosing           bool = false
 	cpuProfile               = flag.String("cpuprofile", "", "write cpu profile to `file`")
@@ -288,9 +290,9 @@ func main() {
 	}
 
 	// Fetch terms on startup
-	_, err = GetTerms("", 1, 10)
+	err = TryReloadTerms()
 	if err != nil {
-		log.Fatal().Stack().Err(err).Msg("Cannot get terms")
+		log.Fatal().Stack().Err(err).Msg("Cannot fetch terms on startup")
 	}
 
 	// Term Select Pre-Search POST
@@ -321,8 +323,7 @@ func main() {
 
 	// Wait for signal (indefinite)
 	closingSignal := <-stop
-
-	isClosing = true
+	isClosing = true // TODO: Switch to atomic lock with forced close after 10 seconds
 
 	// Write memory profile if requested
 	if *memoryProfile != "" {
