@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	log "github.com/rs/zerolog/log"
 	"github.com/samber/lo"
@@ -231,9 +232,15 @@ func GetFirstEnv(key ...string) string {
 	return ""
 }
 
-// GetPointer returns a pointer to the given value.
+// GetIntPointer returns a pointer to the given value.
 // This function is useful for discordgo, which inexplicably requires pointers to integers for minLength arguments.
-func GetPointer(value int) *int {
+func GetIntPointer(value int) *int {
+	return &value
+}
+
+// GetFloatPointer returns a pointer to the given value.
+// This function is useful for discordgo, which inexplicably requires pointers to floats for minLength arguments.
+func GetFloatPointer(value float64) *float64 {
 	return &value
 }
 
@@ -381,20 +388,31 @@ func EncodeParams(params map[string]*[]string) string {
 var terms []BannerTerm
 var lastTermUpdate time.Time
 
+// TryReloadTerms attempts to reload the terms if they are not loaded or the last update was more than 24 hours ago
+func TryReloadTerms() error {
+	if len(terms) > 0 && time.Since(lastTermUpdate) < 24*time.Hour {
+		return nil
+	}
+
+	// Load the terms
+	var err error
+	terms, err = GetTerms("", 1, 100)
+	if err != nil {
+		return errors.Wrap(err, "failed to load terms")
+	}
+
+	lastTermUpdate = time.Now()
+	return nil
+}
+
 // IsTermArchived checks if the given term is archived
 // TODO: Add error, switch missing term logic to error
 func IsTermArchived(term string) bool {
-	// If the terms are not loaded, or the last update was more than 4 hours ago, update the terms
-	if len(terms) == 0 || time.Since(lastTermUpdate) > 4*time.Hour {
-		// Load the terms
-		var err error
-		terms, err = GetTerms("", 1, 10)
-		if err != nil {
-			log.Err(err).Msg("Failed to get terms")
-			return false
-		}
-
-		lastTermUpdate = time.Now()
+	// Ensure the terms are loaded
+	err := TryReloadTerms()
+	if err != nil {
+		log.Err(err).Stack().Msg("Failed to reload terms")
+		return true
 	}
 
 	// Check if the term is in the list of terms
