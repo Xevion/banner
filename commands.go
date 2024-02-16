@@ -87,16 +87,6 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 			var err error
 			valueRaw := strings.TrimSpace(option.StringValue())
 
-			// 4 digit code
-			if len(valueRaw) == 4 {
-				low, err = strconv.Atoi(valueRaw)
-				if err != nil {
-					return errors.Wrap(err, "error parsing course code")
-				}
-
-				high = low
-			}
-
 			// Partially/fully specified range
 			if strings.Contains(valueRaw, "-") {
 				match := regexp.MustCompile(`(\d{1,4})-(\d{1,4})?`).FindSubmatch([]byte(valueRaw))
@@ -126,7 +116,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 				}
 			}
 
-			// TODO: #xxx, ##xx, ###x format
+			// #xxx, ##xx, ###x format (34xx -> 3400-3499)
 			if strings.Contains(valueRaw, "x") {
 				if len(valueRaw) != 4 {
 					return fmt.Errorf("code range format invalid: must be 1 or more digits followed by x's (%s)", valueRaw)
@@ -148,6 +138,16 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 				if err != nil {
 					return errors.Wrap(err, "error parsing implied course code (high)")
 				}
+			}
+
+			// 4 digit code
+			if len(valueRaw) == 4 {
+				low, err = strconv.Atoi(valueRaw)
+				if err != nil {
+					return errors.Wrap(err, "error parsing course code")
+				}
+
+				high = low
 			}
 
 			if low == -1 || high == -1 {
