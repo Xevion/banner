@@ -138,10 +138,8 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 				if err != nil {
 					return errors.Wrap(err, "error parsing implied course code (high)")
 				}
-			}
-
-			// 4 digit code
-			if len(valueRaw) == 4 {
+			} else if len(valueRaw) == 4 {
+				// 4 digit code
 				low, err = strconv.Atoi(valueRaw)
 				if err != nil {
 					return errors.Wrap(err, "error parsing course code")

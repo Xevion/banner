@@ -100,19 +100,19 @@ func SelectTerm(term string) {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		log.Fatal().Stack().Err(err).Msg("Failed to select term")
+		log.Panic().Stack().Err(err).Msg("Failed to select term")
 	}
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Panic().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	// Acquire fwdUrl
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Fatal().Stack().Err(err).Msg("Failed to read response body")
+		log.Panic().Stack().Err(err).Msg("Failed to read response body")
 	}
 
 	var redirectResponse struct {
@@ -124,12 +124,12 @@ func SelectTerm(term string) {
 	req = BuildRequest("GET", redirectResponse.FwdUrl, nil)
 	res, err = DoRequest(req)
 	if err != nil {
-		log.Fatal().Stack().Err(err).Msg("Redirect request failed")
+		log.Panic().Stack().Err(err).Msg("Redirect request failed")
 	}
 
 	// Assert that the response is OK (200)
 	if res.StatusCode != 200 {
-		log.Fatal().Stack().Int("status", res.StatusCode).Msg("Unexpected status code from redirect request")
+		log.Panic().Stack().Int("status", res.StatusCode).Msg("Unexpected status code from redirect request")
 	}
 }
 
@@ -157,7 +157,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		log.Panic().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
 	defer res.Body.Close()

@@ -223,6 +223,19 @@ func main() {
 			// Log command invocation
 			event.Msg("Command Invoked")
 
+			// Prepare to recover
+			defer func() {
+				if err := recover(); err != nil {
+					log.Error().Stack().Str("commandName", name).Interface("detail", err).Msg("Command Handler Panic")
+
+					// Respond with error
+					err := RespondError(internalSession, interaction.Interaction, "Unexpected Error: command handler panic", nil)
+					if err != nil {
+						log.Error().Stack().Str("commandName", name).Err(err).Msg("Failed to respond with panic error feedback")
+					}
+				}
+			}()
+
 			// Call handler
 			err := handler(internalSession, interaction)
 
