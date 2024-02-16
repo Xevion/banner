@@ -82,7 +82,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		case "code":
 			var low, high int
 			var err error
-			valueRaw := option.StringValue()
+			valueRaw := strings.TrimSpace(option.StringValue())
 
 			// 4 digit code
 			if len(valueRaw) == 4 {
@@ -109,7 +109,7 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 				}
 
 				// If there's not a high value, set it to the low value
-				if len(match) == 2 {
+				if len(match) == 2 || len(match[2]) == 0 {
 					high = low
 				} else {
 					high, err = strconv.Atoi(string(match[2]))
