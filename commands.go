@@ -36,7 +36,7 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 			Required:    false,
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionInteger,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "code",
 			MinLength:   GetPointer(2),
 			Description: "Course Code (e.g. 3743, 3000-3999, 3xxx, 3000-)",
