@@ -257,8 +257,10 @@ type Course struct {
 	TermDesc string `json:"termDesc"`
 	// The specific identifier that describes this individual course. CRNs are unique to a term. (TODO: Verify this is true)
 	CourseReferenceNumber string `json:"courseReferenceNumber"`
-	PartOfTerm            string `json:"partOfTerm"`
-	CourseNumber          string `json:"courseNumber"`
+	// A rarely used identifier that species which part of the given term this course is in. By default, this is "1" to encompass the entire term. (e.g. B6, B5)
+	PartOfTerm string `json:"partOfTerm"`
+	// The 4-digit course code that defines this course (e.g. 3743, 0120, 4855, 7339), but not the specific instance (see CourseReferenceNumber)
+	CourseNumber string `json:"courseNumber"`
 	// The short acronym of the course subject (e.g. CS, AEPI)
 	Subject string `json:"subject"`
 	// The full name of the course subject (e.g. Computer Science, Academic English Program-Intl.)
@@ -266,7 +268,8 @@ type Course struct {
 	// The specific section of the course (e.g. 001, 002)
 	SequenceNumber string `json:"sequenceNumber"`
 	// The long name of the campus this course takes place at (e.g. Main Campus, Downtown Campus)
-	CampusDescription       string `json:"campusDescription"`
+	CampusDescription string `json:"campusDescription"`
+	// e.g. Lecture, Seminar, Dissertation, Internship, Independent Study, Thesis, Self-paced, Laboratory
 	ScheduleTypeDescription string `json:"scheduleTypeDescription"`
 	// The long name of the course (generally)
 	CourseTitle string `json:"courseTitle"`
@@ -297,12 +300,16 @@ type Course struct {
 	InstructionalMethod            string  `json:"instructionalMethod"`
 	InstructionalMethodDescription string  `json:"instructionalMethodDescription"`
 	SectionAttributes              []struct {
+		// A internal API class identifier used by Banner
 		Class                 string `json:"class"`
-		Code                  string `json:"code"`
 		CourseReferenceNumber string `json:"courseReferenceNumber"`
-		Description           string `json:"description"`
-		IsZtcAttribute        bool   `json:"isZTCAttribute"`
-		TermCode              string `json:"termCode"`
+		// UPPR, ZIEP, AIS, LEWR, ZZSL, 090, GRAD, ZZTL, 020, BU, CLEP
+		Code string `json:"code"`
+		// Seems to be the fully qualified meaning of the Code (Upper, Intensive English Program...)
+		Description string `json:"description"`
+		TermCode    string `json:"termCode"`
+		// Unknown; always false
+		IsZtcAttribute bool `json:"isZTCAttribute"`
 	} `json:"sectionAttributes"`
 	Faculty         []FacultyItem         `json:"faculty"`
 	MeetingsFaculty []MeetingTimeResponse `json:"meetingsFaculty"`
