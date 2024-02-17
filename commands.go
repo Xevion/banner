@@ -492,7 +492,7 @@ END:VCALENDAR`, vTimezone, strings.Join(events, "\n"))
 		Data: &discordgo.InteractionResponseData{
 			Files: []*discordgo.File{
 				{
-					Name:        fmt.Sprintf("%d.ics", crn),
+					Name:        fmt.Sprintf("%s-%s-%s_%s.ics", course.Subject, course.CourseNumber, course.SequenceNumber, course.CourseReferenceNumber),
 					ContentType: "text/calendar",
 					Reader:      strings.NewReader(ics),
 				},
