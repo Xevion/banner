@@ -10,11 +10,55 @@ import (
 	"strconv"
 	"strings"
 
+	"time"
+
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
 
-var sessionID string = RandomString(5) + Nonce()
+var (
+	latestSession string = ""
+	sessionTime   time.Time
+	expiryTime    time.Duration = 25 * time.Minute
+)
+
+// ResetSessionTimer resets the session timer to the current time.
+// This is only used by the DoRequest handler when Banner API calls are detected, which would reset the session timer.
+func ResetSessionTimer() {
+	// Only reset the session time if the session is still valid
+	if time.Since(sessionTime) <= expiryTime {
+		sessionTime = time.Now()
+	}
+}
+
+// GenerateSession generates a new session ID (nonce) for use with the Banner API.
+// Don't use this function directly, use GetSession instead.
+func GenerateSession() string {
+	return RandomString(5) + Nonce()
+}
+
+// GetSession retrieves the current session ID if it's still valid.
+// If the session ID is invalid or has expired, a new one is generated and returned.
+// SessionIDs are valid for 30 minutes, but we'll be conservative and regenerate every 25 minutes.
+func GetSession() string {
+	// Check if a reset is required
+	if latestSession == "" || time.Since(sessionTime) >= expiryTime {
+		// Generate a new session identifier
+		latestSession = GenerateSession()
+
+		// Select the current term
+		term := Default(time.Now()).ToString()
+		log.Info().Str("term", term).Str("sessionID", latestSession).Msg("Setting selected term")
+		err := SelectTerm(term, latestSession)
+		if err != nil {
+			log.Fatal().Stack().Err(err).Msg("Failed to select term while generating session ID")
+		}
+
+		sessionTime = time.Now()
+	}
+
+	return latestSession
+}
 
 type Pair struct {
 	Code        string `json:"code"`
@@ -81,14 +125,14 @@ func GetTerms(search string, page int, max int) ([]BannerTerm, error) {
 
 // SelectTerm selects the given term in the Banner system.
 // This function completes the initial term selection process, which is required before any other API calls can be made with the session ID.
-func SelectTerm(term string) {
+func SelectTerm(term string, sessionId string) error {
 	form := url.Values{
 		"term":            {term},
 		"studyPath":       {""},
 		"studyPathText":   {""},
 		"startDatepicker": {""},
 		"endDatepicker":   {""},
-		"uniqueSessionId": {sessionID},
+		"uniqueSessionId": {sessionId},
 	}
 
 	params := map[string]string{
@@ -100,19 +144,19 @@ func SelectTerm(term string) {
 
 	res, err := DoRequest(req)
 	if err != nil {
-		log.Panic().Stack().Err(err).Msg("Failed to select term")
+		return fmt.Errorf("failed to select term: %w", err)
 	}
 
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
-		log.Panic().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+		return fmt.Errorf("response was not JSON: %w", res.Header.Get("Content-Type"))
 	}
 
 	// Acquire fwdUrl
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Panic().Stack().Err(err).Msg("Failed to read response body")
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var redirectResponse struct {
@@ -124,13 +168,15 @@ func SelectTerm(term string) {
 	req = BuildRequest("GET", redirectResponse.FwdUrl, nil)
 	res, err = DoRequest(req)
 	if err != nil {
-		log.Panic().Stack().Err(err).Msg("Redirect request failed")
+		return fmt.Errorf("failed to follow redirect: %w", err)
 	}
 
 	// Assert that the response is OK (200)
 	if res.StatusCode != 200 {
-		log.Panic().Stack().Int("status", res.StatusCode).Msg("Unexpected status code from redirect request")
+		return fmt.Errorf("redirect response was not 200: %w", res.StatusCode)
 	}
+
+	return nil
 }
 
 // GetPartOfTerms retrieves and parses the part of term information for a given term.
@@ -146,7 +192,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 		"term":            strconv.Itoa(term),
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
-		"uniqueSessionId": sessionID,
+		"uniqueSessionId": GetSession(),
 		"_":               Nonce(),
 	})
 
@@ -190,7 +236,7 @@ func GetInstructors(search string, term string, offset int, max int) ([]Instruct
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
-		"uniqueSessionId": sessionID,
+		"uniqueSessionId": GetSession(),
 		"_":               Nonce(),
 	})
 
@@ -255,7 +301,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 	params := query.Paramify()
 
 	params["txt_term"] = "202420" // TODO: Make this automatic but dynamically specifiable
-	params["uniqueSessionId"] = sessionID
+	params["uniqueSessionId"] = GetSession()
 	params["sortColumn"] = sort
 	params["sortDirection"] = "asc"
 
@@ -305,7 +351,7 @@ func GetSubjects(search string, term string, offset int, max int) ([]Pair, error
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
-		"uniqueSessionId": sessionID,
+		"uniqueSessionId": GetSession(),
 		"_":               Nonce(),
 	})
 
@@ -349,7 +395,7 @@ func GetCampuses(search string, term int, offset int, max int) ([]Pair, error) {
 		"term":            strconv.Itoa(term),
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
-		"uniqueSessionId": sessionID,
+		"uniqueSessionId": GetSession(),
 		"_":               Nonce(),
 	})
 
@@ -393,7 +439,7 @@ func GetInstructionalMethods(search string, term string, offset int, max int) ([
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
-		"uniqueSessionId": sessionID,
+		"uniqueSessionId": GetSession(),
 		"_":               Nonce(),
 	})
 

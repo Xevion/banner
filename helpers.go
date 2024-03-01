@@ -129,6 +129,11 @@ func DoRequest(req *http.Request) (*http.Response, error) {
 		contentLengthHeader := res.Header.Get("Content-Length")
 		contentLength := int64(-1)
 
+		// If this request was a Banner API request, reset the session timer
+		if strings.HasPrefix(req.URL.Path, "StudentRegistrationSsb/ssb/classSearch/") {
+			ResetSessionTimer()
+		}
+
 		// Get the content length
 		if contentLengthHeader != "" {
 			contentLength, err = strconv.ParseInt(contentLengthHeader, 10, 64)

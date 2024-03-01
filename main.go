@@ -308,11 +308,6 @@ func main() {
 		log.Fatal().Stack().Err(err).Msg("Cannot fetch terms on startup")
 	}
 
-	// Term Select Pre-Search POST
-	term := Default(time.Now()).ToString()
-	log.Info().Str("term", term).Str("sessionID", sessionID).Msg("Setting selected term")
-	SelectTerm(term)
-
 	// Launch a goroutine to scrape the banner system periodically
 	go func() {
 		for {
