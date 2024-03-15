@@ -9,8 +9,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"runtime"
-	"runtime/pprof"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -37,8 +36,6 @@ var (
 	p                   *message.Printer = message.NewPrinter(message.MatchLanguage("en"))
 	CentralTimeLocation *time.Location
 	isClosing           bool = false
-	cpuProfile               = flag.String("cpuprofile", "", "write cpu profile to `file`")
-	memoryProfile            = flag.String("memprofile", "", "write memory profile to `file`")
 )
 
 const (
@@ -139,20 +136,20 @@ func initRedis() {
 func main() {
 	flag.Parse()
 
-	// CPU Profiling (if requested)
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
-		if err != nil {
-			log.Fatal().Stack().Err(err).Msg("could not create CPU profile")
-		}
-		defer f.Close() // error handling omitted for example
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal().Stack().Err(err).Msg("could not start CPU profile")
-		}
-		defer pprof.StopCPUProfile()
-	}
-
 	initRedis()
+
+	if strings.EqualFold(os.Getenv("PPROF_ENABLE"), "true") {
+		// Start pprof server
+		go func() {
+			port := os.Getenv("PPROF_PORT")
+			log.Info().Str("port", port).Msg("Starting pprof server")
+			err := http.ListenAndServe(":"+port, nil)
+
+			if err != nil {
+				log.Fatal().Stack().Err(err).Msg("Cannot start pprof server")
+			}
+		}()
+	}
 
 	// Create cookie jar
 	var err error
@@ -332,19 +329,6 @@ func main() {
 	// Wait for signal (indefinite)
 	closingSignal := <-stop
 	isClosing = true // TODO: Switch to atomic lock with forced close after 10 seconds
-
-	// Write memory profile if requested
-	if *memoryProfile != "" {
-		f, err := os.Create(*memoryProfile)
-		if err != nil {
-			log.Fatal().Stack().Err(err).Msg("could not create memory profile")
-		}
-		defer f.Close() // error handling omitted for example
-		runtime.GC()    // get up-to-date statistics
-		if err := pprof.WriteHeapProfile(f); err != nil {
-			log.Fatal().Stack().Err(err).Msg("could not write memory profile")
-		}
-	}
 
 	// Defers are called after this
 	log.Warn().Str("signal", closingSignal.String()).Msg("Gracefully shutting down")
