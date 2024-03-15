@@ -141,7 +141,7 @@ func main() {
 	if strings.EqualFold(os.Getenv("PPROF_ENABLE"), "true") {
 		// Start pprof server
 		go func() {
-			port := os.Getenv("PPROF_PORT")
+			port := os.Getenv("PORT")
 			log.Info().Str("port", port).Msg("Starting pprof server")
 			err := http.ListenAndServe(":"+port, nil)
 
