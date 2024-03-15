@@ -114,7 +114,23 @@ func Nonce() string {
 
 // DoRequest performs & logs the request, logging and returning the response
 func DoRequest(req *http.Request) (*http.Response, error) {
+	headerSize := 0
+	for key, values := range req.Header {
+		for _, value := range values {
+			headerSize += len(key)
+			headerSize += len(value)
+		}
+	}
+
+	bodySize := int64(0)
+	if req.Body != nil {
+		bodySize, _ = io.Copy(io.Discard, req.Body)
+	}
+
+	size := zerolog.Dict().Int64("body", bodySize).Int("header", headerSize).Int("url", len(req.URL.String()))
+
 	log.Debug().
+		Dict("size", size).
 		Str("method", strings.TrimRight(req.Method, " ")).
 		Str("url", req.URL.String()).
 		Str("query", req.URL.RawQuery).
