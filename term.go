@@ -71,6 +71,11 @@ func GetCurrentTerm(now time.Time) (*Term, *Term) {
 	year := uint16(now.Year())
 	dayOfYear := uint16(now.YearDay())
 
+	// Fall of 2024 => 202410
+	// Spring of 2024 => 202420
+	// Fall of 2025 => 202510
+	// Summer of 2025 => 202530
+
 	if (dayOfYear < SpringRange.Start) || (dayOfYear >= FallRange.End) {
 		// Fall over, Spring not yet begun
 		return nil, &Term{Year: year + 1, Season: Spring}
@@ -85,10 +90,10 @@ func GetCurrentTerm(now time.Time) (*Term, *Term) {
 		return &Term{Year: year, Season: Summer}, &Term{Year: year, Season: Fall}
 	} else if dayOfYear < FallRange.Start {
 		// Summer over, Fall not yet begun
-		return nil, &Term{Year: year, Season: Fall}
+		return nil, &Term{Year: year + 1, Season: Fall}
 	} else if (dayOfYear >= FallRange.Start) && (dayOfYear < FallRange.End) {
 		// Fall
-		return &Term{Year: year, Season: Fall}, nil
+		return &Term{Year: year + 1, Season: Fall}, nil
 	}
 
 	panic(fmt.Sprintf("Impossible Code Reached (dayOfYear: %d)", dayOfYear))

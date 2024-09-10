@@ -332,7 +332,8 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) er
 	fetch_time := time.Now()
 	crn := i.ApplicationCommandData().Options[0].IntValue()
 
-	meetingTimes, err := GetCourseMeetingTime(202420, int(crn))
+	// Fix static term
+	meetingTimes, err := GetCourseMeetingTime(202510, int(crn))
 	if err != nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -400,6 +401,7 @@ func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) err
 		return fmt.Errorf("Error retrieving course data: %w", err)
 	}
 
+	// Fix static term
 	meetingTimes, err := GetCourseMeetingTime(202420, int(crn))
 	if err != nil {
 		return fmt.Errorf("Error requesting meeting time: %w", err)
