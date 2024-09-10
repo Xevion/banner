@@ -300,7 +300,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 
 	params := query.Paramify()
 
-	params["txt_term"] = "202420" // TODO: Make this automatic but dynamically specifiable
+	params["txt_term"] = "202510" // TODO: Make this automatic but dynamically specifiable
 	params["uniqueSessionId"] = GetSession()
 	params["sortColumn"] = sort
 	params["sortDirection"] = "asc"
@@ -316,8 +316,13 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 		return nil, fmt.Errorf("failed to search: %w", err)
 	}
 
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("search failed with status code: %d", res.StatusCode)
+	}
+
 	// Assert that the response is JSON
 	if !ContentTypeMatch(res, "application/json") {
+		// for server 500 errors, parse for the error with '#dialog-message > div.message'
 		log.Error().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
