@@ -402,7 +402,7 @@ func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) err
 	}
 
 	// Fix static term
-	meetingTimes, err := GetCourseMeetingTime(202420, int(crn))
+	meetingTimes, err := GetCourseMeetingTime(202510, int(crn))
 	if err != nil {
 		return fmt.Errorf("Error requesting meeting time: %w", err)
 	}
