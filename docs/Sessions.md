@@ -11,19 +11,20 @@ All notes on the internal workings of Sessions in the Banner system.
   - If they click the button, the session will be extended via the keepAliveURL (see `meta[name="keepAliveURL"]`).
   - The `keepAliveURL` does not seem to care whether the session is or was ever valid, it will always return a 200 OK with `I am Alive` as the content.
 - When searching with an invalid session (or none at all, as the case may be), the server will return 200 OK, but with an empty result response structure.
-  - ```json
-    {
-        "success": true,
-        "totalCount": 0,
-        "data": null,    // always an array, even if empty
-        "pageOffset": 0,                  //
-        "pageMaxSize": 10,
-        "sectionsFetchedCount": 0,
-        "pathMode": "registration",   // normally "search"
-        "searchResultsConfigs": null,  // normally an array
-        "ztcEncodedImage": null  // normally a static string in base64
-    }
+
+```json
+{
+  "success": true,
+  "totalCount": 0,
+  "data": null, // always an array, even if empty
+  "pageOffset": 0, //
+  "pageMaxSize": 10,
+  "sectionsFetchedCount": 0,
+  "pathMode": "registration", // normally "search"
+  "searchResultsConfigs": null, // normally an array
+  "ztcEncodedImage": null // normally a static string in base64
+}
 ```
-    
-  - This is only the handling for the search endpoint, more research is required to see how other endpoints handle invalid/expired sessions.
-  - TODO: How is `pathMode` affected by an expired session, rather than an invalid/non-existent one?
+
+- This is only the handling for the search endpoint, more research is required to see how other endpoints handle invalid/expired sessions.
+- TODO: How is `pathMode` affected by an expired session, rather than an invalid/non-existent one?

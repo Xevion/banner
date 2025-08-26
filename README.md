@@ -23,21 +23,21 @@ A discord bot for executing queries & searches on the Ellucian Banner instance h
 - Full Autocomplete for Every Search Option
 - Metrics, Log Query, Privileged Error Feedback
 - Search for Classes
-    - Major, Professor, Location, Name, Time of Day
+  - Major, Professor, Location, Name, Time of Day
 - Subscribe to Classes
-    - Availability (seat, pre-seat)
-    - Waitlist Movement
-    - Detail Changes (meta, time, location, seats, professor)
-        - `time` Start, End, Days of Week
-        - `seats` Any change in seat/waitlist data
-        - `meta` 
+  - Availability (seat, pre-seat)
+  - Waitlist Movement
+  - Detail Changes (meta, time, location, seats, professor)
+    - `time` Start, End, Days of Week
+    - `seats` Any change in seat/waitlist data
+    - `meta`
 - Lookup via Course Reference Number (CRN)
 - Smart Time of Day Handling
-    - "2 PM" -> Start within 2:00 PM to 2:59 PM
-    - "2-3 PM" -> Start within 2:00 PM to 3:59 PM
-    - "ends by 2 PM" -> Ends within 12:00 AM to 2:00 PM
-    - "after 2 PM" -> Start within 2:01 PM to 11:59 PM
-    - "before 2 PM" -> Ends within 12:00 AM to 1:59 PM
+  - "2 PM" -> Start within 2:00 PM to 2:59 PM
+  - "2-3 PM" -> Start within 2:00 PM to 3:59 PM
+  - "ends by 2 PM" -> Ends within 12:00 AM to 2:00 PM
+  - "after 2 PM" -> Start within 2:01 PM to 11:59 PM
+  - "before 2 PM" -> Ends within 12:00 AM to 1:59 PM
 - Get By Section Command
   - CS 4393 001 =>
   - Will require SQL to be able to search for a class by its section number
@@ -100,6 +100,7 @@ Scraping will be separated by major to allow for priority majors (namely, Comput
 This will lower the overall load on the Banner system while ensuring that data presented by the app is still relevant.
 
 For now, all majors will be scraped fully every 4 hours with at least 5 minutes between each one.
+
 - On startup, priority majors will be scraped first (if required).
 - Other majors will be scraped in arbitrary order (if required).
 - Scrape timing will be stored in Redis.
@@ -107,6 +108,7 @@ For now, all majors will be scraped fully every 4 hours with at least 5 minutes 
   - If CRNs are duplicated between terms, then the primary key will be (CRN, Term)
 
 Considerations
+
 - Change in metadata should decrease the interval
 - The number of courses scraped should change the interval (2 hours per 500 courses involved)
 
@@ -118,5 +120,6 @@ For example, a recent scrape of 350 classes should be weighted 5x more than a se
 Still, even if the cap does not normally allow for this request to be processed immediately, the small user search should proceed with a small bursting cap.
 
 The requirements to this hypothetical system would be:
+
 - Conditional Bursting: background processes or other requests deemed "low priority" are not allowed to use bursting.
 - Arbitrary Costs: rate limiting is considered in the form of the request size/speed more or less, such that small simple requests can be made more frequently, unlike large requests.
