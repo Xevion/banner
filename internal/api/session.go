@@ -1,7 +1,7 @@
 package api
 
 import (
-	"banner/internal/utils"
+	"banner/internal"
 	"net/url"
 
 	log "github.com/rs/zerolog/log"
@@ -18,7 +18,7 @@ func (a *API) Setup() {
 
 	for _, path := range requestQueue {
 		req := a.config.Client.NewRequest().
-			SetQueryParam("_", utils.Nonce()).
+			SetQueryParam("_", internal.Nonce()).
 			SetExpectResponseContentType("application/json")
 
 		res, err := req.Get(path)

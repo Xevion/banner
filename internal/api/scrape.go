@@ -1,8 +1,8 @@
 package api
 
 import (
+	"banner/internal"
 	"banner/internal/models"
-	"banner/internal/utils"
 	"context"
 	"fmt"
 	"math/rand"
@@ -70,7 +70,7 @@ func (a *API) Scrape() error {
 
 // GetExpiredSubjects returns a list of subjects that are expired and should be scraped.
 func (a *API) GetExpiredSubjects() ([]string, error) {
-	term := utils.Default(time.Now()).ToString()
+	term := Default(time.Now()).ToString()
 	subjects := make([]string, 0)
 
 	// Create a timeout context for Redis operations
@@ -109,7 +109,7 @@ func (a *API) ScrapeMajor(subject string) error {
 	for {
 		// Build & execute the query
 		query := NewQuery().Offset(offset).MaxResults(MaxPageSize * 2).Subject(subject)
-		term := utils.Default(time.Now()).ToString()
+		term := Default(time.Now()).ToString()
 		result, err := a.Search(term, query, "subjectDescription", false)
 		if err != nil {
 			return fmt.Errorf("search failed: %w (%s)", err, query.String())
@@ -152,7 +152,7 @@ func (a *API) ScrapeMajor(subject string) error {
 		break
 	}
 
-	term := utils.Default(time.Now()).ToString()
+	term := Default(time.Now()).ToString()
 
 	// Calculate the expiry time for the scrape (1 hour for every 200 classes, random +-15%) with a minimum of 1 hour
 	var scrapeExpiry time.Duration
@@ -190,7 +190,7 @@ func (a *API) CalculateExpiry(term string, count int, priority bool) time.Durati
 	// Subjects with less than 50 classes have a reversed expiry (less classes, longer interval)
 	// 1 class => 12 hours, 49 classes => 1 hour
 	if count < 50 {
-		hours := utils.Slope(utils.Point{X: 1, Y: 12}, utils.Point{X: 49, Y: 1}, float64(count)).Y
+		hours := internal.Slope(internal.Point{X: 1, Y: 12}, internal.Point{X: 49, Y: 1}, float64(count)).Y
 		baseExpiry = time.Duration(hours * float64(time.Hour))
 	}
 

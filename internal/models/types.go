@@ -1,7 +1,7 @@
 package models
 
 import (
-	"banner/internal/utils"
+	"banner/internal"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -10,8 +10,6 @@ import (
 
 	log "github.com/rs/zerolog/log"
 )
-
-const JsonContentType = "application/json"
 
 type FacultyItem struct {
 	BannerId              string  `json:"bannerId"`
@@ -114,7 +112,7 @@ func (m *MeetingTimeResponse) TimeString() string {
 		return "???"
 	}
 
-	return fmt.Sprintf("%s %s-%s", utils.WeekdaysToString(m.Days()), m.StartTime().String(), m.EndTime().String())
+	return fmt.Sprintf("%s %s-%s", internal.WeekdaysToString(m.Days()), m.StartTime().String(), m.EndTime().String())
 }
 
 // PlaceString returns a formatted string best representing the place of the meeting time
@@ -195,7 +193,7 @@ func (m *MeetingTimeResponse) EndDay() time.Time {
 
 // StartTime returns the start time of the meeting time as a NaiveTime object
 // This is not cached and is parsed on each invocation. It may also panic without handling.
-func (m *MeetingTimeResponse) StartTime() *utils.NaiveTime {
+func (m *MeetingTimeResponse) StartTime() *internal.NaiveTime {
 	raw := m.MeetingTime.BeginTime
 	if raw == "" {
 		log.Panic().Stack().Msg("Start time is empty")
@@ -206,12 +204,12 @@ func (m *MeetingTimeResponse) StartTime() *utils.NaiveTime {
 		log.Panic().Stack().Err(err).Str("raw", raw).Msg("Cannot parse start time integer")
 	}
 
-	return utils.ParseNaiveTime(value)
+	return internal.ParseNaiveTime(value)
 }
 
 // EndTime returns the end time of the meeting time as a NaiveTime object
 // This is not cached and is parsed on each invocation. It may also panic without handling.
-func (m *MeetingTimeResponse) EndTime() *utils.NaiveTime {
+func (m *MeetingTimeResponse) EndTime() *internal.NaiveTime {
 	raw := m.MeetingTime.EndTime
 	if raw == "" {
 		return nil
@@ -222,7 +220,7 @@ func (m *MeetingTimeResponse) EndTime() *utils.NaiveTime {
 		log.Panic().Stack().Err(err).Str("raw", raw).Msg("Cannot parse end time integer")
 	}
 
-	return utils.ParseNaiveTime(value)
+	return internal.ParseNaiveTime(value)
 }
 
 type RRule struct {

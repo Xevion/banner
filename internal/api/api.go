@@ -1,9 +1,9 @@
 package api
 
 import (
+	"banner/internal"
 	"banner/internal/config"
 	"banner/internal/models"
-	"banner/internal/utils"
 	"context"
 	"encoding/json"
 	"errors"
@@ -51,7 +51,7 @@ func SessionMiddleware(c *resty.Client, r *resty.Response) error {
 // GenerateSession generates a new session ID (nonce) for use with the Banner API.
 // Don't use this function directly, use GetSession instead.
 func GenerateSession() string {
-	return utils.RandomString(5) + utils.Nonce()
+	return internal.RandomString(5) + internal.Nonce()
 }
 
 var terms []BannerTerm
@@ -131,7 +131,7 @@ func (a *API) GetTerms(search string, page int, maxResults int) ([]BannerTerm, e
 		SetQueryParam("searchTerm", search).
 		SetQueryParam("offset", strconv.Itoa(page)).
 		SetQueryParam("max", strconv.Itoa(maxResults)).
-		SetQueryParam("_", utils.Nonce()).
+		SetQueryParam("_", internal.Nonce()).
 		SetExpectResponseContentType("application/json").
 		SetResult(&[]BannerTerm{})
 
@@ -206,7 +206,7 @@ func (a *API) GetPartOfTerms(search string, term int, offset int, maxResults int
 		SetQueryParam("offset", strconv.Itoa(offset)).
 		SetQueryParam("max", strconv.Itoa(maxResults)).
 		SetQueryParam("uniqueSessionId", a.EnsureSession()).
-		SetQueryParam("_", utils.Nonce()).
+		SetQueryParam("_", internal.Nonce()).
 		SetExpectResponseContentType("application/json").
 		SetResult(&[]BannerTerm{})
 
@@ -239,7 +239,7 @@ func (a *API) GetInstructors(search string, term string, offset int, maxResults 
 		SetQueryParam("offset", strconv.Itoa(offset)).
 		SetQueryParam("max", strconv.Itoa(maxResults)).
 		SetQueryParam("uniqueSessionId", a.EnsureSession()).
-		SetQueryParam("_", utils.Nonce()).
+		SetQueryParam("_", internal.Nonce()).
 		SetExpectResponseContentType("application/json").
 		SetResult(&[]Instructor{})
 
@@ -337,7 +337,7 @@ func (a *API) GetSubjects(search string, term string, offset int, maxResults int
 		SetQueryParam("offset", strconv.Itoa(offset)).
 		SetQueryParam("max", strconv.Itoa(maxResults)).
 		SetQueryParam("uniqueSessionId", a.EnsureSession()).
-		SetQueryParam("_", utils.Nonce()).
+		SetQueryParam("_", internal.Nonce()).
 		SetExpectResponseContentType("application/json").
 		SetResult(&[]Pair{})
 
@@ -370,7 +370,7 @@ func (a *API) GetCampuses(search string, term int, offset int, maxResults int) (
 		SetQueryParam("offset", strconv.Itoa(offset)).
 		SetQueryParam("max", strconv.Itoa(maxResults)).
 		SetQueryParam("uniqueSessionId", a.EnsureSession()).
-		SetQueryParam("_", utils.Nonce()).
+		SetQueryParam("_", internal.Nonce()).
 		SetExpectResponseContentType("application/json").
 		SetResult(&[]Pair{})
 
@@ -403,7 +403,7 @@ func (a *API) GetInstructionalMethods(search string, term string, offset int, ma
 		SetQueryParam("offset", strconv.Itoa(offset)).
 		SetQueryParam("max", strconv.Itoa(maxResults)).
 		SetQueryParam("uniqueSessionId", a.EnsureSession()).
-		SetQueryParam("_", utils.Nonce()).
+		SetQueryParam("_", internal.Nonce()).
 		SetExpectResponseContentType("application/json").
 		SetResult(&[]Pair{})
 
@@ -423,23 +423,27 @@ func (a *API) GetInstructionalMethods(search string, term string, offset int, ma
 // It makes an HTTP GET request to the appropriate API endpoint and parses the response to extract the meeting time data.
 // The function returns a MeetingTimeResponse struct containing the extracted information.
 func (a *API) GetCourseMeetingTime(term int, crn int) ([]models.MeetingTimeResponse, error) {
+	type responseWrapper struct {
+		Fmt []models.MeetingTimeResponse `json:"fmt"`
+	}
+
 	req := a.config.Client.NewRequest().
 		SetQueryParam("term", strconv.Itoa(term)).
 		SetQueryParam("courseReferenceNumber", strconv.Itoa(crn)).
 		SetExpectResponseContentType("application/json").
-		SetResult(&[]models.MeetingTimeResponse{})
+		SetResult(&responseWrapper{})
 
 	res, err := req.Get("/searchResults/getFacultyMeetingTimes")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get meeting time: %w", err)
 	}
 
-	meetingTimes, ok := res.Result().(*[]models.MeetingTimeResponse)
+	result, ok := res.Result().(*responseWrapper)
 	if !ok {
 		return nil, fmt.Errorf("meeting times parsing failed to cast: %v", res.Result())
 	}
 
-	return *meetingTimes, nil
+	return result.Fmt, nil
 }
 
 // ResetDataForm makes a POST request that needs to be made upon before new search requests can be made.

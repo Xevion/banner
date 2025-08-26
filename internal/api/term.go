@@ -1,12 +1,10 @@
-package utils
+package api
 
 import (
 	"banner/internal/config"
 	"fmt"
 	"strconv"
 	"time"
-
-	"github.com/rs/zerolog/log"
 )
 
 // Term selection should yield smart results based on the current time, as well as the input provided.
@@ -32,9 +30,6 @@ var (
 func init() {
 	loc, _ := time.LoadLocation(config.CentralTimezoneName)
 	SpringRange, SummerRange, FallRange = GetYearDayRange(loc, uint16(time.Now().Year()))
-
-	currentTerm, nextTerm := GetCurrentTerm(time.Now())
-	log.Debug().Str("CurrentTerm", fmt.Sprintf("%+v", currentTerm)).Str("NextTerm", fmt.Sprintf("%+v", nextTerm)).Msg("GetCurrentTerm")
 }
 
 type YearDayRange struct {

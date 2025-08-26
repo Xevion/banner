@@ -1,9 +1,9 @@
 package bot
 
 import (
+	"banner/internal"
 	"banner/internal/api"
 	"banner/internal/models"
-	"banner/internal/utils"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -40,7 +40,7 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 	Options: []*discordgo.ApplicationCommandOption{
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
-			MinLength:    utils.GetIntPointer(0),
+			MinLength:    internal.GetIntPointer(0),
 			MaxLength:    48,
 			Name:         "title",
 			Description:  "Course Title (exact, use autocomplete)",
@@ -50,7 +50,7 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 		{
 			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "code",
-			MinLength:   utils.GetIntPointer(4),
+			MinLength:   internal.GetIntPointer(4),
 			Description: "Course Code (e.g. 3743, 3000-3999, 3xxx, 3000-)",
 			Required:    false,
 		},
@@ -248,8 +248,8 @@ func SearchCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.Interaction
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      utils.GetFetchedFooter(b.Config, fetch_time),
-					Description: fmt.Sprintf("%d Class%s", courses.TotalCount, utils.Plural(courses.TotalCount)),
+					Footer:      internal.GetFetchedFooter(b.Config, fetch_time),
+					Description: fmt.Sprintf("%d Class%s", courses.TotalCount, internal.Plural(courses.TotalCount)),
 					Fields:      fields[:min(25, len(fields))],
 					Color:       color,
 				},
@@ -267,7 +267,7 @@ var TermCommandDefinition = &discordgo.ApplicationCommand{
 	Options: []*discordgo.ApplicationCommandOption{
 		{
 			Type:        discordgo.ApplicationCommandOptionString,
-			MinLength:   utils.GetIntPointer(0),
+			MinLength:   internal.GetIntPointer(0),
 			MaxLength:   8,
 			Name:        "search",
 			Description: "Term to search for",
@@ -278,7 +278,7 @@ var TermCommandDefinition = &discordgo.ApplicationCommand{
 			Name:        "page",
 			Description: "Page Number",
 			Required:    false,
-			MinValue:    utils.GetFloatPointer(1),
+			MinValue:    internal.GetFloatPointer(1),
 		},
 	},
 }
@@ -303,7 +303,7 @@ func TermCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCr
 	termResult, err := b.API.GetTerms(searchTerm, pageNumber, 25)
 
 	if err != nil {
-		utils.RespondError(s, i.Interaction, "Error while fetching terms", err)
+		internal.RespondError(s, i.Interaction, "Error while fetching terms", err)
 		return err
 	}
 
@@ -328,8 +328,8 @@ func TermCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCr
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      utils.GetFetchedFooter(b.Config, fetch_time),
-					Description: fmt.Sprintf("%d term%s (page %d)", len(termResult), utils.Plural(len(termResult)), pageNumber),
+					Footer:      internal.GetFetchedFooter(b.Config, fetch_time),
+					Description: fmt.Sprintf("%d term%s (page %d)", len(termResult), internal.Plural(len(termResult)), pageNumber),
 					Fields:      fields[:min(25, len(fields))],
 				},
 			},
@@ -387,7 +387,7 @@ func TimeCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCr
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      utils.GetFetchedFooter(b.Config, fetch_time),
+					Footer:      internal.GetFetchedFooter(b.Config, fetch_time),
 					Description: "",
 					Fields: []*discordgo.MessageEmbedField{
 						{
@@ -404,7 +404,7 @@ func TimeCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCr
 						},
 						{
 							Name:  "Days of Week",
-							Value: utils.WeekdaysToString(meetingTime.Days()),
+							Value: internal.WeekdaysToString(meetingTime.Days()),
 						},
 					},
 				},
@@ -430,7 +430,7 @@ var IcsCommandDefinition = &discordgo.ApplicationCommand{
 
 func IcsCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	// Parse all options
-	options := utils.ParseOptions(i.ApplicationCommandData().Options)
+	options := internal.ParseOptions(i.ApplicationCommandData().Options)
 	crn := options.GetInt("crn")
 
 	course, err := b.API.GetCourse(strconv.Itoa(int(crn)))
@@ -460,7 +460,7 @@ func IcsCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCre
 
 	if !exists {
 		log.Warn().Str("crn", course.CourseReferenceNumber).Msg("Non-meeting course requested for ICS file")
-		utils.RespondError(s, i.Interaction, "The course requested does not meet at a defined moment in time.", nil)
+		internal.RespondError(s, i.Interaction, "The course requested does not meet at a defined moment in time.", nil)
 		return nil
 	}
 

@@ -22,10 +22,10 @@ import (
 	"github.com/samber/lo"
 	"resty.dev/v3"
 
+	"banner/internal"
 	"banner/internal/api"
 	"banner/internal/bot"
 	"banner/internal/config"
-	"banner/internal/utils"
 )
 
 var (
@@ -57,25 +57,25 @@ func init() {
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 
 	// Use the custom console writer if we're in development
-	isDevelopment := utils.GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
+	isDevelopment := internal.GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
 	if isDevelopment == "" {
 		isDevelopment = "development"
 	}
 
 	if isDevelopment == "development" {
-		log.Logger = zerolog.New(utils.NewConsoleWriter()).With().Timestamp().Logger()
+		log.Logger = zerolog.New(config.NewConsoleWriter()).With().Timestamp().Logger()
 	} else {
-		log.Logger = zerolog.New(utils.LogSplitter{Std: os.Stdout, Err: os.Stderr}).With().Timestamp().Logger()
+		log.Logger = zerolog.New(config.LogSplitter{Std: os.Stdout, Err: os.Stderr}).With().Timestamp().Logger()
 	}
 	log.Debug().Str("environment", isDevelopment).Msg("Loggers Setup")
 
 	// Set discordgo's logger to use zerolog
-	discordgo.Logger = utils.DiscordGoLogger
+	discordgo.Logger = internal.DiscordGoLogger
 }
 
 func initRedis(cfg *config.Config) {
 	// Setup redis
-	redisUrl := utils.GetFirstEnv("REDIS_URL", "REDIS_PRIVATE_URL")
+	redisUrl := internal.GetFirstEnv("REDIS_URL", "REDIS_PRIVATE_URL")
 	if redisUrl == "" {
 		log.Fatal().Stack().Msg("REDIS_URL/REDIS_PRIVATE_URL not set")
 	}
@@ -130,7 +130,7 @@ func main() {
 	}
 
 	// Try to grab the environment variable, or default to development
-	environment := utils.GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
+	environment := internal.GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
 	if environment == "" {
 		environment = "development"
 	}

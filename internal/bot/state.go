@@ -3,7 +3,6 @@ package bot
 import (
 	"banner/internal/api"
 	"banner/internal/config"
-	"banner/internal/utils"
 	"fmt"
 	"time"
 
@@ -28,7 +27,7 @@ func (b *Bot) SetClosing() {
 
 func (b *Bot) GetSession() (string, error) {
 	sessionID := b.API.EnsureSession()
-	term := utils.Default(time.Now()).ToString()
+	term := api.Default(time.Now()).ToString()
 
 	log.Info().Str("term", term).Str("sessionID", sessionID).Msg("Setting selected term")
 	err := b.API.SelectTerm(term, sessionID)
