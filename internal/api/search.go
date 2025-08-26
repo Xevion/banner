@@ -32,6 +32,8 @@ const (
 	paramMaxResults        = "pageMaxSize"
 )
 
+// Query represents a search query for courses.
+// It is a builder struct that allows for chaining of methods to build a query.
 type Query struct {
 	subject             *string
 	title               *string
@@ -51,6 +53,7 @@ type Query struct {
 	courseNumberRange   *Range
 }
 
+// NewQuery creates a new Query with default values.
 func NewQuery() *Query {
 	return &Query{maxResults: 8, offset: 0}
 }
@@ -107,42 +110,50 @@ func (q *Query) InstructionalMethod(instructionalMethod []string) *Query {
 	return q
 }
 
+// Attributes sets the attributes for the query
 func (q *Query) Attributes(attributes []string) *Query {
 	q.attributes = &attributes
 	return q
 }
 
+// Instructor sets the instructors for the query
 func (q *Query) Instructor(instructor []uint64) *Query {
 	q.instructor = &instructor
 	return q
 }
 
+// StartTime sets the start time for the query
 func (q *Query) StartTime(startTime time.Duration) *Query {
 	q.startTime = &startTime
 	return q
 }
 
+// EndTime sets the end time for the query
 func (q *Query) EndTime(endTime time.Duration) *Query {
 	q.endTime = &endTime
 	return q
 }
 
+// Credits sets the credit range for the query
 func (q *Query) Credits(low int, high int) *Query {
 	q.minCredits = &low
 	q.maxCredits = &high
 	return q
 }
 
+// MinCredits sets the minimum credits for the query
 func (q *Query) MinCredits(value int) *Query {
 	q.minCredits = &value
 	return q
 }
 
+// MaxCredits sets the maximum credits for the query
 func (q *Query) MaxCredits(value int) *Query {
 	q.maxCredits = &value
 	return q
 }
 
+// CourseNumbers sets the course number range for the query
 func (q *Query) CourseNumbers(low int, high int) *Query {
 	q.courseNumberRange = &Range{low, high}
 	return q
@@ -160,6 +171,7 @@ func (q *Query) MaxResults(maxResults int) *Query {
 	return q
 }
 
+// Range represents a range of two integers.
 type Range struct {
 	Low  int
 	High int

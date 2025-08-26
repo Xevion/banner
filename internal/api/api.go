@@ -365,8 +365,8 @@ func GetInstructors(search string, term string, offset int, maxResults int) ([]I
 	return instructors, nil
 }
 
+// ClassDetails represents the details of a course.
 // TODO: Finish this struct & function
-// ClassDetails represents
 type ClassDetails struct {
 }
 
