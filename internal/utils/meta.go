@@ -2,6 +2,7 @@ package utils
 
 import (
 	"banner/internal/config"
+	"context"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -11,8 +12,12 @@ import (
 
 // GetGuildName returns the name of the guild with the given ID, utilizing Redis to cache the value
 func GetGuildName(cfg *config.Config, session *discordgo.Session, guildID string) string {
+	// Create a timeout context for Redis operations
+	ctx, cancel := context.WithTimeout(cfg.Ctx, 5*time.Second)
+	defer cancel()
+
 	// Check Redis for the guild name
-	guildName, err := cfg.KV.Get(cfg.Ctx, "guild:"+guildID+":name").Result()
+	guildName, err := cfg.KV.Get(ctx, "guild:"+guildID+":name").Result()
 	if err != nil && err != redis.Nil {
 		log.Error().Stack().Err(err).Msg("Error getting guild name from Redis")
 		return "err"
@@ -29,7 +34,9 @@ func GetGuildName(cfg *config.Config, session *discordgo.Session, guildID string
 		log.Error().Stack().Err(err).Msg("Error getting guild name")
 
 		// Store an invalid value in Redis so we  don't keep trying to get the guild name
-		_, err := cfg.KV.Set(cfg.Ctx, "guild:"+guildID+":name", "x", time.Minute*5).Result()
+		ctx2, cancel2 := context.WithTimeout(cfg.Ctx, 5*time.Second)
+		defer cancel2()
+		_, err := cfg.KV.Set(ctx2, "guild:"+guildID+":name", "x", time.Minute*5).Result()
 		if err != nil {
 			log.Error().Stack().Err(err).Msg("Error setting false guild name in Redis")
 		}
@@ -38,15 +45,21 @@ func GetGuildName(cfg *config.Config, session *discordgo.Session, guildID string
 	}
 
 	// Cache the guild name in Redis
-	cfg.KV.Set(cfg.Ctx, "guild:"+guildID+":name", guild.Name, time.Hour*3)
+	ctx3, cancel3 := context.WithTimeout(cfg.Ctx, 5*time.Second)
+	defer cancel3()
+	cfg.KV.Set(ctx3, "guild:"+guildID+":name", guild.Name, time.Hour*3)
 
 	return guild.Name
 }
 
 // GetChannelName returns the name of the channel with the given ID, utilizing Redis to cache the value
 func GetChannelName(cfg *config.Config, session *discordgo.Session, channelID string) string {
+	// Create a timeout context for Redis operations
+	ctx, cancel := context.WithTimeout(cfg.Ctx, 5*time.Second)
+	defer cancel()
+
 	// Check Redis for the channel name
-	channelName, err := cfg.KV.Get(cfg.Ctx, "channel:"+channelID+":name").Result()
+	channelName, err := cfg.KV.Get(ctx, "channel:"+channelID+":name").Result()
 	if err != nil && err != redis.Nil {
 		log.Error().Stack().Err(err).Msg("Error getting channel name from Redis")
 		return "err"
@@ -63,7 +76,9 @@ func GetChannelName(cfg *config.Config, session *discordgo.Session, channelID st
 		log.Error().Stack().Err(err).Msg("Error getting channel name")
 
 		// Store an invalid value in Redis so we  don't keep trying to get the channel name
-		_, err := cfg.KV.Set(cfg.Ctx, "channel:"+channelID+":name", "x", time.Minute*5).Result()
+		ctx2, cancel2 := context.WithTimeout(cfg.Ctx, 5*time.Second)
+		defer cancel2()
+		_, err := cfg.KV.Set(ctx2, "channel:"+channelID+":name", "x", time.Minute*5).Result()
 		if err != nil {
 			log.Error().Stack().Err(err).Msg("Error setting false channel name in Redis")
 		}
@@ -72,7 +87,9 @@ func GetChannelName(cfg *config.Config, session *discordgo.Session, channelID st
 	}
 
 	// Cache the channel name in Redis
-	cfg.KV.Set(cfg.Ctx, "channel:"+channelID+":name", channel.Name, time.Hour*3)
+	ctx3, cancel3 := context.WithTimeout(cfg.Ctx, 5*time.Second)
+	defer cancel3()
+	cfg.KV.Set(ctx3, "channel:"+channelID+":name", channel.Name, time.Hour*3)
 
 	return channel.Name
 }

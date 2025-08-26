@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	Ctx                 context.Context
+	CancelFunc          context.CancelFunc
 	KV                  *redis.Client
 	Client              *http.Client
 	IsDevelopment       bool
@@ -23,15 +24,17 @@ const (
 )
 
 func New() (*Config, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	loc, err := time.LoadLocation(CentralTimezoneName)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
 	return &Config{
 		Ctx:                 ctx,
+		CancelFunc:          cancel,
 		CentralTimeLocation: loc,
 	}, nil
 }

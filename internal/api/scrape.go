@@ -3,6 +3,7 @@ package api
 import (
 	"banner/internal/models"
 	"banner/internal/utils"
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
@@ -72,8 +73,12 @@ func (a *API) GetExpiredSubjects() ([]string, error) {
 	term := utils.Default(time.Now()).ToString()
 	subjects := make([]string, 0)
 
+	// Create a timeout context for Redis operations
+	ctx, cancel := context.WithTimeout(a.config.Ctx, 10*time.Second)
+	defer cancel()
+
 	// Get all subjects
-	values, err := a.config.KV.MGet(a.config.Ctx, lo.Map(AllMajors, func(major string, _ int) string {
+	values, err := a.config.KV.MGet(ctx, lo.Map(AllMajors, func(major string, _ int) string {
 		return fmt.Sprintf("scraped:%s:%s", major, term)
 	})...).Result()
 	if err != nil {
@@ -161,7 +166,12 @@ func (a *API) ScrapeMajor(subject string) error {
 	if totalClassCount == 0 {
 		totalClassCount = -1
 	}
-	err := a.config.KV.Set(a.config.Ctx, fmt.Sprintf("scraped:%s:%s", subject, term), totalClassCount, scrapeExpiry).Err()
+
+	// Create a timeout context for Redis operations
+	ctx, cancel := context.WithTimeout(a.config.Ctx, 5*time.Second)
+	defer cancel()
+
+	err := a.config.KV.Set(ctx, fmt.Sprintf("scraped:%s:%s", subject, term), totalClassCount, scrapeExpiry).Err()
 	if err != nil {
 		log.Error().Err(err).Msg("failed to mark major as scraped")
 	}
@@ -214,7 +224,11 @@ func (a *API) CalculateExpiry(term string, count int, priority bool) time.Durati
 // IntakeCourse stores a course in Redis.
 // This function is mostly a stub for now, but will be used to handle change identification, notifications, and SQLite upserts in the future.
 func (a *API) IntakeCourse(course models.Course) error {
-	err := a.config.KV.Set(a.config.Ctx, fmt.Sprintf("class:%s", course.CourseReferenceNumber), course, 0).Err()
+	// Create a timeout context for Redis operations
+	ctx, cancel := context.WithTimeout(a.config.Ctx, 5*time.Second)
+	defer cancel()
+
+	err := a.config.KV.Set(ctx, fmt.Sprintf("class:%s", course.CourseReferenceNumber), course, 0).Err()
 	if err != nil {
 		return fmt.Errorf("failed to store class in Redis: %w", err)
 	}

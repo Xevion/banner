@@ -58,7 +58,7 @@ func BuildRequestWithBody(cfg *config.Config, method string, path string, params
 		}
 	}
 
-	request, _ := http.NewRequest(method, requestUrl, body)
+	request, _ := http.NewRequestWithContext(cfg.Ctx, method, requestUrl, body)
 	AddUserAgent(request)
 	return request
 }

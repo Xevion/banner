@@ -5,6 +5,7 @@ import (
 	"banner/internal/models"
 	"banner/internal/utils"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,7 +77,14 @@ func (a *API) DoRequest(req *http.Request) (*http.Response, error) {
 		Str("content-type", req.Header.Get("Content-Type")).
 		Msg("Request")
 
-	res, err := a.config.Client.Do(req)
+	// Create a timeout context for this specific request
+	ctx, cancel := context.WithTimeout(req.Context(), 15*time.Second)
+	defer cancel()
+
+	// Clone the request with the timeout context
+	reqWithTimeout := req.Clone(ctx)
+
+	res, err := a.config.Client.Do(reqWithTimeout)
 
 	if err != nil {
 		log.Err(err).Stack().Str("method", req.Method).Msg("Request Failed")
@@ -614,8 +622,12 @@ func (a *API) ResetDataForm() {
 // GetCourse retrieves the course information.
 // This course does not retrieve directly from the API, but rather uses scraped data stored in Redis.
 func (a *API) GetCourse(crn string) (*models.Course, error) {
+	// Create a timeout context for Redis operations
+	ctx, cancel := context.WithTimeout(a.config.Ctx, 5*time.Second)
+	defer cancel()
+
 	// Retrieve raw data
-	result, err := a.config.KV.Get(a.config.Ctx, fmt.Sprintf("class:%s", crn)).Result()
+	result, err := a.config.KV.Get(ctx, fmt.Sprintf("class:%s", crn)).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, fmt.Errorf("course not found: %w", err)

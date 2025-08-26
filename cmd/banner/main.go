@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"net/http"
 	"net/http/cookiejar"
@@ -139,14 +140,31 @@ func main() {
 	initRedis(cfg)
 
 	if strings.EqualFold(os.Getenv("PPROF_ENABLE"), "true") {
-		// Start pprof server
+		// Start pprof server with graceful shutdown
 		go func() {
 			port := os.Getenv("PORT")
 			log.Info().Str("port", port).Msg("Starting pprof server")
-			err := http.ListenAndServe(":"+port, nil)
 
-			if err != nil {
-				log.Fatal().Stack().Err(err).Msg("Cannot start pprof server")
+			server := &http.Server{
+				Addr: ":" + port,
+			}
+
+			// Start server in a separate goroutine
+			go func() {
+				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					log.Fatal().Stack().Err(err).Msg("Cannot start pprof server")
+				}
+			}()
+
+			// Wait for context cancellation and then shutdown
+			<-cfg.Ctx.Done()
+			log.Info().Msg("Shutting down pprof server")
+
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+
+			if err := server.Shutdown(shutdownCtx); err != nil {
+				log.Error().Err(err).Msg("Pprof server forced to shutdown")
 			}
 		}()
 	}
@@ -157,8 +175,11 @@ func main() {
 		log.Err(err).Msg("Cannot create cookie jar")
 	}
 
-	// Create client, setup session (acquire cookies)
-	client := &http.Client{Jar: cookies}
+	// Create client with timeout, setup session (acquire cookies)
+	client := &http.Client{
+		Jar:     cookies,
+		Timeout: 30 * time.Second,
+	}
 	cfg.SetClient(client)
 
 	baseURL := os.Getenv("BANNER_BASE_URL")
@@ -237,13 +258,20 @@ func main() {
 
 	// Launch a goroutine to scrape the banner system periodically
 	go func() {
-		for {
-			err := apiInstance.Scrape()
-			if err != nil {
-				log.Err(err).Stack().Msg("Periodic Scrape Failed")
-			}
+		ticker := time.NewTicker(3 * time.Minute)
+		defer ticker.Stop()
 
-			time.Sleep(3 * time.Minute)
+		for {
+			select {
+			case <-cfg.Ctx.Done():
+				log.Info().Msg("Periodic scraper stopped due to context cancellation")
+				return
+			case <-ticker.C:
+				err := apiInstance.Scrape()
+				if err != nil {
+					log.Err(err).Stack().Msg("Periodic Scrape Failed")
+				}
+			}
 		}
 	}()
 
@@ -259,6 +287,9 @@ func main() {
 	// Wait for signal (indefinite)
 	closingSignal := <-stop
 	botInstance.SetClosing() // TODO: Switch to atomic lock with forced close after 10 seconds
+
+	// Cancel the context to signal all operations to stop
+	cfg.CancelFunc()
 
 	// Defers are called after this
 	log.Warn().Str("signal", closingSignal.String()).Msg("Gracefully shutting down")
