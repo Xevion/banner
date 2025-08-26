@@ -203,13 +203,23 @@ func SearchCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.Interaction
 	fields := []*discordgo.MessageEmbedField{}
 
 	for _, course := range courses.Data {
-		displayName := course.Faculty[0].DisplayName
+		// Safe instructor name handling
+		displayName := "TBA"
+		if len(course.Faculty) > 0 {
+			displayName = course.Faculty[0].DisplayName
+		}
+
 		categoryLink := fmt.Sprintf("[%s](https://catalog.utsa.edu/undergraduate/coursedescriptions/%s/)", course.Subject, strings.ToLower(course.Subject))
 		classLink := fmt.Sprintf("[%s-%s](https://catalog.utsa.edu/search/?P=%s%%20%s)", course.CourseNumber, course.SequenceNumber, course.Subject, course.CourseNumber)
 		professorLink := fmt.Sprintf("[%s](https://www.ratemyprofessors.com/search/professors/1516?q=%s)", displayName, url.QueryEscape(displayName))
 
 		identifierText := fmt.Sprintf("%s %s (CRN %s)\n%s", categoryLink, classLink, course.CourseReferenceNumber, professorLink)
-		meetings := course.MeetingsFaculty[0]
+
+		// Safe meeting time handling
+		meetingTime := "No scheduled meetings"
+		if len(course.MeetingsFaculty) > 0 {
+			meetingTime = course.MeetingsFaculty[0].String()
+		}
 
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:   "Identifier",
@@ -221,7 +231,7 @@ func SearchCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.Interaction
 			Inline: true,
 		}, &discordgo.MessageEmbedField{
 			Name:   "Meeting Time",
-			Value:  meetings.String(),
+			Value:  meetingTime,
 			Inline: true,
 		},
 		)
@@ -359,6 +369,16 @@ func TimeCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCr
 		return err
 	}
 
+	if len(meetingTimes) == 0 {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "No meeting times found for this course",
+			},
+		})
+		return fmt.Errorf("no meeting times found for CRN %d", crn)
+	}
+
 	meetingTime := meetingTimes[0]
 	duration := meetingTime.EndTime().Sub(meetingTime.StartTime())
 
@@ -459,7 +479,14 @@ func IcsCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCre
 		// until := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 23, 59, 59, 0, b.Config.CentralTimeLocation)
 
 		summary := fmt.Sprintf("%s %s %s", course.Subject, course.CourseNumber, course.CourseTitle)
-		description := fmt.Sprintf("Instructor: %s\nSection: %s\nCRN: %s", course.Faculty[0].DisplayName, course.SequenceNumber, meeting.CourseReferenceNumber)
+
+		// Safe instructor name handling
+		instructorName := "TBA"
+		if len(course.Faculty) > 0 {
+			instructorName = course.Faculty[0].DisplayName
+		}
+
+		description := fmt.Sprintf("Instructor: %s\nSection: %s\nCRN: %s", instructorName, course.SequenceNumber, meeting.CourseReferenceNumber)
 		location := meeting.PlaceString()
 
 		rrule := meeting.RRule()
