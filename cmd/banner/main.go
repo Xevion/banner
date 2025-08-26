@@ -20,7 +20,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/rs/zerolog/pkgerrors"
 	"github.com/samber/lo"
-	"golang.org/x/text/message"
+	"resty.dev/v3"
 
 	"banner/internal/api"
 	"banner/internal/bot"
@@ -30,7 +30,6 @@ import (
 
 var (
 	Session *discordgo.Session
-	p       *message.Printer = message.NewPrinter(message.MatchLanguage("en"))
 )
 
 const (
@@ -175,14 +174,16 @@ func main() {
 		log.Err(err).Msg("Cannot create cookie jar")
 	}
 
-	// Create client with timeout, setup session (acquire cookies)
-	client := &http.Client{
-		Jar:     cookies,
-		Timeout: 30 * time.Second,
-	}
-	cfg.SetClient(client)
-
+	// Create Resty client with timeout and cookie jar
 	baseURL := os.Getenv("BANNER_BASE_URL")
+	client := resty.New().
+		SetBaseURL(baseURL).
+		SetTimeout(30*time.Second).
+		SetCookieJar(cookies).
+		SetHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36").
+		AddResponseMiddleware(api.SessionMiddleware)
+
+	cfg.SetClient(client)
 	cfg.SetBaseURL(baseURL)
 
 	apiInstance := api.New(cfg)
@@ -275,9 +276,9 @@ func main() {
 		}
 	}()
 
-	// Close session, ensure http client closes idle connections
+	// Close session, ensure Resty client closes
 	defer session.Close()
-	defer client.CloseIdleConnections()
+	defer client.Close()
 
 	// Setup signal handler channel
 	stop := make(chan os.Signal, 1)

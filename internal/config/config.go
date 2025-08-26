@@ -2,17 +2,17 @@ package config
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"resty.dev/v3"
 )
 
 type Config struct {
 	Ctx                 context.Context
 	CancelFunc          context.CancelFunc
 	KV                  *redis.Client
-	Client              *http.Client
+	Client              *resty.Client
 	IsDevelopment       bool
 	BaseURL             string
 	Environment         string
@@ -50,8 +50,8 @@ func (c *Config) SetEnvironment(env string) {
 	c.IsDevelopment = env == "development"
 }
 
-// SetClient sets the HTTP client
-func (c *Config) SetClient(client *http.Client) {
+// SetClient sets the Resty client
+func (c *Config) SetClient(client *resty.Client) {
 	c.Client = client
 }
 

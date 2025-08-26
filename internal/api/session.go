@@ -17,8 +17,18 @@ func (a *API) Setup() {
 	}
 
 	for _, path := range requestQueue {
-		req := utils.BuildRequest(a.config, "GET", path, nil)
-		a.DoRequest(req)
+		req := a.config.Client.NewRequest().
+			SetQueryParam("_", utils.Nonce()).
+			SetExpectResponseContentType("application/json")
+
+		res, err := req.Get(path)
+		if err != nil {
+			log.Fatal().Stack().Str("path", path).Err(err).Msg("Failed to make request")
+		}
+
+		if res.StatusCode() != 200 {
+			log.Fatal().Stack().Str("path", path).Int("status", res.StatusCode()).Msg("Failed to make request")
+		}
 	}
 
 	// Validate that cookies were set
@@ -27,7 +37,7 @@ func (a *API) Setup() {
 		log.Fatal().Stack().Str("baseURL", a.config.BaseURL).Err(err).Msg("Failed to parse baseURL")
 	}
 
-	currentCookies := a.config.Client.Jar.Cookies(baseURLParsed)
+	currentCookies := a.config.Client.CookieJar().Cookies(baseURLParsed)
 	requiredCookies := map[string]bool{
 		"JSESSIONID": false,
 		"SSB_COOKIE": false,

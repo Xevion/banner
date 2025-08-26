@@ -4,13 +4,10 @@ import (
 	"banner/internal/config"
 	"banner/internal/models"
 	"banner/internal/utils"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,9 +15,9 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
+	"resty.dev/v3"
 )
 
 type API struct {
@@ -37,77 +34,24 @@ var (
 	expiryTime    = 25 * time.Minute
 )
 
-// ResetSessionTimer resets the session timer to the current time.
-// This is only used by the DoRequest handler when Banner API calls are detected, which would reset the session timer.
-func ResetSessionTimer() {
-	// Only reset the session time if the session is still valid
-	if time.Since(sessionTime) <= expiryTime {
-		sessionTime = time.Now()
+// SessionMiddleware creates a Resty middleware that resets the session timer on each Banner API call.
+func SessionMiddleware(c *resty.Client, r *resty.Response) error {
+	// log.Debug().Str("url", r.Request.RawRequest.URL.Path).Msg("Session middleware")
+
+	// Reset session timer on successful requests to Banner API endpoints
+	if r.IsSuccess() && strings.HasPrefix(r.Request.RawRequest.URL.Path, "StudentRegistrationSsb/ssb/classSearch/") {
+		// Only reset the session time if the session is still valid
+		if time.Since(sessionTime) <= expiryTime {
+			sessionTime = time.Now()
+		}
 	}
+	return nil
 }
 
 // GenerateSession generates a new session ID (nonce) for use with the Banner API.
 // Don't use this function directly, use GetSession instead.
 func GenerateSession() string {
 	return utils.RandomString(5) + utils.Nonce()
-}
-
-// DoRequest performs & logs the request, logging and returning the response
-func (a *API) DoRequest(req *http.Request) (*http.Response, error) {
-	headerSize := 0
-	for key, values := range req.Header {
-		for _, value := range values {
-			headerSize += len(key)
-			headerSize += len(value)
-		}
-	}
-
-	bodySize := int64(0)
-	if req.Body != nil {
-		bodySize, _ = io.Copy(io.Discard, req.Body)
-	}
-
-	size := zerolog.Dict().Int64("body", bodySize).Int("header", headerSize).Int("url", len(req.URL.String()))
-
-	log.Debug().
-		Dict("size", size).
-		Str("method", strings.TrimRight(req.Method, " ")).
-		Str("url", req.URL.String()).
-		Str("query", req.URL.RawQuery).
-		Str("content-type", req.Header.Get("Content-Type")).
-		Msg("Request")
-
-	// Create a timeout context for this specific request
-	ctx, cancel := context.WithTimeout(req.Context(), 15*time.Second)
-	defer cancel()
-
-	// Clone the request with the timeout context
-	reqWithTimeout := req.Clone(ctx)
-
-	res, err := a.config.Client.Do(reqWithTimeout)
-
-	if err != nil {
-		log.Err(err).Stack().Str("method", req.Method).Msg("Request Failed")
-	} else {
-		contentLengthHeader := res.Header.Get("Content-Length")
-		contentLength := int64(-1)
-
-		// If this request was a Banner API request, reset the session timer
-		if strings.HasPrefix(req.URL.Path, "StudentRegistrationSsb/ssb/classSearch/") {
-			ResetSessionTimer()
-		}
-
-		// Get the content length
-		if contentLengthHeader != "" {
-			contentLength, err = strconv.ParseInt(contentLengthHeader, 10, 64)
-			if err != nil {
-				contentLength = -1
-			}
-		}
-
-		log.Debug().Int("status", res.StatusCode).Int64("content-length", contentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
-	}
-	return res, err
 }
 
 var terms []BannerTerm
@@ -183,46 +127,25 @@ func (a *API) GetTerms(search string, page int, maxResults int) ([]BannerTerm, e
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest(a.config, "GET", "/classSearch/getTerms", map[string]string{
-		"searchTerm": search,
-		// Page vs Offset is not a mistake here, the API uses "offset" as the page number
-		"offset": strconv.Itoa(page),
-		"max":    strconv.Itoa(maxResults),
-		"_":      utils.Nonce(),
-	})
+	req := a.config.Client.NewRequest().
+		SetQueryParam("searchTerm", search).
+		SetQueryParam("offset", strconv.Itoa(page)).
+		SetQueryParam("max", strconv.Itoa(maxResults)).
+		SetQueryParam("_", utils.Nonce()).
+		SetExpectResponseContentType("application/json").
+		SetResult(&[]BannerTerm{})
 
-	if page <= 0 {
-		return nil, errors.New("Offset must be greater than 0")
-	}
-
-	res, err := a.DoRequest(req)
+	res, err := req.Get("/classSearch/getTerms")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get terms: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if contentType := res.Header.Get("Content-Type"); !strings.Contains(contentType, models.JsonContentType) {
-		return nil, &utils.UnexpectedContentTypeError{
-			Expected: models.JsonContentType,
-			Actual:   contentType,
-		}
+	terms, ok := res.Result().(*[]BannerTerm)
+	if !ok {
+		return nil, fmt.Errorf("terms parsing failed to cast: %v", res.Result())
 	}
 
-	// print the response body
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	terms := make([]BannerTerm, 0, 10)
-	err = json.Unmarshal(body, &terms)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse terms: %w", err)
-	}
-
-	return terms, nil
+	return *terms, nil
 }
 
 // SelectTerm selects the given term in the Banner system.
@@ -237,45 +160,33 @@ func (a *API) SelectTerm(term string, sessionID string) error {
 		"uniqueSessionId": {sessionID},
 	}
 
-	params := map[string]string{
-		"mode": "search",
+	type RedirectResponse struct {
+		FwdURL string `json:"fwdUrl"`
 	}
 
-	req := utils.BuildRequestWithBody(a.config, "POST", "/term/search", params, bytes.NewBufferString(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := a.config.Client.NewRequest().
+		SetResult(&RedirectResponse{}).
+		SetQueryParam("mode", "search").
+		SetBody(form.Encode()).
+		SetExpectResponseContentType("application/json").
+		SetHeader("Content-Type", "application/x-www-form-urlencoded")
 
-	res, err := a.DoRequest(req)
+	res, err := req.Post("/term/search")
 	if err != nil {
 		return fmt.Errorf("failed to select term: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		return fmt.Errorf("response was not JSON: %s", res.Header.Get("Content-Type"))
-	}
+	redirectResponse := res.Result().(*RedirectResponse)
 
-	// Acquire fwdUrl
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	var redirectResponse struct {
-		FwdURL string `json:"fwdUrl"`
-	}
-	json.Unmarshal(body, &redirectResponse)
+	// TODO: Mild validation to ensure the redirect is appropriate
 
 	// Make a GET request to the fwdUrl
-	req = utils.BuildRequest(a.config, "GET", redirectResponse.FwdURL, nil)
-	res, err = a.DoRequest(req)
-	if err != nil {
-		return fmt.Errorf("failed to follow redirect: %w", err)
-	}
+	req = a.config.Client.NewRequest()
+	res, err = req.Get(redirectResponse.FwdURL)
 
 	// Assert that the response is OK (200)
-	if res.StatusCode != 200 {
-		return fmt.Errorf("redirect response was not 200: %d", res.StatusCode)
+	if res.StatusCode() != 200 {
+		return fmt.Errorf("redirect response was not OK: %d", res.StatusCode())
 	}
 
 	return nil
@@ -289,38 +200,27 @@ func (a *API) GetPartOfTerms(search string, term int, offset int, maxResults int
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_partOfTerm", map[string]string{
-		"searchTerm":      search,
-		"term":            strconv.Itoa(term),
-		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": a.EnsureSession(),
-		"_":               utils.Nonce(),
-	})
+	req := a.config.Client.NewRequest().
+		SetQueryParam("searchTerm", search).
+		SetQueryParam("term", strconv.Itoa(term)).
+		SetQueryParam("offset", strconv.Itoa(offset)).
+		SetQueryParam("max", strconv.Itoa(maxResults)).
+		SetQueryParam("uniqueSessionId", a.EnsureSession()).
+		SetQueryParam("_", utils.Nonce()).
+		SetExpectResponseContentType("application/json").
+		SetResult(&[]BannerTerm{})
 
-	res, err := a.DoRequest(req)
+	res, err := req.Get("/classSearch/get_partOfTerm")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get part of terms: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		log.Panic().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+	terms, ok := res.Result().(*[]BannerTerm)
+	if !ok {
+		return nil, fmt.Errorf("term parsing failed to cast: %v", res.Result())
 	}
 
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	terms := make([]BannerTerm, 0, 10)
-	err = json.Unmarshal(body, &terms)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse part of terms: %w", err)
-	}
-
-	return terms, nil
+	return *terms, nil
 }
 
 // GetInstructors retrieves and parses the instructor information for a given search term.
@@ -333,38 +233,27 @@ func (a *API) GetInstructors(search string, term string, offset int, maxResults 
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_instructor", map[string]string{
-		"searchTerm":      search,
-		"term":            term,
-		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": a.EnsureSession(),
-		"_":               utils.Nonce(),
-	})
+	req := a.config.Client.NewRequest().
+		SetQueryParam("searchTerm", search).
+		SetQueryParam("term", term).
+		SetQueryParam("offset", strconv.Itoa(offset)).
+		SetQueryParam("max", strconv.Itoa(maxResults)).
+		SetQueryParam("uniqueSessionId", a.EnsureSession()).
+		SetQueryParam("_", utils.Nonce()).
+		SetExpectResponseContentType("application/json").
+		SetResult(&[]Instructor{})
 
-	res, err := a.DoRequest(req)
+	res, err := req.Get("/classSearch/get_instructor")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get instructors: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+	instructors, ok := res.Result().(*[]Instructor)
+	if !ok {
+		return nil, fmt.Errorf("instructor parsing failed to cast: %v", res.Result())
 	}
 
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	instructors := make([]Instructor, 0, 10)
-	err = json.Unmarshal(body, &instructors)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse instructors: %w", err)
-	}
-
-	return instructors, nil
+	return *instructors, nil
 }
 
 // ClassDetails represents the details of a course.
@@ -372,7 +261,7 @@ func (a *API) GetInstructors(search string, term string, offset int, maxResults 
 type ClassDetails struct {
 }
 
-func (a *API) GetCourseDetails(term int, crn int) *ClassDetails {
+func (a *API) GetCourseDetails(term int, crn int) (*ClassDetails, error) {
 	body, err := json.Marshal(map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
@@ -381,19 +270,23 @@ func (a *API) GetCourseDetails(term int, crn int) *ClassDetails {
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Failed to marshal body")
 	}
-	req := utils.BuildRequestWithBody(a.config, "GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
 
-	res, err := a.DoRequest(req)
+	req := a.config.Client.NewRequest().
+		SetBody(body).
+		SetExpectResponseContentType("application/json").
+		SetResult(&ClassDetails{})
+
+	res, err := req.Get("/searchResults/getClassDetails")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to get course details: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+	details, ok := res.Result().(*ClassDetails)
+	if !ok {
+		return nil, fmt.Errorf("course details parsing failed to cast: %v", res.Result())
 	}
 
-	return &ClassDetails{}
+	return details, nil
 }
 
 // Search invokes a search on the Banner system with the given query and returns the results.
@@ -411,37 +304,22 @@ func (a *API) Search(term string, query *Query, sort string, sortDescending bool
 	params["startDatepicker"] = ""
 	params["endDatepicker"] = ""
 
-	req := utils.BuildRequest(a.config, "GET", "/searchResults/searchResults", params)
+	req := a.config.Client.NewRequest().
+		SetQueryParams(params).
+		SetExpectResponseContentType("application/json").
+		SetResult(&models.SearchResult{})
 
-	res, err := a.DoRequest(req)
+	res, err := req.Get("/searchResults/searchResults")
 	if err != nil {
 		return nil, fmt.Errorf("failed to search: %w", err)
 	}
 
-	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("search failed with status code: %d", res.StatusCode)
+	searchResult, ok := res.Result().(*models.SearchResult)
+	if !ok {
+		return nil, fmt.Errorf("search result parsing failed to cast: %v", res.Result())
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		// for server 500 errors, parse for the error with '#dialog-message > div.message'
-		log.Error().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
-	}
-
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	var result models.SearchResult
-	err = json.Unmarshal(body, &result)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse search results: %w", err)
-	}
-
-	return &result, nil
+	return searchResult, nil
 }
 
 // GetSubjects retrieves and parses the subject information for a given search term.
@@ -453,38 +331,27 @@ func (a *API) GetSubjects(search string, term string, offset int, maxResults int
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_subject", map[string]string{
-		"searchTerm":      search,
-		"term":            term,
-		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": a.EnsureSession(),
-		"_":               utils.Nonce(),
-	})
+	req := a.config.Client.NewRequest().
+		SetQueryParam("searchTerm", search).
+		SetQueryParam("term", term).
+		SetQueryParam("offset", strconv.Itoa(offset)).
+		SetQueryParam("max", strconv.Itoa(maxResults)).
+		SetQueryParam("uniqueSessionId", a.EnsureSession()).
+		SetQueryParam("_", utils.Nonce()).
+		SetExpectResponseContentType("application/json").
+		SetResult(&[]Pair{})
 
-	res, err := a.DoRequest(req)
+	res, err := req.Get("/classSearch/get_subject")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get subjects: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+	subjects, ok := res.Result().(*[]Pair)
+	if !ok {
+		return nil, fmt.Errorf("subjects parsing failed to cast: %v", res.Result())
 	}
 
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	subjects := make([]Pair, 0, 10)
-	err = json.Unmarshal(body, &subjects)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse subjects: %w", err)
-	}
-
-	return subjects, nil
+	return *subjects, nil
 }
 
 // GetCampuses retrieves and parses the campus information for a given search term.
@@ -497,38 +364,27 @@ func (a *API) GetCampuses(search string, term int, offset int, maxResults int) (
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_campus", map[string]string{
-		"searchTerm":      search,
-		"term":            strconv.Itoa(term),
-		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": a.EnsureSession(),
-		"_":               utils.Nonce(),
-	})
+	req := a.config.Client.NewRequest().
+		SetQueryParam("searchTerm", search).
+		SetQueryParam("term", strconv.Itoa(term)).
+		SetQueryParam("offset", strconv.Itoa(offset)).
+		SetQueryParam("max", strconv.Itoa(maxResults)).
+		SetQueryParam("uniqueSessionId", a.EnsureSession()).
+		SetQueryParam("_", utils.Nonce()).
+		SetExpectResponseContentType("application/json").
+		SetResult(&[]Pair{})
 
-	res, err := a.DoRequest(req)
+	res, err := req.Get("/classSearch/get_campus")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get campuses: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+	campuses, ok := res.Result().(*[]Pair)
+	if !ok {
+		return nil, fmt.Errorf("campuses parsing failed to cast: %v", res.Result())
 	}
 
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	campuses := make([]Pair, 0, 10)
-	err = json.Unmarshal(body, &campuses)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse campuses: %w", err)
-	}
-
-	return campuses, nil
+	return *campuses, nil
 }
 
 // GetInstructionalMethods retrieves and parses the instructional method information for a given search term.
@@ -541,79 +397,56 @@ func (a *API) GetInstructionalMethods(search string, term string, offset int, ma
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_instructionalMethod", map[string]string{
-		"searchTerm":      search,
-		"term":            term,
-		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": a.EnsureSession(),
-		"_":               utils.Nonce(),
-	})
+	req := a.config.Client.NewRequest().
+		SetQueryParam("searchTerm", search).
+		SetQueryParam("term", term).
+		SetQueryParam("offset", strconv.Itoa(offset)).
+		SetQueryParam("max", strconv.Itoa(maxResults)).
+		SetQueryParam("uniqueSessionId", a.EnsureSession()).
+		SetQueryParam("_", utils.Nonce()).
+		SetExpectResponseContentType("application/json").
+		SetResult(&[]Pair{})
 
-	res, err := a.DoRequest(req)
+	res, err := req.Get("/classSearch/get_instructionalMethod")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get instructional methods: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+	methods, ok := res.Result().(*[]Pair)
+	if !ok {
+		return nil, fmt.Errorf("instructional methods parsing failed to cast: %v", res.Result())
 	}
-
-	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
-
-	methods := make([]Pair, 0, 10)
-	err = json.Unmarshal(body, &methods)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse instructional methods: %w", err)
-	}
-
-	return methods, nil
+	return *methods, nil
 }
 
 // GetCourseMeetingTime retrieves the meeting time information for a course based on the given term and course reference number (CRN).
 // It makes an HTTP GET request to the appropriate API endpoint and parses the response to extract the meeting time data.
 // The function returns a MeetingTimeResponse struct containing the extracted information.
 func (a *API) GetCourseMeetingTime(term int, crn int) ([]models.MeetingTimeResponse, error) {
-	req := utils.BuildRequest(a.config, "GET", "/searchResults/getFacultyMeetingTimes", map[string]string{
-		"term":                  strconv.Itoa(term),
-		"courseReferenceNumber": strconv.Itoa(crn),
-	})
+	req := a.config.Client.NewRequest().
+		SetQueryParam("term", strconv.Itoa(term)).
+		SetQueryParam("courseReferenceNumber", strconv.Itoa(crn)).
+		SetExpectResponseContentType("application/json").
+		SetResult(&[]models.MeetingTimeResponse{})
 
-	res, err := a.DoRequest(req)
+	res, err := req.Get("/searchResults/getFacultyMeetingTimes")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get meeting time: %w", err)
 	}
 
-	// Assert that the response is JSON
-	if !utils.ContentTypeMatch(res, "application/json") {
-		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
+	meetingTimes, ok := res.Result().(*[]models.MeetingTimeResponse)
+	if !ok {
+		return nil, fmt.Errorf("meeting times parsing failed to cast: %v", res.Result())
 	}
 
-	// Read the response body into JSON
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Parse the JSON into a MeetingTimeResponse struct
-	var meetingTime struct {
-		Inner []models.MeetingTimeResponse `json:"fmt"`
-	}
-	err = json.Unmarshal(body, &meetingTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse meeting time: %w", err)
-	}
-
-	return meetingTime.Inner, nil
+	return *meetingTimes, nil
 }
 
 // ResetDataForm makes a POST request that needs to be made upon before new search requests can be made.
 func (a *API) ResetDataForm() {
-	req := utils.BuildRequest(a.config, "POST", "/classSearch/resetDataForm", nil)
-	_, err := a.DoRequest(req)
+	req := a.config.Client.NewRequest()
+
+	_, err := req.Post("/classSearch/resetDataForm")
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Failed to reset data form")
 	}

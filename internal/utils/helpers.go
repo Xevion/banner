@@ -16,6 +16,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/rs/zerolog"
 	log "github.com/rs/zerolog/log"
+	"resty.dev/v3"
 
 	"banner/internal/config"
 )
@@ -40,47 +41,18 @@ func ParseOptions(options []*discordgo.ApplicationCommandInteractionDataOption) 
 	return optionMap
 }
 
-// BuildRequestWithBody builds a request with the given method, path, parameters, and body
-func BuildRequestWithBody(cfg *config.Config, method string, path string, params map[string]string, body io.Reader) *http.Request {
-	// Builds a URL for the given path and parameters
-	requestUrl := cfg.BaseURL + path
-
-	if params != nil {
-		takenFirst := false
-		for key, value := range params {
-			paramChar := "&"
-			if !takenFirst {
-				paramChar = "?"
-				takenFirst = true
-			}
-
-			requestUrl += paramChar + url.QueryEscape(key) + "=" + url.QueryEscape(value)
-		}
-	}
-
-	request, _ := http.NewRequestWithContext(cfg.Ctx, method, requestUrl, body)
-	AddUserAgent(request)
-	return request
-}
-
-// BuildRequest builds a request with the given method, path, and parameters and an empty body
-func BuildRequest(cfg *config.Config, method string, path string, params map[string]string) *http.Request {
-	return BuildRequestWithBody(cfg, method, path, params, nil)
-}
-
 // AddUserAgent adds a false but consistent user agent to the request
 func AddUserAgent(req *http.Request) {
 	req.Header.Add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36")
 }
 
-// ContentTypeMatch checks if the response has the given content type
-func ContentTypeMatch(response *http.Response, search string) bool {
-	contentType := response.Header.Get("Content-Type")
+// ContentTypeMatch checks if the Resty response has the given content type
+func ContentTypeMatch(res *resty.Response, expectedContentType string) bool {
+	contentType := res.Header().Get("Content-Type")
 	if contentType == "" {
-		return search == "application/octect-stream"
+		return expectedContentType == "application/octect-stream"
 	}
-
-	return strings.HasPrefix(contentType, search)
+	return strings.HasPrefix(contentType, expectedContentType)
 }
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -280,9 +252,9 @@ func GuessExtension(contentType string) string {
 	return ext
 }
 
-// DumpResponse dumps a response body to a file for debugging purposes
-func DumpResponse(res *http.Response) {
-	contentType := res.Header.Get("Content-Type")
+// DumpResponse dumps a Resty response body to a file for debugging purposes
+func DumpResponse(res *resty.Response) {
+	contentType := res.Header().Get("Content-Type")
 	ext := GuessExtension(contentType)
 
 	// Use current time as filename + /dumps/ prefix
@@ -295,9 +267,15 @@ func DumpResponse(res *http.Response) {
 	}
 	defer file.Close()
 
-	_, err = io.Copy(file, res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Err(err).Stack().Msg("Error copying response body")
+		log.Err(err).Stack().Msg("Error reading response body")
+		return
+	}
+
+	_, err = file.Write(body)
+	if err != nil {
+		log.Err(err).Stack().Msg("Error writing response body")
 		return
 	}
 
