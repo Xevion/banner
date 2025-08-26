@@ -23,9 +23,9 @@ import (
 )
 
 var (
-	latestSession string = ""
+	latestSession string
 	sessionTime   time.Time
-	expiryTime    time.Duration = 25 * time.Minute
+	expiryTime    = 25 * time.Minute
 )
 
 // ResetSessionTimer resets the session timer to the current time.
@@ -175,7 +175,7 @@ func (term BannerTerm) Archived() bool {
 
 // GetTerms retrieves and parses the term information for a given search term.
 // Page number must be at least 1.
-func GetTerms(search string, page int, max int) ([]BannerTerm, error) {
+func GetTerms(search string, page int, maxResults int) ([]BannerTerm, error) {
 	// Ensure offset is valid
 	if page <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -185,7 +185,7 @@ func GetTerms(search string, page int, max int) ([]BannerTerm, error) {
 		"searchTerm": search,
 		// Page vs Offset is not a mistake here, the API uses "offset" as the page number
 		"offset": strconv.Itoa(page),
-		"max":    strconv.Itoa(max),
+		"max":    strconv.Itoa(maxResults),
 		"_":      utils.Nonce(),
 	})
 
@@ -214,7 +214,7 @@ func GetTerms(search string, page int, max int) ([]BannerTerm, error) {
 	}
 
 	terms := make([]BannerTerm, 0, 10)
-	json.Unmarshal(body, &terms)
+	err = json.Unmarshal(body, &terms)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse terms: %w", err)
@@ -225,14 +225,14 @@ func GetTerms(search string, page int, max int) ([]BannerTerm, error) {
 
 // SelectTerm selects the given term in the Banner system.
 // This function completes the initial term selection process, which is required before any other API calls can be made with the session ID.
-func SelectTerm(term string, sessionId string) error {
+func SelectTerm(term string, sessionID string) error {
 	form := url.Values{
 		"term":            {term},
 		"studyPath":       {""},
 		"studyPathText":   {""},
 		"startDatepicker": {""},
 		"endDatepicker":   {""},
-		"uniqueSessionId": {sessionId},
+		"uniqueSessionId": {sessionID},
 	}
 
 	params := map[string]string{
@@ -249,7 +249,7 @@ func SelectTerm(term string, sessionId string) error {
 
 	// Assert that the response is JSON
 	if !utils.ContentTypeMatch(res, "application/json") {
-		return fmt.Errorf("response was not JSON: %w", res.Header.Get("Content-Type"))
+		return fmt.Errorf("response was not JSON: %s", res.Header.Get("Content-Type"))
 	}
 
 	// Acquire fwdUrl
@@ -260,12 +260,12 @@ func SelectTerm(term string, sessionId string) error {
 	}
 
 	var redirectResponse struct {
-		FwdUrl string `json:"fwdUrl"`
+		FwdURL string `json:"fwdUrl"`
 	}
 	json.Unmarshal(body, &redirectResponse)
 
 	// Make a GET request to the fwdUrl
-	req = utils.BuildRequest("GET", redirectResponse.FwdUrl, nil)
+	req = utils.BuildRequest("GET", redirectResponse.FwdURL, nil)
 	res, err = DoRequest(req)
 	if err != nil {
 		return fmt.Errorf("failed to follow redirect: %w", err)
@@ -273,7 +273,7 @@ func SelectTerm(term string, sessionId string) error {
 
 	// Assert that the response is OK (200)
 	if res.StatusCode != 200 {
-		return fmt.Errorf("redirect response was not 200: %w", res.StatusCode)
+		return fmt.Errorf("redirect response was not 200: %d", res.StatusCode)
 	}
 
 	return nil
@@ -281,7 +281,7 @@ func SelectTerm(term string, sessionId string) error {
 
 // GetPartOfTerms retrieves and parses the part of term information for a given term.
 // Ensure that the offset is greater than 0.
-func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm, error) {
+func GetPartOfTerms(search string, term int, offset int, maxResults int) ([]BannerTerm, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -291,7 +291,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
 		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(max),
+		"max":             strconv.Itoa(maxResults),
 		"uniqueSessionId": GetSession(),
 		"_":               utils.Nonce(),
 	})
@@ -325,7 +325,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 // In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
 // This function is included for completeness, but probably isn't useful.
 // Ensure that the offset is greater than 0.
-func GetInstructors(search string, term string, offset int, max int) ([]Instructor, error) {
+func GetInstructors(search string, term string, offset int, maxResults int) ([]Instructor, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -335,7 +335,7 @@ func GetInstructors(search string, term string, offset int, max int) ([]Instruct
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(max),
+		"max":             strconv.Itoa(maxResults),
 		"uniqueSessionId": GetSession(),
 		"_":               utils.Nonce(),
 	})
@@ -445,7 +445,7 @@ func Search(query *Query, sort string, sortDescending bool) (*models.SearchResul
 // GetSubjects retrieves and parses the subject information for a given search term.
 // The results of this response shouldn't change much, but technically could as new majors are developed, or old ones are removed.
 // Ensure that the offset is greater than 0.
-func GetSubjects(search string, term string, offset int, max int) ([]Pair, error) {
+func GetSubjects(search string, term string, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -455,7 +455,7 @@ func GetSubjects(search string, term string, offset int, max int) ([]Pair, error
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(max),
+		"max":             strconv.Itoa(maxResults),
 		"uniqueSessionId": GetSession(),
 		"_":               utils.Nonce(),
 	})
@@ -489,7 +489,7 @@ func GetSubjects(search string, term string, offset int, max int) ([]Pair, error
 // In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
 // This function is included for completeness, but probably isn't useful.
 // Ensure that the offset is greater than 0.
-func GetCampuses(search string, term int, offset int, max int) ([]Pair, error) {
+func GetCampuses(search string, term int, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -499,7 +499,7 @@ func GetCampuses(search string, term int, offset int, max int) ([]Pair, error) {
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
 		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(max),
+		"max":             strconv.Itoa(maxResults),
 		"uniqueSessionId": GetSession(),
 		"_":               utils.Nonce(),
 	})
@@ -533,7 +533,7 @@ func GetCampuses(search string, term int, offset int, max int) ([]Pair, error) {
 // In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
 // This function is included for completeness, but probably isn't useful.
 // Ensure that the offset is greater than 0.
-func GetInstructionalMethods(search string, term string, offset int, max int) ([]Pair, error) {
+func GetInstructionalMethods(search string, term string, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
@@ -543,7 +543,7 @@ func GetInstructionalMethods(search string, term string, offset int, max int) ([
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
-		"max":             strconv.Itoa(max),
+		"max":             strconv.Itoa(maxResults),
 		"uniqueSessionId": GetSession(),
 		"_":               utils.Nonce(),
 	})

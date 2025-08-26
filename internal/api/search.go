@@ -95,11 +95,13 @@ func (q *Query) TermPart(termPart []string) *Query {
 	return q
 }
 
+// Campus sets the campuses for the query
 func (q *Query) Campus(campus []string) *Query {
 	q.campus = &campus
 	return q
 }
 
+// InstructionalMethod sets the instructional methods for the query
 func (q *Query) InstructionalMethod(instructionalMethod []string) *Query {
 	q.instructionalMethod = &instructionalMethod
 	return q

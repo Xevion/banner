@@ -140,11 +140,10 @@ func ScrapeMajor(subject string) error {
 			log.Debug().Str("subject", subject).Int("nextOffset", offset).Msg("Sleeping before next page")
 			time.Sleep(time.Second * 3)
 			continue
-		} else {
-			// Log the number of classes scraped
-			log.Info().Str("subject", subject).Int("total", totalClassCount).Msgf("Subject %s Scraped", subject)
-			break
 		}
+		// Log the number of classes scraped
+		log.Info().Str("subject", subject).Int("total", totalClassCount).Msgf("Subject %s Scraped", subject)
+		break
 	}
 
 	term := utils.Default(time.Now()).ToString()
@@ -180,7 +179,7 @@ func CalculateExpiry(term string, count int, priority bool) time.Duration {
 	// Subjects with less than 50 classes have a reversed expiry (less classes, longer interval)
 	// 1 class => 12 hours, 49 classes => 1 hour
 	if count < 50 {
-		hours := utils.Slope(utils.Point{1, 12}, utils.Point{49, 1}, float64(count)).Y
+		hours := utils.Slope(utils.Point{X: 1, Y: 12}, utils.Point{X: 49, Y: 1}, float64(count)).Y
 		baseExpiry = time.Duration(hours * float64(time.Hour))
 	}
 
