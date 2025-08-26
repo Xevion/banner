@@ -1,187 +1,19 @@
-use serde::Deserialize;
 use serenity::all::{ClientBuilder, GatewayIntents};
 use std::time::Duration;
-use tokio::{signal, sync::broadcast, task::JoinSet};
+use tokio::{signal, task::JoinSet};
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use crate::bot::{Data, age};
+use crate::config::Config;
+use crate::services::{ServiceResult, bot::BotService, dummy::DummyService, run_service};
+use crate::shutdown::ShutdownCoordinator;
 use figment::{Figment, providers::Env};
 
-#[derive(Deserialize)]
-struct Config {
-    bot_token: String,
-    database_url: String,
-    redis_url: String,
-    banner_base_url: String,
-    bot_target_guild: u64,
-    bot_app_id: u64,
-}
-
 mod bot;
-
-#[derive(Debug)]
-enum ServiceResult {
-    GracefulShutdown,
-    NormalCompletion,
-    Error(Box<dyn std::error::Error + Send + Sync>),
-}
-
-/// Common trait for all services in the application
-#[async_trait::async_trait]
-trait Service: Send + Sync {
-    /// The name of the service for logging
-    fn name(&self) -> &'static str;
-
-    /// Run the service's main work loop
-    async fn run(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-
-    /// Gracefully shutdown the service
-    async fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-}
-
-/// Generic service runner that handles the lifecycle
-async fn run_service(
-    mut service: Box<dyn Service>,
-    mut shutdown_rx: broadcast::Receiver<()>,
-) -> ServiceResult {
-    let name = service.name();
-    info!(service = name, "Service started");
-
-    let work = async {
-        match service.run().await {
-            Ok(()) => {
-                warn!(service = name, "Service completed unexpectedly");
-                ServiceResult::NormalCompletion
-            }
-            Err(e) => {
-                error!(service = name, "Service failed: {e}");
-                ServiceResult::Error(e)
-            }
-        }
-    };
-
-    tokio::select! {
-        result = work => result,
-        _ = shutdown_rx.recv() => {
-            info!(service = name, "Shutting down...");
-            let start_time = std::time::Instant::now();
-
-            match service.shutdown().await {
-                Ok(()) => {
-                    let elapsed = start_time.elapsed();
-                    info!(service = name, "Shutdown completed in {elapsed:.2?}");
-                    ServiceResult::GracefulShutdown
-                }
-                Err(e) => {
-                    let elapsed = start_time.elapsed();
-                    error!(service = name, "Shutdown failed after {elapsed:.2?}: {e}");
-                    ServiceResult::Error(e)
-                }
-            }
-        }
-    }
-}
-
-/// Shutdown coordinator for managing graceful shutdown of multiple services
-struct ShutdownCoordinator {
-    shutdown_tx: broadcast::Sender<()>,
-}
-
-impl ShutdownCoordinator {
-    fn new() -> Self {
-        let (shutdown_tx, _) = broadcast::channel(1);
-        Self { shutdown_tx }
-    }
-
-    fn subscribe(&self) -> broadcast::Receiver<()> {
-        self.shutdown_tx.subscribe()
-    }
-
-    fn shutdown(&self) {
-        let _ = self.shutdown_tx.send(());
-    }
-}
-
-/// Discord bot service implementation
-struct BotService {
-    client: serenity::Client,
-    shard_manager: std::sync::Arc<serenity::gateway::ShardManager>,
-}
-
-impl BotService {
-    fn new(client: serenity::Client) -> Self {
-        let shard_manager = client.shard_manager.clone();
-        Self {
-            client,
-            shard_manager,
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl Service for BotService {
-    fn name(&self) -> &'static str {
-        "bot"
-    }
-
-    async fn run(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        match self.client.start().await {
-            Ok(()) => {
-                warn!(service = "bot", "Stopped early.");
-                Err("bot stopped early".into())
-            }
-            Err(e) => {
-                error!(service = "bot", "Error: {e:?}");
-                Err(e.into())
-            }
-        }
-    }
-
-    async fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.shard_manager.shutdown_all().await;
-        Ok(())
-    }
-}
-
-/// Dummy service implementation for demonstration
-struct DummyService {
-    name: &'static str,
-}
-
-impl DummyService {
-    fn new(name: &'static str) -> Self {
-        Self { name }
-    }
-}
-
-#[async_trait::async_trait]
-impl Service for DummyService {
-    fn name(&self) -> &'static str {
-        self.name
-    }
-
-    async fn run(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut counter = 0;
-        loop {
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            counter += 1;
-            info!(service = self.name, "Service heartbeat ({counter})");
-
-            // Simulate service failure after 60 seconds for demo
-            if counter >= 6 {
-                error!(service = self.name, "Service encountered an error");
-                return Err("Service error".into());
-            }
-        }
-    }
-
-    async fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Simulate cleanup work
-        tokio::time::sleep(Duration::from_millis(3500)).await;
-        Ok(())
-    }
-}
+mod config;
+mod services;
+mod shutdown;
 
 #[tokio::main]
 async fn main() {
@@ -238,13 +70,13 @@ async fn main() {
 
     // Set up signal handling
     let signal_handle = {
-        let coordinator = shutdown_coordinator.shutdown_tx.clone();
+        let shutdown_tx = shutdown_coordinator.shutdown_tx();
         tokio::spawn(async move {
             signal::ctrl_c()
                 .await
                 .expect("Failed to install CTRL+C signal handler");
             info!("Received CTRL+C, initiating shutdown...");
-            let _ = coordinator.send(());
+            let _ = shutdown_tx.send(());
             ServiceResult::GracefulShutdown
         })
     };
@@ -259,7 +91,7 @@ async fn main() {
     let mut exit_code = 0;
     let first_completion = services.join_next().await;
 
-    let service_result = match first_completion {
+    match first_completion {
         Some(Ok(Ok(service_result))) => {
             // A service completed successfully
             match &service_result {
@@ -275,22 +107,18 @@ async fn main() {
                     exit_code = 1;
                 }
             }
-            service_result
         }
         Some(Ok(Err(e))) => {
             error!("Service task panicked: {e}");
             exit_code = 1;
-            ServiceResult::Error("Task panic".into())
         }
         Some(Err(e)) => {
             error!("JoinSet error: {e}");
             exit_code = 1;
-            ServiceResult::Error("JoinSet error".into())
         }
         None => {
             warn!("No services running");
             exit_code = 1;
-            ServiceResult::Error("No services".into())
         }
     };
 
