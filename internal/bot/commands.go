@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	ICalTimestampFormatUtc   = "20060102T150405Z"
-	ICalTimestampFormatLocal = "20060102T150405"
+	// ICalTimestampLayoutUtc is the formatting layout for timestamps in the UTC timezone.
+	ICalTimestampLayoutUtc = "20060102T150405Z"
+	// ICalTimestampLayoutLocal is the formatting layout for timestamps in the local timezone.
+	ICalTimestampLayoutLocal = "20060102T150405"
 )
 
 // CommandHandler is a function that handles a slash command interaction.
@@ -27,13 +29,14 @@ type CommandHandler func(b *Bot, s *discordgo.Session, i *discordgo.InteractionC
 
 var (
 	// CommandDefinitions is a list of all the bot's command definitions.
-	CommandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition, SearchCommandDefinition, IcsCommandDefinition}
+	CommandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition, SearchCommandDefinition, IcsCommandDefinition, GCalCommandDefinition}
 	// CommandHandlers is a map of command names to their handlers.
 	CommandHandlers = map[string]CommandHandler{
 		TimeCommandDefinition.Name:   TimeCommandHandler,
 		TermCommandDefinition.Name:   TermCommandHandler,
 		SearchCommandDefinition.Name: SearchCommandHandler,
 		IcsCommandDefinition.Name:    IcsCommandHandler,
+		GCalCommandDefinition.Name:   GCalCommandHandler,
 	}
 )
 
@@ -203,7 +206,7 @@ func SearchCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.Interaction
 		return err
 	}
 
-	fetch_time := time.Now()
+	fetchTime := time.Now()
 	fields := []*discordgo.MessageEmbedField{}
 
 	for _, course := range courses.Data {
@@ -252,7 +255,7 @@ func SearchCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.Interaction
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      internal.GetFetchedFooter(b.Config, fetch_time),
+					Footer:      internal.GetFetchedFooter(b.Config, fetchTime),
 					Description: fmt.Sprintf("%d Class%s", courses.TotalCount, internal.Plural(courses.TotalCount)),
 					Fields:      fields[:min(25, len(fields))],
 					Color:       color,
@@ -322,7 +325,7 @@ func TermCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCr
 		})
 	}
 
-	fetch_time := time.Now()
+	fetchTime := time.Now()
 
 	if len(fields) > 25 {
 		log.Warn().Int("count", len(fields)).Msg("Too many fields in term command (trimmed)")
@@ -333,7 +336,7 @@ func TermCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCr
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      internal.GetFetchedFooter(b.Config, fetch_time),
+					Footer:      internal.GetFetchedFooter(b.Config, fetchTime),
 					Description: fmt.Sprintf("%d term%s (page %d)", len(termResult), internal.Plural(len(termResult)), pageNumber),
 					Fields:      fields[:min(25, len(fields))],
 				},
@@ -360,7 +363,7 @@ var TimeCommandDefinition = &discordgo.ApplicationCommand{
 
 // TimeCommandHandler handles the /time command, which allows users to get the meeting times for a course.
 func TimeCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	fetch_time := time.Now()
+	fetchTime := time.Now()
 	crn := i.ApplicationCommandData().Options[0].IntValue()
 
 	// Fix static term
@@ -393,7 +396,7 @@ func TimeCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCr
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      internal.GetFetchedFooter(b.Config, fetch_time),
+					Footer:      internal.GetFetchedFooter(b.Config, fetchTime),
 					Description: "",
 					Fields: []*discordgo.MessageEmbedField{
 						{
@@ -432,6 +435,93 @@ var IcsCommandDefinition = &discordgo.ApplicationCommand{
 			Required:    true,
 		},
 	},
+}
+
+var GCalCommandDefinition = &discordgo.ApplicationCommand{
+	Name:        "gcal",
+	Description: "Generate a link to create a Google Calendar event for a course",
+	Options: []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "crn",
+			Description: "Course Reference Number",
+			Required:    true,
+		},
+	},
+}
+
+// GCalCommandHandler handles the /gcal command, which allows users to generate a link to create a Google Calendar event for a course.
+func GCalCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	// Parse all options
+	options := internal.ParseOptions(i.ApplicationCommandData().Options)
+	crn := options.GetInt("crn")
+
+	course, err := b.API.GetCourse(strconv.Itoa(int(crn)))
+	if err != nil {
+		return fmt.Errorf("Error retrieving course data: %w", err)
+	}
+
+	meetingTimes, err := b.API.GetCourseMeetingTime(202510, int(crn))
+	if err != nil {
+		return fmt.Errorf("Error requesting meeting time: %w", err)
+	}
+
+	if len(meetingTimes) == 0 {
+		return fmt.Errorf("unexpected - no meeting time data found for course")
+	}
+
+	// Check if the course has any meeting times
+	meetingTime, exists := lo.Find(meetingTimes, func(mt models.MeetingTimeResponse) bool {
+		switch mt.MeetingTime.MeetingType {
+		case "ID", "OA":
+			return false
+		default:
+			return true
+		}
+	})
+
+	if !exists {
+		internal.RespondError(s, i.Interaction, "The course requested does not meet at a defined moment in time.", nil)
+		return nil
+	}
+
+	startDay := meetingTime.StartDay()
+	startTime := meetingTime.StartTime()
+	endTime := meetingTime.EndTime()
+
+	// Create timestamps in UTC
+	dtStart := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(startTime.Hours), int(startTime.Minutes), 0, 0, b.Config.CentralTimeLocation)
+	dtEnd := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(endTime.Hours), int(endTime.Minutes), 0, 0, b.Config.CentralTimeLocation)
+
+	// Format times in UTC for Google Calendar
+	startStr := dtStart.UTC().Format(ICalTimestampLayoutUtc)
+	endStr := dtEnd.UTC().Format(ICalTimestampLayoutUtc)
+
+	// Generate RRULE for recurrence
+	rrule := meetingTime.RRule()
+	recurRule := fmt.Sprintf("FREQ=WEEKLY;BYDAY=%s;UNTIL=%s", rrule.ByDay, rrule.Until)
+
+	// Build calendar URL
+	params := url.Values{}
+	params.Add("action", "TEMPLATE")
+	params.Add("text", fmt.Sprintf("%s %s - %s", course.Subject, course.CourseNumber, course.CourseTitle))
+	params.Add("dates", fmt.Sprintf("%s/%s", startStr, endStr))
+	params.Add("details", fmt.Sprintf("CRN: %s\nInstructor: %s\nDays: %s", course.CourseReferenceNumber, meetingTime.Faculty[0].DisplayName, internal.WeekdaysToString(meetingTime.Days())))
+	params.Add("location", meetingTime.PlaceString())
+	params.Add("trp", "true")
+	params.Add("ctz", b.Config.CentralTimeLocation.String())
+	params.Add("recur", "RRULE:"+recurRule)
+
+	calendarURL := "https://calendar.google.com/calendar/render?" + params.Encode()
+
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content:         fmt.Sprintf("[Add to Google Calendar](<%s>)", calendarURL),
+			AllowedMentions: &discordgo.MessageAllowedMentions{},
+		},
+	})
+	return err
 }
 
 // IcsCommandHandler handles the /ics command, which allows users to generate an ICS file for a course.
@@ -507,7 +597,7 @@ DTEND;TZID=America/Chicago:%s
 SUMMARY:%s
 DESCRIPTION:%s
 LOCATION:%s
-END:VEVENT`, now.Format(ICalTimestampFormatLocal), uid, dtStart.Format(ICalTimestampFormatLocal), rrule.ByDay, rrule.Until, dtEnd.Format(ICalTimestampFormatLocal), summary, strings.Replace(description, "\n", `\n`, -1), location)
+END:VEVENT`, now.Format(ICalTimestampLayoutLocal), uid, dtStart.Format(ICalTimestampLayoutLocal), rrule.ByDay, rrule.Until, dtEnd.Format(ICalTimestampLayoutLocal), summary, strings.Replace(description, "\n", `\n`, -1), location)
 
 		events = append(events, event)
 	}
