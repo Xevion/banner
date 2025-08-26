@@ -19,5 +19,6 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 dotenvy = "0.15.7"
 poise = "0.6.1"
 async-trait = "0.1"
+fundu = "2.0.1"
 anyhow = "1.0.99"
 thiserror = "2.0.16"

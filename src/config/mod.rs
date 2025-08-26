@@ -1,11 +1,127 @@
-use serde::Deserialize;
+//! Configuration module for the banner application.
+//!
+//! This module handles loading and parsing configuration from environment variables
+//! using the figment crate. It supports flexible duration parsing that accepts both
+//! numeric values (interpreted as seconds) and duration strings with units.
+//!
+//! All configuration is loaded from environment variables with the `APP_` prefix:
 
+use fundu::{DurationParser, TimeUnit};
+use serde::{Deserialize, Deserializer};
+use std::time::Duration;
+
+/// Application configuration loaded from environment variables.
 #[derive(Deserialize)]
 pub struct Config {
+    /// Discord bot token for authentication
     pub bot_token: String,
+    /// Database connection URL
     pub database_url: String,
+    /// Redis connection URL
     pub redis_url: String,
+    /// Base URL for banner generation service
     pub banner_base_url: String,
+    /// Target Discord guild ID where the bot operates
     pub bot_target_guild: u64,
+    /// Discord application ID
     pub bot_app_id: u64,
+    /// Graceful shutdown timeout duration
+    ///
+    /// Accepts both numeric values (seconds) and duration strings.
+    /// Defaults to 8 seconds if not specified.
+    #[serde(
+        default = "default_shutdown_timeout",
+        deserialize_with = "deserialize_duration"
+    )]
+    pub shutdown_timeout: Duration,
+}
+
+/// Default shutdown timeout of 8 seconds.
+fn default_shutdown_timeout() -> Duration {
+    Duration::from_secs(8)
+}
+
+/// Duration parser configured to handle various time units with seconds as default.
+///
+/// Supports:
+/// - Seconds (s) - default unit
+/// - Milliseconds (ms)
+/// - Minutes (m)
+/// - Hours (h)
+///
+/// Does not support fractions, exponents, or infinity values.
+/// Allows for whitespace between the number and the time unit.
+/// Allows for multiple time units to be specified (summed together, e.g. "10s 2m" = 120 + 10 = 130 seconds)
+const DURATION_PARSER: DurationParser<'static> = DurationParser::builder()
+    .time_units(&[TimeUnit::Second, TimeUnit::MilliSecond, TimeUnit::Minute])
+    .parse_multiple(None)
+    .allow_time_unit_delimiter()
+    .disable_infinity()
+    .disable_fraction()
+    .disable_exponent()
+    .default_unit(TimeUnit::Second)
+    .build();
+
+/// Custom deserializer for duration fields that accepts both numeric and string values.
+///
+/// This deserializer handles the flexible duration parsing by accepting:
+/// - Unsigned integers (interpreted as seconds)
+/// - Signed integers (interpreted as seconds, must be non-negative)
+/// - Strings (parsed using the fundu duration parser)
+///
+/// # Examples
+///
+/// - `1` -> 1 second
+/// - `"30s"` -> 30 seconds  
+/// - `"2 m"` -> 2 minutes
+/// - `"1500ms"` -> 1.5 seconds
+fn deserialize_duration<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Visitor;
+
+    struct DurationVisitor;
+
+    impl<'de> Visitor<'de> for DurationVisitor {
+        type Value = Duration;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a duration string or number")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            DURATION_PARSER.parse(value)
+                .map_err(|e| {
+                    serde::de::Error::custom(format!(
+                        "Invalid duration format '{}': {}. Examples: '5' (5 seconds), '3500ms', '30s', '2m', '1.5h'", 
+                        value, e
+                    ))
+                })?
+                .try_into()
+                .map_err(|e| serde::de::Error::custom(format!("Duration conversion error: {}", e)))
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(Duration::from_secs(value))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            if value < 0 {
+                return Err(serde::de::Error::custom("Duration cannot be negative"));
+            }
+            Ok(Duration::from_secs(value as u64))
+        }
+    }
+
+    deserializer.deserialize_any(DurationVisitor)
 }

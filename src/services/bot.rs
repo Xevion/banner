@@ -1,4 +1,4 @@
-use super::{Service, ServiceResult};
+use super::Service;
 use serenity::Client;
 use std::sync::Arc;
 use tracing::{error, warn};
