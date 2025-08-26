@@ -68,33 +68,49 @@ func GetYearDayRange(year uint16) (YearDayRange, YearDayRange, YearDayRange) {
 
 // GetCurrentTerm returns the current term, and the next term. Only the first term is nillable.
 // YearDay ranges are inclusive of the start, and exclusive of the end.
+// You can think of the 'year' part of it as the 'school year', the second part of the 20XX-(20XX+1) phrasing.
+//
+// e.g. the Fall 2025, Spring 2026, and Summer 2026 terms all occur as part of the 2025-2026 school year. The second year, 2026, is the part used in all term identifiers.
+// So even though the Fall 2025 term occurs in 2025, it uses the 2026 year in it's term identifier.
+//
+// Fall of 2024 => 202510
+// Spring of 2025 => 202520
+// Summer of 2025 => 202530
+// Fall of 2025 => 202610
+// Spring of 2026 => 202620
+// Summer of 2026 => 202630
+//
+// Reading out 'Fall of 2024' as '202510' might be confusing, but it's correct.
 func GetCurrentTerm(now time.Time) (*Term, *Term) {
-	year := uint16(now.Year())
+	literalYear := uint16(now.Year())
 	dayOfYear := uint16(now.YearDay())
 
-	// Fall of 2024 => 202410
-	// Spring of 2024 => 202420
-	// Fall of 2025 => 202510
-	// Summer of 2025 => 202530
+	// If we're past the end of the summer term, we're 'in' the next school year.
+	var termYear uint16
+	if dayOfYear > SummerRange.End {
+		termYear = literalYear + 1
+	} else {
+		termYear = literalYear
+	}
 
 	if (dayOfYear < SpringRange.Start) || (dayOfYear >= FallRange.End) {
 		// Fall over, Spring not yet begun
-		return nil, &Term{Year: year + 1, Season: Spring}
+		return nil, &Term{Year: termYear, Season: Spring}
 	} else if (dayOfYear >= SpringRange.Start) && (dayOfYear < SpringRange.End) {
 		// Spring
-		return &Term{Year: year, Season: Spring}, &Term{Year: year, Season: Summer}
+		return &Term{Year: termYear, Season: Spring}, &Term{Year: termYear, Season: Summer}
 	} else if dayOfYear < SummerRange.Start {
 		// Spring over, Summer not yet begun
-		return nil, &Term{Year: year, Season: Summer}
+		return nil, &Term{Year: termYear, Season: Summer}
 	} else if (dayOfYear >= SummerRange.Start) && (dayOfYear < SummerRange.End) {
 		// Summer
-		return &Term{Year: year, Season: Summer}, &Term{Year: year, Season: Fall}
+		return &Term{Year: termYear, Season: Summer}, &Term{Year: termYear, Season: Fall}
 	} else if dayOfYear < FallRange.Start {
 		// Summer over, Fall not yet begun
-		return nil, &Term{Year: year + 1, Season: Fall}
+		return nil, &Term{Year: termYear, Season: Fall}
 	} else if (dayOfYear >= FallRange.Start) && (dayOfYear < FallRange.End) {
 		// Fall
-		return &Term{Year: year + 1, Season: Fall}, nil
+		return &Term{Year: termYear, Season: Fall}, nil
 	}
 
 	panic(fmt.Sprintf("Impossible Code Reached (dayOfYear: %d)", dayOfYear))
