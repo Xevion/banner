@@ -63,7 +63,7 @@ func init() {
 	}
 
 	if isDevelopment == "development" {
-		log.Logger = zerolog.New(utils.LogSplitter{Std: os.Stdout, Err: os.Stderr}).With().Timestamp().Logger()
+		log.Logger = zerolog.New(utils.NewConsoleWriter()).With().Timestamp().Logger()
 	} else {
 		log.Logger = zerolog.New(utils.LogSplitter{Std: os.Stdout, Err: os.Stderr}).With().Timestamp().Logger()
 	}
