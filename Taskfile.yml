@@ -20,7 +20,14 @@ tasks:
   test:
     desc: Run tests
     cmds:
-      - go test ./...
+      - go test ./tests/...
+    env:
+      ENVIRONMENT: test
+
+  test-coverage:
+    desc: Run tests with coverage
+    cmds:
+      - go test -coverpkg=./internal/... -cover ./tests/...
     env:
       ENVIRONMENT: test
 
