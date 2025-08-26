@@ -1,3 +1,4 @@
+// Package main is the entry point for the banner application.
 package main
 
 import (
@@ -73,6 +74,7 @@ func init() {
 	discordgo.Logger = internal.DiscordGoLogger
 }
 
+// initRedis initializes the Redis client and pings the server to ensure a connection.
 func initRedis(cfg *config.Config) {
 	// Setup redis
 	redisUrl := internal.GetFirstEnv("REDIS_URL", "REDIS_PRIVATE_URL")

@@ -1,3 +1,4 @@
+// Package api provides the core functionality for interacting with the Banner API.
 package api
 
 import (
@@ -17,16 +18,19 @@ const (
 )
 
 var (
-	// PriorityMajors is a list of majors that are considered to be high priority for scraping. This list is used to determine which majors to scrape first/most often.
+	// PriorityMajors is a list of majors that are considered to be high priority for scraping.
+	// This list is used to determine which majors to scrape first/most often.
 	PriorityMajors = []string{"CS", "CPE", "MAT", "EE", "IS"}
-	// AncillaryMajors is a list of majors that are considered to be low priority for scraping. This list will not contain any majors that are in PriorityMajors.
+	// AncillaryMajors is a list of majors that are considered to be low priority for scraping.
+	// This list will not contain any majors that are in PriorityMajors.
 	AncillaryMajors []string
 	// AllMajors is a list of all majors that are available in the Banner system.
 	AllMajors []string
 )
 
-// Scrape scrapes the API for all courses and stores them in Redis.
+// Scrape retrieves all courses from the Banner API and stores them in Redis.
 // This is a long-running process that should be run in a goroutine.
+//
 // TODO: Switch from hardcoded term to dynamic term
 func (a *API) Scrape() error {
 	// For each subject, retrieve all courses
@@ -68,7 +72,8 @@ func (a *API) Scrape() error {
 	return nil
 }
 
-// GetExpiredSubjects returns a list of subjects that are expired and should be scraped.
+// GetExpiredSubjects returns a list of subjects that have expired and should be scraped again.
+// It checks Redis for the "scraped" status of each major for the current term.
 func (a *API) GetExpiredSubjects() ([]string, error) {
 	term := Default(time.Now()).ToString()
 	subjects := make([]string, 0)
@@ -100,8 +105,8 @@ func (a *API) GetExpiredSubjects() ([]string, error) {
 	return subjects, nil
 }
 
-// ScrapeMajor is the scraping invocation for a specific major.
-// This function does not check whether scraping is required at this time, it is assumed that the caller has already done so.
+// ScrapeMajor scrapes all courses for a specific major.
+// This function does not check whether scraping is required at this time; it is assumed that the caller has already done so.
 func (a *API) ScrapeMajor(subject string) error {
 	offset := 0
 	totalClassCount := 0
@@ -180,9 +185,7 @@ func (a *API) ScrapeMajor(subject string) error {
 }
 
 // CalculateExpiry calculates the expiry time until the next scrape for a major.
-// term is the term for which the relevant course is occurring within.
-// count is the number of courses that were scraped.
-// priority is a boolean indicating whether the major is a priority major.
+// The duration is based on the number of courses, whether the major is a priority, and if the term is archived.
 func (a *API) CalculateExpiry(term string, count int, priority bool) time.Duration {
 	// An hour for every 100 classes
 	baseExpiry := time.Hour * time.Duration(count/100)
@@ -222,7 +225,7 @@ func (a *API) CalculateExpiry(term string, count int, priority bool) time.Durati
 }
 
 // IntakeCourse stores a course in Redis.
-// This function is mostly a stub for now, but will be used to handle change identification, notifications, and SQLite upserts in the future.
+// This function will be used to handle change identification, notifications, and SQLite upserts in the future.
 func (a *API) IntakeCourse(course models.Course) error {
 	// Create a timeout context for Redis operations
 	ctx, cancel := context.WithTimeout(a.config.Ctx, 5*time.Second)

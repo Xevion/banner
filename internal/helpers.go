@@ -21,10 +21,10 @@ import (
 	"banner/internal/config"
 )
 
-// Options is a map of options from a discord command.
+// Options is a map of options from a Discord command.
 type Options map[string]*discordgo.ApplicationCommandInteractionDataOption
 
-// GetInt returns the integer value of an option.
+// GetInt returns the integer value of an option, or 0 if it doesn't exist.
 func (o Options) GetInt(key string) int64 {
 	if opt, ok := o[key]; ok {
 		return opt.IntValue()
@@ -32,7 +32,7 @@ func (o Options) GetInt(key string) int64 {
 	return 0
 }
 
-// ParseOptions parses slash command options into a map.
+// ParseOptions parses slash command options into a map for easier access.
 func ParseOptions(options []*discordgo.ApplicationCommandInteractionDataOption) Options {
 	optionMap := make(Options)
 	for _, opt := range options {
@@ -41,12 +41,12 @@ func ParseOptions(options []*discordgo.ApplicationCommandInteractionDataOption) 
 	return optionMap
 }
 
-// AddUserAgent adds a false but consistent user agent to the request
+// AddUserAgent adds a consistent user agent to the request to mimic a real browser.
 func AddUserAgent(req *http.Request) {
 	req.Header.Add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36")
 }
 
-// ContentTypeMatch checks if the Resty response has the given content type
+// ContentTypeMatch checks if a Resty response has the given content type.
 func ContentTypeMatch(res *resty.Response, expectedContentType string) bool {
 	contentType := res.Header().Get("Content-Type")
 	if contentType == "" {
@@ -57,8 +57,8 @@ func ContentTypeMatch(res *resty.Response, expectedContentType string) bool {
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-// RandomString returns a random string of length n using the letterBytes constant
-// The constant used is specifically chosen to mimic Ellucian's banner session ID generation.
+// RandomString returns a random string of length n.
+// The character set is chosen to mimic Ellucian's Banner session ID generation.
 func RandomString(n int) string {
 	b := make([]byte, n)
 	for i := range b {
@@ -67,8 +67,7 @@ func RandomString(n int) string {
 	return string(b)
 }
 
-// DiscordGoLogger is a specialized helper function that implements discordgo's global logging interface.
-// It directs all logs to the zerolog implementation.
+// DiscordGoLogger is a helper function that implements discordgo's logging interface, directing all logs to zerolog.
 func DiscordGoLogger(msgL, caller int, format string, a ...interface{}) {
 	pc, file, line, _ := runtime.Caller(caller)
 
@@ -98,13 +97,13 @@ func DiscordGoLogger(msgL, caller int, format string, a ...interface{}) {
 	event.Str("file", file).Int("line", line).Str("function", name).Msg(msg)
 }
 
-// Nonce returns a string made up of the current time in milliseconds, Unix epoch/UTC
-// This is typically used as a query parameter to prevent request caching in the browser.
+// Nonce returns the current time in milliseconds since the Unix epoch as a string.
+// This is typically used as a query parameter to prevent request caching.
 func Nonce() string {
 	return strconv.Itoa(int(time.Now().UnixMilli()))
 }
 
-// Plural is a simple helper function that returns an empty string if n is 1, and "s" otherwise.
+// Plural returns "s" if n is not 1.
 func Plural(n int) string {
 	if n == 1 {
 		return ""
@@ -112,8 +111,7 @@ func Plural(n int) string {
 	return "s"
 }
 
-// Plurale is a simple helper function that returns an empty string if n is 1, and "ess" otherwise.
-// This is for words that end in "es" when plural.
+// Plurale returns "es" if n is not 1.
 func Plurale(n int) string {
 	if n == 1 {
 		return ""
@@ -121,6 +119,7 @@ func Plurale(n int) string {
 	return "es"
 }
 
+// WeekdaysToString converts a map of weekdays to a compact string representation (e.g., "MWF").
 func WeekdaysToString(days map[time.Weekday]bool) string {
 	// If no days are present
 	numDays := len(days)
@@ -166,15 +165,18 @@ func WeekdaysToString(days map[time.Weekday]bool) string {
 	return str
 }
 
+// NaiveTime represents a time of day without a date or timezone.
 type NaiveTime struct {
 	Hours   uint
 	Minutes uint
 }
 
+// Sub returns the duration between two NaiveTime instances.
 func (nt *NaiveTime) Sub(other *NaiveTime) time.Duration {
 	return time.Hour*time.Duration(nt.Hours-other.Hours) + time.Minute*time.Duration(nt.Minutes-other.Minutes)
 }
 
+// ParseNaiveTime converts an integer representation of time (e.g., 1430) to a NaiveTime struct.
 func ParseNaiveTime(integer uint64) *NaiveTime {
 	minutes := uint(integer % 100)
 	hours := uint(integer / 100)
@@ -182,6 +184,7 @@ func ParseNaiveTime(integer uint64) *NaiveTime {
 	return &NaiveTime{Hours: hours, Minutes: minutes}
 }
 
+// String returns a string representation of the NaiveTime in 12-hour format (e.g., "2:30PM").
 func (nt NaiveTime) String() string {
 	meridiem := "AM"
 	hour := nt.Hours
@@ -194,6 +197,7 @@ func (nt NaiveTime) String() string {
 	return fmt.Sprintf("%d:%02d%s", hour, nt.Minutes, meridiem)
 }
 
+// GetFirstEnv returns the value of the first environment variable that is set.
 func GetFirstEnv(key ...string) string {
 	for _, k := range key {
 		if v := os.Getenv(k); v != "" {
@@ -203,14 +207,12 @@ func GetFirstEnv(key ...string) string {
 	return ""
 }
 
-// GetIntPointer returns a pointer to the given value.
-// This function is useful for discordgo, which inexplicably requires pointers to integers for minLength arguments.
+// GetIntPointer returns a pointer to the given integer.
 func GetIntPointer(value int) *int {
 	return &value
 }
 
-// GetFloatPointer returns a pointer to the given value.
-// This function is useful for discordgo, which inexplicably requires pointers to floats for minLength arguments.
+// GetFloatPointer returns a pointer to the given float.
 func GetFloatPointer(value float64) *float64 {
 	return &value
 }
@@ -244,6 +246,7 @@ var extensionMap = map[string]string{
 	"image/jxl":                "jxl",
 }
 
+// GuessExtension guesses the file extension for a given content type.
 func GuessExtension(contentType string) string {
 	ext, ok := extensionMap[strings.ToLower(contentType)]
 	if !ok {
@@ -252,7 +255,7 @@ func GuessExtension(contentType string) string {
 	return ext
 }
 
-// DumpResponse dumps a Resty response body to a file for debugging purposes
+// DumpResponse dumps the body of a Resty response to a file for debugging.
 func DumpResponse(res *resty.Response) {
 	contentType := res.Header().Get("Content-Type")
 	ext := GuessExtension(contentType)
@@ -282,8 +285,7 @@ func DumpResponse(res *resty.Response) {
 	log.Info().Str("filename", filename).Str("content-type", contentType).Msg("Dumped response body")
 }
 
-// ResponseError responds to an interaction with an error message
-// TODO: Improve with a proper embed and colors
+// RespondError responds to an interaction with a formatted error message.
 func RespondError(session *discordgo.Session, interaction *discordgo.Interaction, message string, err error) error {
 	// Optional: log the error
 	if err != nil {
@@ -307,26 +309,25 @@ func RespondError(session *discordgo.Session, interaction *discordgo.Interaction
 	})
 }
 
+// GetFetchedFooter returns a standard footer for embeds, indicating when the data was fetched.
 func GetFetchedFooter(cfg *config.Config, time time.Time) *discordgo.MessageEmbedFooter {
 	return &discordgo.MessageEmbedFooter{
 		Text: fmt.Sprintf("Fetched at %s", time.In(cfg.CentralTimeLocation).Format("Monday, January 2, 2006 at 3:04:05PM")),
 	}
 }
 
-// GetUser returns the user from the interaction.
-// This helper method is useful as depending on where the message was sent (guild or DM), the user is in a different field.
+// GetUser returns the user from an interaction, regardless of whether it was in a guild or a DM.
 func GetUser(interaction *discordgo.InteractionCreate) *discordgo.User {
-	// If the interaction is in a guild, the user is kept in the Member field
+	// If the interaction is in a guild, the user is in the Member field
 	if interaction.Member != nil {
 		return interaction.Member.User
 	}
 
-	// If the interaction is in a DM, the user is kept in the User field
+	// If the interaction is in a DM, the user is in the User field
 	return interaction.User
 }
 
-// Encode encodes the values into “URL encoded” form
-// ("bar=baz&foo=quux") sorted by key.
+// EncodeParams encodes a map of parameters into a URL-encoded string, sorted by key.
 func EncodeParams(params map[string]*[]string) string {
 	// Escape hatch for nil
 	if params == nil {
@@ -362,11 +363,12 @@ func EncodeParams(params map[string]*[]string) string {
 	return buf.String()
 }
 
-// Point represents a point in 2D space
+// Point represents a point in 2D space.
 type Point struct {
 	X, Y float64
 }
 
+// Slope calculates the y-coordinate of a point on a line given two other points and an x-coordinate.
 func Slope(p1 Point, p2 Point, x float64) Point {
 	slope := (p2.Y - p1.Y) / (p2.X - p1.X)
 	newY := slope*(x-p1.X) + p1.Y

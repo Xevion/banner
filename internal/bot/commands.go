@@ -22,11 +22,14 @@ const (
 	ICalTimestampFormatLocal = "20060102T150405"
 )
 
+// CommandHandler is a function that handles a slash command interaction.
 type CommandHandler func(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error
 
 var (
+	// CommandDefinitions is a list of all the bot's command definitions.
 	CommandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition, SearchCommandDefinition, IcsCommandDefinition}
-	CommandHandlers    = map[string]CommandHandler{
+	// CommandHandlers is a map of command names to their handlers.
+	CommandHandlers = map[string]CommandHandler{
 		TimeCommandDefinition.Name:   TimeCommandHandler,
 		TermCommandDefinition.Name:   TermCommandHandler,
 		SearchCommandDefinition.Name: SearchCommandHandler,
@@ -82,6 +85,7 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
+// SearchCommandHandler handles the /search command, which allows users to search for courses.
 func SearchCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	data := i.ApplicationCommandData()
 	query := api.NewQuery().Credits(3, 6)
@@ -283,6 +287,7 @@ var TermCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
+// TermCommandHandler handles the /terms command, which allows users to search for terms.
 func TermCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	data := i.ApplicationCommandData()
 
@@ -353,6 +358,7 @@ var TimeCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
+// TimeCommandHandler handles the /time command, which allows users to get the meeting times for a course.
 func TimeCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	fetch_time := time.Now()
 	crn := i.ApplicationCommandData().Options[0].IntValue()
@@ -428,6 +434,7 @@ var IcsCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
+// IcsCommandHandler handles the /ics command, which allows users to generate an ICS file for a course.
 func IcsCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	// Parse all options
 	options := internal.ParseOptions(i.ApplicationCommandData().Options)

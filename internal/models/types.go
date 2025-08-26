@@ -1,3 +1,4 @@
+// Package models provides the data structures for the Banner API.
 package models
 
 import (
@@ -11,8 +12,9 @@ import (
 	log "github.com/rs/zerolog/log"
 )
 
+// FacultyItem represents a faculty member associated with a course.
 type FacultyItem struct {
-	BannerId              string  `json:"bannerId"`
+	BannerID              string  `json:"bannerId"`
 	Category              *string `json:"category"`
 	Class                 string  `json:"class"`
 	CourseReferenceNumber string  `json:"courseReferenceNumber"`
@@ -22,6 +24,7 @@ type FacultyItem struct {
 	Term                  string  `json:"term"`
 }
 
+// MeetingTimeResponse represents the meeting time information for a course.
 type MeetingTimeResponse struct {
 	Category              *string `json:"category"`
 	Class                 string  `json:"class"`
@@ -80,6 +83,7 @@ type MeetingTimeResponse struct {
 	Term string `json:"term"`
 }
 
+// String returns a formatted string representation of the meeting time.
 func (m *MeetingTimeResponse) String() string {
 	switch m.MeetingTime.MeetingType {
 	case "HB":
@@ -104,6 +108,7 @@ func (m *MeetingTimeResponse) String() string {
 	return "Unknown"
 }
 
+// TimeString returns a formatted string of the meeting times (e.g., "MWF 1:00PM-2:15PM").
 func (m *MeetingTimeResponse) TimeString() string {
 	startTime := m.StartTime()
 	endTime := m.EndTime()
@@ -115,11 +120,11 @@ func (m *MeetingTimeResponse) TimeString() string {
 	return fmt.Sprintf("%s %s-%s", internal.WeekdaysToString(m.Days()), m.StartTime().String(), m.EndTime().String())
 }
 
-// PlaceString returns a formatted string best representing the place of the meeting time
+// PlaceString returns a formatted string representing the location of the meeting.
 func (m *MeetingTimeResponse) PlaceString() string {
 	mt := m.MeetingTime
 
-	// TODO: ADd format case for partial online classes
+	// TODO: Add format case for partial online classes
 	if mt.Room == "" {
 		return "Online"
 	}
@@ -127,6 +132,7 @@ func (m *MeetingTimeResponse) PlaceString() string {
 	return fmt.Sprintf("%s | %s | %s %s", mt.CampusDescription, mt.BuildingDescription, mt.Building, mt.Room)
 }
 
+// Days returns a map of weekdays on which the course meets.
 func (m *MeetingTimeResponse) Days() map[time.Weekday]bool {
 	days := map[time.Weekday]bool{}
 
@@ -140,7 +146,7 @@ func (m *MeetingTimeResponse) Days() map[time.Weekday]bool {
 	return days
 }
 
-// Returns the BYDAY value for the iCalendar RRule format
+// ByDay returns a comma-separated string of two-letter day abbreviations for the iCalendar RRule.
 func (m *MeetingTimeResponse) ByDay() string {
 	days := []string{}
 
@@ -171,8 +177,8 @@ func (m *MeetingTimeResponse) ByDay() string {
 
 const layout = "01/02/2006"
 
-// StartDay returns the start date of the meeting time as a time.Time object
-// This is not cached and is parsed on each invocation. It may also panic without handling.
+// StartDay returns the start date of the meeting as a time.Time object.
+// This method is not cached and will panic if the date cannot be parsed.
 func (m *MeetingTimeResponse) StartDay() time.Time {
 	t, err := time.Parse(layout, m.MeetingTime.StartDate)
 	if err != nil {
@@ -181,8 +187,8 @@ func (m *MeetingTimeResponse) StartDay() time.Time {
 	return t
 }
 
-// EndDay returns the end date of the meeting time as a time.Time object.
-// This is not cached and is parsed on each invocation. It may also panic without handling.
+// EndDay returns the end date of the meeting as a time.Time object.
+// This method is not cached and will panic if the date cannot be parsed.
 func (m *MeetingTimeResponse) EndDay() time.Time {
 	t, err := time.Parse(layout, m.MeetingTime.EndDate)
 	if err != nil {
@@ -191,8 +197,8 @@ func (m *MeetingTimeResponse) EndDay() time.Time {
 	return t
 }
 
-// StartTime returns the start time of the meeting time as a NaiveTime object
-// This is not cached and is parsed on each invocation. It may also panic without handling.
+// StartTime returns the start time of the meeting as a NaiveTime object.
+// This method is not cached and will panic if the time cannot be parsed.
 func (m *MeetingTimeResponse) StartTime() *internal.NaiveTime {
 	raw := m.MeetingTime.BeginTime
 	if raw == "" {
@@ -207,8 +213,8 @@ func (m *MeetingTimeResponse) StartTime() *internal.NaiveTime {
 	return internal.ParseNaiveTime(value)
 }
 
-// EndTime returns the end time of the meeting time as a NaiveTime object
-// This is not cached and is parsed on each invocation. It may also panic without handling.
+// EndTime returns the end time of the meeting as a NaiveTime object.
+// This method is not cached and will panic if the time cannot be parsed.
 func (m *MeetingTimeResponse) EndTime() *internal.NaiveTime {
 	raw := m.MeetingTime.EndTime
 	if raw == "" {
@@ -223,12 +229,13 @@ func (m *MeetingTimeResponse) EndTime() *internal.NaiveTime {
 	return internal.ParseNaiveTime(value)
 }
 
+// RRule represents a recurrence rule for an iCalendar event.
 type RRule struct {
 	Until string
 	ByDay string
 }
 
-// Converts the meeting time to a string that satisfies the iCalendar RRule format
+// RRule converts the meeting time to a struct that satisfies the iCalendar RRule format.
 func (m *MeetingTimeResponse) RRule() RRule {
 	return RRule{
 		Until: m.EndDay().UTC().Format("20060102T150405Z"),
@@ -236,6 +243,7 @@ func (m *MeetingTimeResponse) RRule() RRule {
 	}
 }
 
+// SearchResult represents the result of a course search.
 type SearchResult struct {
 	Success             bool   `json:"success"`
 	TotalCount          int    `json:"totalCount"`
@@ -249,41 +257,36 @@ type SearchResult struct {
 	Data []Course `json:"data"`
 }
 
+// Course represents a single course returned from a search.
 type Course struct {
-	// A internal identifier not used outside of the Banner system
-	Id int `json:"id"`
-	// The internal identifier for the term this class is in (e.g. 202420)
+	// ID is an internal identifier not used outside of the Banner system.
+	ID int `json:"id"`
+	// Term is the internal identifier for the term this class is in (e.g. 202420).
 	Term string `json:"term"`
-	// The human-readable name of the term this class is in (e.g. Fall 2021)
+	// TermDesc is the human-readable name of the term this class is in (e.g. Fall 2021).
 	TermDesc string `json:"termDesc"`
-	// The specific identifier that describes this individual course. CRNs are unique to a term. (TODO: Verify this is true)
+	// CourseReferenceNumber is the unique identifier for a course within a term.
 	CourseReferenceNumber string `json:"courseReferenceNumber"`
-	// A rarely used identifier that species which part of the given term this course is in. By default, this is "1" to encompass the entire term. (e.g. B6, B5)
+	// PartOfTerm specifies which part of the term the course is in (e.g. B6, B5).
 	PartOfTerm string `json:"partOfTerm"`
-	// The 4-digit course code that defines this course (e.g. 3743, 0120, 4855, 7339), but not the specific instance (see CourseReferenceNumber)
+	// CourseNumber is the 4-digit code for the course (e.g. 3743).
 	CourseNumber string `json:"courseNumber"`
-	// The short acronym of the course subject (e.g. CS, AEPI)
+	// Subject is the subject acronym (e.g. CS, AEPI).
 	Subject string `json:"subject"`
-	// The full name of the course subject (e.g. Computer Science, Academic English Program-Intl.)
+	// SubjectDescription is the full name of the course subject.
 	SubjectDescription string `json:"subjectDescription"`
-	// The specific section of the course (e.g. 001, 002)
-	SequenceNumber string `json:"sequenceNumber"`
-	// The long name of the campus this course takes place at (e.g. Main Campus, Downtown Campus)
+	// SequenceNumber is the course section (e.g. 001, 002).
+	SequenceNumber    string `json:"sequenceNumber"`
 	CampusDescription string `json:"campusDescription"`
-	// e.g. Lecture, Seminar, Dissertation, Internship, Independent Study, Thesis, Self-paced, Laboratory
+	// ScheduleTypeDescription is the type of schedule for the course (e.g. Lecture, Seminar).
 	ScheduleTypeDescription string `json:"scheduleTypeDescription"`
-	// The long name of the course (generally)
-	CourseTitle string `json:"courseTitle"`
-	CreditHours int    `json:"creditHours"`
-	// The maximum number of students that can enroll in this course
-	MaximumEnrollment int `json:"maximumEnrollment"`
-	// The number of students currently enrolled in this course
-	Enrollment int `json:"enrollment"`
-	// The number of seats available in this course (MaximumEnrollment - Enrollment)
-	SeatsAvailable int `json:"seatsAvailable"`
-	// The number of students that could waitlist for this course
-	WaitCapacity int `json:"waitCapacity"`
-	// The number of students currently on the waitlist for this course
+	CourseTitle             string `json:"courseTitle"`
+	CreditHours             int    `json:"creditHours"`
+	// MaximumEnrollment is the maximum number of students that can enroll.
+	MaximumEnrollment   int     `json:"maximumEnrollment"`
+	Enrollment          int     `json:"enrollment"`
+	SeatsAvailable      int     `json:"seatsAvailable"`
+	WaitCapacity        int     `json:"waitCapacity"`
 	WaitCount           int     `json:"waitCount"`
 	CrossList           *string `json:"crossList"`
 	CrossListCapacity   *int    `json:"crossListCapacity"`
@@ -295,27 +298,26 @@ type Course struct {
 	OpenSection         bool    `json:"openSection"`
 	LinkIdentifier      *string `json:"linkIdentifier"`
 	IsSectionLinked     bool    `json:"isSectionLinked"`
-	// A combination of the subject and course number (e.g. subject=CS, courseNumber=3443 => "CS3443")
+	// SubjectCourse is the combination of the subject and course number (e.g. CS3443).
 	SubjectCourse                  string  `json:"subjectCourse"`
 	ReservedSeatSummary            *string `json:"reservedSeatSummary"`
 	InstructionalMethod            string  `json:"instructionalMethod"`
 	InstructionalMethodDescription string  `json:"instructionalMethodDescription"`
 	SectionAttributes              []struct {
-		// A internal API class identifier used by Banner
+		// Class is an internal API class identifier used by Banner.
 		Class                 string `json:"class"`
 		CourseReferenceNumber string `json:"courseReferenceNumber"`
-		// UPPR, ZIEP, AIS, LEWR, ZZSL, 090, GRAD, ZZTL, 020, BU, CLEP
-		Code string `json:"code"`
-		// Seems to be the fully qualified meaning of the Code (Upper, Intensive English Program...)
-		Description string `json:"description"`
-		TermCode    string `json:"termCode"`
-		// Unknown; always false
-		IsZtcAttribute bool `json:"isZTCAttribute"`
+		// Code for the attribute (e.g., UPPR, ZIEP, AIS).
+		Code           string `json:"code"`
+		Description    string `json:"description"`
+		TermCode       string `json:"termCode"`
+		IsZtcAttribute bool   `json:"isZTCAttribute"`
 	} `json:"sectionAttributes"`
 	Faculty         []FacultyItem         `json:"faculty"`
 	MeetingsFaculty []MeetingTimeResponse `json:"meetingsFaculty"`
 }
 
+// MarshalBinary implements the encoding.BinaryMarshaler interface.
 func (course Course) MarshalBinary() ([]byte, error) {
 	return json.Marshal(course)
 }

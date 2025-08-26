@@ -1,3 +1,4 @@
+// Package internal provides shared functionality for the banner application.
 package internal
 
 import (
@@ -10,7 +11,7 @@ import (
 	log "github.com/rs/zerolog/log"
 )
 
-// GetGuildName returns the name of the guild with the given ID, utilizing Redis to cache the value
+// GetGuildName returns the name of a guild by its ID, using Redis for caching.
 func GetGuildName(cfg *config.Config, session *discordgo.Session, guildID string) string {
 	// Create a timeout context for Redis operations
 	ctx, cancel := context.WithTimeout(cfg.Ctx, 5*time.Second)
@@ -52,7 +53,7 @@ func GetGuildName(cfg *config.Config, session *discordgo.Session, guildID string
 	return guild.Name
 }
 
-// GetChannelName returns the name of the channel with the given ID, utilizing Redis to cache the value
+// GetChannelName returns the name of a channel by its ID, using Redis for caching.
 func GetChannelName(cfg *config.Config, session *discordgo.Session, channelID string) string {
 	// Create a timeout context for Redis operations
 	ctx, cancel := context.WithTimeout(cfg.Ctx, 5*time.Second)

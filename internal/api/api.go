@@ -20,10 +20,12 @@ import (
 	"resty.dev/v3"
 )
 
+// API provides a client for interacting with the Banner API.
 type API struct {
 	config *config.Config
 }
 
+// New creates a new API client with the given configuration.
 func New(config *config.Config) *API {
 	return &API{config: config}
 }
@@ -34,7 +36,7 @@ var (
 	expiryTime    = 25 * time.Minute
 )
 
-// SessionMiddleware creates a Resty middleware that resets the session timer on each Banner API call.
+// SessionMiddleware creates a Resty middleware that resets the session timer on each successful Banner API call.
 func SessionMiddleware(c *resty.Client, r *resty.Response) error {
 	// log.Debug().Str("url", r.Request.RawRequest.URL.Path).Msg("Session middleware")
 
@@ -48,8 +50,8 @@ func SessionMiddleware(c *resty.Client, r *resty.Response) error {
 	return nil
 }
 
-// GenerateSession generates a new session ID (nonce) for use with the Banner API.
-// Don't use this function directly, use GetSession instead.
+// GenerateSession generates a new session ID for use with the Banner API.
+// This function should not be used directly; use EnsureSession instead.
 func GenerateSession() string {
 	return internal.RandomString(5) + internal.Nonce()
 }
@@ -57,7 +59,7 @@ func GenerateSession() string {
 var terms []BannerTerm
 var lastTermUpdate time.Time
 
-// TryReloadTerms attempts to reload the terms if they are not loaded or the last update was more than 24 hours ago
+// TryReloadTerms attempts to reload the terms if they are not loaded or if the last update was more than 24 hours ago.
 func (a *API) TryReloadTerms() error {
 	if len(terms) > 0 && time.Since(lastTermUpdate) < 24*time.Hour {
 		return nil
@@ -74,8 +76,9 @@ func (a *API) TryReloadTerms() error {
 	return nil
 }
 
-// IsTermArchived checks if the given term is archived
-// TODO: Add error, switch missing term logic to error
+// IsTermArchived checks if the given term is archived (view only).
+//
+// TODO: Add error handling for when a term does not exist.
 func (a *API) IsTermArchived(term string) bool {
 	// Ensure the terms are loaded
 	err := a.TryReloadTerms()
@@ -106,21 +109,25 @@ func (a *API) EnsureSession() string {
 	return latestSession
 }
 
+// Pair represents a key-value pair from the Banner API.
 type Pair struct {
 	Code        string `json:"code"`
 	Description string `json:"description"`
 }
 
+// BannerTerm represents a term in the Banner system.
 type BannerTerm Pair
+
+// Instructor represents an instructor in the Banner system.
 type Instructor Pair
 
-// Archived returns true if the term is in it's archival state (view only)
+// Archived returns true if the term is in an archival (view-only) state.
 func (term BannerTerm) Archived() bool {
 	return strings.Contains(term.Description, "View Only")
 }
 
-// GetTerms retrieves and parses the term information for a given search term.
-// Page number must be at least 1.
+// GetTerms retrieves a list of terms from the Banner API.
+// The page number must be at least 1.
 func (a *API) GetTerms(search string, page int, maxResults int) ([]BannerTerm, error) {
 	// Ensure offset is valid
 	if page <= 0 {
@@ -148,8 +155,8 @@ func (a *API) GetTerms(search string, page int, maxResults int) ([]BannerTerm, e
 	return *terms, nil
 }
 
-// SelectTerm selects the given term in the Banner system.
-// This function completes the initial term selection process, which is required before any other API calls can be made with the session ID.
+// SelectTerm selects a term in the Banner system for the given session.
+// This is required before other API calls can be made.
 func (a *API) SelectTerm(term string, sessionID string) error {
 	form := url.Values{
 		"term":            {term},
@@ -192,8 +199,8 @@ func (a *API) SelectTerm(term string, sessionID string) error {
 	return nil
 }
 
-// GetPartOfTerms retrieves and parses the part of term information for a given term.
-// Ensure that the offset is greater than 0.
+// GetPartOfTerms retrieves a list of parts of a term from the Banner API.
+// The page number must be at least 1.
 func (a *API) GetPartOfTerms(search string, term int, offset int, maxResults int) ([]BannerTerm, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
@@ -223,10 +230,7 @@ func (a *API) GetPartOfTerms(search string, term int, offset int, maxResults int
 	return *terms, nil
 }
 
-// GetInstructors retrieves and parses the instructor information for a given search term.
-// In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
-// This function is included for completeness, but probably isn't useful.
-// Ensure that the offset is greater than 0.
+// GetInstructors retrieves a list of instructors from the Banner API.
 func (a *API) GetInstructors(search string, term string, offset int, maxResults int) ([]Instructor, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
@@ -256,11 +260,13 @@ func (a *API) GetInstructors(search string, term string, offset int, maxResults 
 	return *instructors, nil
 }
 
-// ClassDetails represents the details of a course.
-// TODO: Finish this struct & function
+// ClassDetails represents the detailed information for a class.
+//
+// TODO: Implement this struct and the associated GetCourseDetails function.
 type ClassDetails struct {
 }
 
+// GetCourseDetails retrieves the details for a specific course.
 func (a *API) GetCourseDetails(term int, crn int) (*ClassDetails, error) {
 	body, err := json.Marshal(map[string]string{
 		"term":                  strconv.Itoa(term),
@@ -289,7 +295,7 @@ func (a *API) GetCourseDetails(term int, crn int) (*ClassDetails, error) {
 	return details, nil
 }
 
-// Search invokes a search on the Banner system with the given query and returns the results.
+// Search performs a search for courses with the given query and returns the results.
 func (a *API) Search(term string, query *Query, sort string, sortDescending bool) (*models.SearchResult, error) {
 	a.ResetDataForm()
 
@@ -322,9 +328,8 @@ func (a *API) Search(term string, query *Query, sort string, sortDescending bool
 	return searchResult, nil
 }
 
-// GetSubjects retrieves and parses the subject information for a given search term.
-// The results of this response shouldn't change much, but technically could as new majors are developed, or old ones are removed.
-// Ensure that the offset is greater than 0.
+// GetSubjects retrieves a list of subjects from the Banner API.
+// The page number must be at least 1.
 func (a *API) GetSubjects(search string, term string, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
@@ -354,10 +359,8 @@ func (a *API) GetSubjects(search string, term string, offset int, maxResults int
 	return *subjects, nil
 }
 
-// GetCampuses retrieves and parses the campus information for a given search term.
-// In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
-// This function is included for completeness, but probably isn't useful.
-// Ensure that the offset is greater than 0.
+// GetCampuses retrieves a list of campuses from the Banner API.
+// The page number must be at least 1.
 func (a *API) GetCampuses(search string, term int, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
@@ -387,10 +390,8 @@ func (a *API) GetCampuses(search string, term int, offset int, maxResults int) (
 	return *campuses, nil
 }
 
-// GetInstructionalMethods retrieves and parses the instructional method information for a given search term.
-// In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
-// This function is included for completeness, but probably isn't useful.
-// Ensure that the offset is greater than 0.
+// GetInstructionalMethods retrieves a list of instructional methods from the Banner API.
+// The page number must be at least 1.
 func (a *API) GetInstructionalMethods(search string, term string, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
@@ -419,9 +420,7 @@ func (a *API) GetInstructionalMethods(search string, term string, offset int, ma
 	return *methods, nil
 }
 
-// GetCourseMeetingTime retrieves the meeting time information for a course based on the given term and course reference number (CRN).
-// It makes an HTTP GET request to the appropriate API endpoint and parses the response to extract the meeting time data.
-// The function returns a MeetingTimeResponse struct containing the extracted information.
+// GetCourseMeetingTime retrieves the meeting time information for a course.
 func (a *API) GetCourseMeetingTime(term int, crn int) ([]models.MeetingTimeResponse, error) {
 	type responseWrapper struct {
 		Fmt []models.MeetingTimeResponse `json:"fmt"`
@@ -446,7 +445,8 @@ func (a *API) GetCourseMeetingTime(term int, crn int) ([]models.MeetingTimeRespo
 	return result.Fmt, nil
 }
 
-// ResetDataForm makes a POST request that needs to be made upon before new search requests can be made.
+// ResetDataForm resets the search form in the Banner system.
+// This must be called before a new search can be performed.
 func (a *API) ResetDataForm() {
 	req := a.config.Client.NewRequest()
 
@@ -456,8 +456,7 @@ func (a *API) ResetDataForm() {
 	}
 }
 
-// GetCourse retrieves the course information.
-// This course does not retrieve directly from the API, but rather uses scraped data stored in Redis.
+// GetCourse retrieves course information from the Redis cache.
 func (a *API) GetCourse(crn string) (*models.Course, error) {
 	// Create a timeout context for Redis operations
 	ctx, cancel := context.WithTimeout(a.config.Ctx, 5*time.Second)

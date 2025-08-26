@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// RegisterHandlers registers the bot's command handlers.
 func (b *Bot) RegisterHandlers() {
 	b.Session.AddHandler(func(internalSession *discordgo.Session, interaction *discordgo.InteractionCreate) {
 		// Handle commands during restart (highly unlikely, but just in case)

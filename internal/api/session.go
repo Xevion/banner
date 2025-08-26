@@ -7,6 +7,7 @@ import (
 	log "github.com/rs/zerolog/log"
 )
 
+// Setup makes the initial requests to set up the session cookies for the application.
 func (a *API) Setup() {
 	// Makes the initial requests that sets up the session cookies for the rest of the application
 	log.Info().Msg("Setting up session...")

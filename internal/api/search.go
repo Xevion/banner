@@ -33,7 +33,7 @@ const (
 )
 
 // Query represents a search query for courses.
-// It is a builder struct that allows for chaining of methods to build a query.
+// It is a builder that allows for chaining methods to construct a query.
 type Query struct {
 	subject             *string
 	title               *string
@@ -58,25 +58,25 @@ func NewQuery() *Query {
 	return &Query{maxResults: 8, offset: 0}
 }
 
-// Subject sets the subject for the query
+// Subject sets the subject for the query.
 func (q *Query) Subject(subject string) *Query {
 	q.subject = &subject
 	return q
 }
 
-// Title sets the title for the query
+// Title sets the title for the query.
 func (q *Query) Title(title string) *Query {
 	q.title = &title
 	return q
 }
 
-// Keywords sets the keywords for the query
+// Keywords sets the keywords for the query.
 func (q *Query) Keywords(keywords []string) *Query {
 	q.keywords = &keywords
 	return q
 }
 
-// Keyword adds a keyword to the query
+// Keyword adds a keyword to the query.
 func (q *Query) Keyword(keyword string) *Query {
 	if q.keywords == nil {
 		q.keywords = &[]string{keyword}
@@ -86,86 +86,86 @@ func (q *Query) Keyword(keyword string) *Query {
 	return q
 }
 
-// OpenOnly sets the open only flag for the query
+// OpenOnly sets whether to search for open courses only.
 func (q *Query) OpenOnly(openOnly bool) *Query {
 	q.openOnly = &openOnly
 	return q
 }
 
-// TermPart sets the term part for the query
+// TermPart sets the term part for the query.
 func (q *Query) TermPart(termPart []string) *Query {
 	q.termPart = &termPart
 	return q
 }
 
-// Campus sets the campuses for the query
+// Campus sets the campuses for the query.
 func (q *Query) Campus(campus []string) *Query {
 	q.campus = &campus
 	return q
 }
 
-// InstructionalMethod sets the instructional methods for the query
+// InstructionalMethod sets the instructional methods for the query.
 func (q *Query) InstructionalMethod(instructionalMethod []string) *Query {
 	q.instructionalMethod = &instructionalMethod
 	return q
 }
 
-// Attributes sets the attributes for the query
+// Attributes sets the attributes for the query.
 func (q *Query) Attributes(attributes []string) *Query {
 	q.attributes = &attributes
 	return q
 }
 
-// Instructor sets the instructors for the query
+// Instructor sets the instructors for the query.
 func (q *Query) Instructor(instructor []uint64) *Query {
 	q.instructor = &instructor
 	return q
 }
 
-// StartTime sets the start time for the query
+// StartTime sets the start time for the query.
 func (q *Query) StartTime(startTime time.Duration) *Query {
 	q.startTime = &startTime
 	return q
 }
 
-// EndTime sets the end time for the query
+// EndTime sets the end time for the query.
 func (q *Query) EndTime(endTime time.Duration) *Query {
 	q.endTime = &endTime
 	return q
 }
 
-// Credits sets the credit range for the query
+// Credits sets the credit range for the query.
 func (q *Query) Credits(low int, high int) *Query {
 	q.minCredits = &low
 	q.maxCredits = &high
 	return q
 }
 
-// MinCredits sets the minimum credits for the query
+// MinCredits sets the minimum credits for the query.
 func (q *Query) MinCredits(value int) *Query {
 	q.minCredits = &value
 	return q
 }
 
-// MaxCredits sets the maximum credits for the query
+// MaxCredits sets the maximum credits for the query.
 func (q *Query) MaxCredits(value int) *Query {
 	q.maxCredits = &value
 	return q
 }
 
-// CourseNumbers sets the course number range for the query
+// CourseNumbers sets the course number range for the query.
 func (q *Query) CourseNumbers(low int, high int) *Query {
 	q.courseNumberRange = &Range{low, high}
 	return q
 }
 
-// Offset sets the offset for the query, allowing for pagination
+// Offset sets the offset for pagination.
 func (q *Query) Offset(offset int) *Query {
 	q.offset = offset
 	return q
 }
 
-// MaxResults sets the maximum number of results for the query
+// MaxResults sets the maximum number of results to return.
 func (q *Query) MaxResults(maxResults int) *Query {
 	q.maxResults = maxResults
 	return q
@@ -177,8 +177,8 @@ type Range struct {
 	High int
 }
 
-// FormatTimeParameter formats a time.Duration into a tuple of strings
-// This is mostly a private helper to keep the parameter formatting for both the start and end time consistent together
+// FormatTimeParameter formats a time.Duration into a tuple of strings for use in a POST request.
+// It returns the hour, minute, and meridiem (AM/PM) as separate strings.
 func FormatTimeParameter(d time.Duration) (string, string, string) {
 	hourParameter, minuteParameter, meridiemParameter := "", "", ""
 
@@ -204,7 +204,7 @@ func FormatTimeParameter(d time.Duration) (string, string, string) {
 	return hourParameter, minuteParameter, meridiemParameter
 }
 
-// Paramify converts a Query into a map of parameters that can be used in a POST request
+// Paramify converts a Query into a map of parameters for a POST request.
 // This function assumes each query key only appears once.
 func (q *Query) Paramify() map[string]string {
 	params := map[string]string{}

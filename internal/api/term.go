@@ -18,6 +18,7 @@ const (
 	Fall
 )
 
+// Term represents a school term, consisting of a year and a season.
 type Term struct {
 	Year   uint16
 	Season uint8
@@ -32,16 +33,14 @@ func init() {
 	SpringRange, SummerRange, FallRange = GetYearDayRange(loc, uint16(time.Now().Year()))
 }
 
+// YearDayRange represents the start and end day of a term within a year.
 type YearDayRange struct {
 	Start uint16
 	End   uint16
 }
 
 // GetYearDayRange returns the start and end day of each term for the given year.
-// This could technically introduce race conditions, but it's more likely confusion from UTC will be a greater issue.
-// Spring: January 14th to May
-// Summer: May 25th - August 15th
-// Fall: August 18th - December 10th
+// The ranges are inclusive of the start day and exclusive of the end day.
 func GetYearDayRange(loc *time.Location, year uint16) (YearDayRange, YearDayRange, YearDayRange) {
 	springStart := time.Date(int(year), time.January, 14, 0, 0, 0, 0, loc).YearDay()
 	springEnd := time.Date(int(year), time.May, 1, 0, 0, 0, 0, loc).YearDay()
@@ -62,21 +61,9 @@ func GetYearDayRange(loc *time.Location, year uint16) (YearDayRange, YearDayRang
 		}
 }
 
-// GetCurrentTerm returns the current term, and the next term. Only the first term is nillable.
-// YearDay ranges are inclusive of the start, and exclusive of the end.
-// You can think of the 'year' part of it as the 'school year', the second part of the 20XX-(20XX+1) phrasing.
-//
-// e.g. the Fall 2025, Spring 2026, and Summer 2026 terms all occur as part of the 2025-2026 school year. The second year, 2026, is the part used in all term identifiers.
-// So even though the Fall 2025 term occurs in 2025, it uses the 2026 year in it's term identifier.
-//
-// Fall of 2024 => 202510
-// Spring of 2025 => 202520
-// Summer of 2025 => 202530
-// Fall of 2025 => 202610
-// Spring of 2026 => 202620
-// Summer of 2026 => 202630
-//
-// Reading out 'Fall of 2024' as '202510' might be confusing, but it's correct.
+// GetCurrentTerm returns the current and next terms based on the provided time.
+// The current term can be nil if the time falls between terms.
+// The 'year' in the term corresponds to the academic year, which may differ from the calendar year.
 func GetCurrentTerm(now time.Time) (*Term, *Term) {
 	literalYear := uint16(now.Year())
 	dayOfYear := uint16(now.YearDay())
@@ -112,7 +99,7 @@ func GetCurrentTerm(now time.Time) (*Term, *Term) {
 	panic(fmt.Sprintf("Impossible Code Reached (dayOfYear: %d)", dayOfYear))
 }
 
-// ParseTerm converts a Banner term code to a Term struct
+// ParseTerm converts a Banner term code string to a Term struct.
 func ParseTerm(code string) Term {
 	year, _ := strconv.ParseUint(code[0:4], 10, 16)
 
@@ -133,7 +120,7 @@ func ParseTerm(code string) Term {
 	}
 }
 
-// TermToBannerTerm converts a Term struct to a Banner term code
+// ToString converts a Term struct to a Banner term code string.
 func (term Term) ToString() string {
 	var season string
 	switch term.Season {
@@ -148,7 +135,7 @@ func (term Term) ToString() string {
 	return fmt.Sprintf("%d%s", term.Year, season)
 }
 
-// Default chooses the default term, which is the current term if it exists, otherwise the next term.
+// Default returns the default term, which is the current term if it exists, otherwise the next term.
 func Default(t time.Time) Term {
 	currentTerm, nextTerm := GetCurrentTerm(t)
 	if currentTerm == nil {
