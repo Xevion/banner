@@ -1,6 +1,9 @@
-package main
+package api
 
 import (
+	"banner/internal/config"
+	"banner/internal/models"
+	"banner/internal/utils"
 	"fmt"
 	"math/rand"
 	"time"
@@ -26,7 +29,7 @@ var (
 func Scrape() error {
 	// Populate AllMajors if it is empty
 	if len(AncillaryMajors) == 0 {
-		term := Default(time.Now()).ToString()
+		term := utils.Default(time.Now()).ToString()
 		subjects, err := GetSubjects("", term, 1, 99)
 		if err != nil {
 			return fmt.Errorf("failed to get subjects: %w", err)
@@ -66,11 +69,11 @@ func Scrape() error {
 
 // GetExpiredSubjects returns a list of subjects that are expired and should be scraped.
 func GetExpiredSubjects() ([]string, error) {
-	term := Default(time.Now()).ToString()
+	term := utils.Default(time.Now()).ToString()
 	subjects := make([]string, 0)
 
 	// Get all subjects
-	values, err := kv.MGet(ctx, lo.Map(AllMajors, func(major string, _ int) string {
+	values, err := config.KV.MGet(config.Ctx, lo.Map(AllMajors, func(major string, _ int) string {
 		return fmt.Sprintf("scraped:%s:%s", major, term)
 	})...).Result()
 	if err != nil {
@@ -144,7 +147,7 @@ func ScrapeMajor(subject string) error {
 		}
 	}
 
-	term := Default(time.Now()).ToString()
+	term := utils.Default(time.Now()).ToString()
 
 	// Calculate the expiry time for the scrape (1 hour for every 200 classes, random +-15%) with a minimum of 1 hour
 	var scrapeExpiry time.Duration
@@ -158,7 +161,7 @@ func ScrapeMajor(subject string) error {
 	if totalClassCount == 0 {
 		totalClassCount = -1
 	}
-	err := kv.Set(ctx, fmt.Sprintf("scraped:%s:%s", subject, term), totalClassCount, scrapeExpiry).Err()
+	err := config.KV.Set(config.Ctx, fmt.Sprintf("scraped:%s:%s", subject, term), totalClassCount, scrapeExpiry).Err()
 	if err != nil {
 		log.Error().Err(err).Msg("failed to mark major as scraped")
 	}
@@ -177,7 +180,7 @@ func CalculateExpiry(term string, count int, priority bool) time.Duration {
 	// Subjects with less than 50 classes have a reversed expiry (less classes, longer interval)
 	// 1 class => 12 hours, 49 classes => 1 hour
 	if count < 50 {
-		hours := Slope(Point{1, 12}, Point{49, 1}, float64(count)).Y
+		hours := utils.Slope(utils.Point{1, 12}, utils.Point{49, 1}, float64(count)).Y
 		baseExpiry = time.Duration(hours * float64(time.Hour))
 	}
 
@@ -210,8 +213,8 @@ func CalculateExpiry(term string, count int, priority bool) time.Duration {
 
 // IntakeCourse stores a course in Redis.
 // This function is mostly a stub for now, but will be used to handle change identification, notifications, and SQLite upserts in the future.
-func IntakeCourse(course Course) error {
-	err := kv.Set(ctx, fmt.Sprintf("class:%s", course.CourseReferenceNumber), course, 0).Err()
+func IntakeCourse(course models.Course) error {
+	err := config.KV.Set(config.Ctx, fmt.Sprintf("class:%s", course.CourseReferenceNumber), course, 0).Err()
 	if err != nil {
 		return fmt.Errorf("failed to store class in Redis: %w", err)
 	}

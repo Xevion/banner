@@ -1,6 +1,8 @@
-package main
+package models
 
 import (
+	"banner/internal/config"
+	"banner/internal/utils"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -113,7 +115,7 @@ func (m *MeetingTimeResponse) TimeString() string {
 		return "???"
 	}
 
-	return fmt.Sprintf("%s %s-%s", WeekdaysToString(m.Days()), m.StartTime().String(), m.EndTime().String())
+	return fmt.Sprintf("%s %s-%s", utils.WeekdaysToString(m.Days()), m.StartTime().String(), m.EndTime().String())
 }
 
 // PlaceString returns a formatted string best representing the place of the meeting time
@@ -194,7 +196,7 @@ func (m *MeetingTimeResponse) EndDay() time.Time {
 
 // StartTime returns the start time of the meeting time as a NaiveTime object
 // This is not cached and is parsed on each invocation. It may also panic without handling.
-func (m *MeetingTimeResponse) StartTime() *NaiveTime {
+func (m *MeetingTimeResponse) StartTime() *utils.NaiveTime {
 	raw := m.MeetingTime.BeginTime
 	if raw == "" {
 		log.Panic().Stack().Msg("Start time is empty")
@@ -205,12 +207,12 @@ func (m *MeetingTimeResponse) StartTime() *NaiveTime {
 		log.Panic().Stack().Err(err).Str("raw", raw).Msg("Cannot parse start time integer")
 	}
 
-	return ParseNaiveTime(value)
+	return utils.ParseNaiveTime(value)
 }
 
 // EndTime returns the end time of the meeting time as a NaiveTime object
 // This is not cached and is parsed on each invocation. It may also panic without handling.
-func (m *MeetingTimeResponse) EndTime() *NaiveTime {
+func (m *MeetingTimeResponse) EndTime() *utils.NaiveTime {
 	raw := m.MeetingTime.EndTime
 	if raw == "" {
 		return nil
@@ -221,7 +223,7 @@ func (m *MeetingTimeResponse) EndTime() *NaiveTime {
 		log.Panic().Stack().Err(err).Str("raw", raw).Msg("Cannot parse end time integer")
 	}
 
-	return ParseNaiveTime(value)
+	return utils.ParseNaiveTime(value)
 }
 
 // Converts the meeting time to a string that satisfies the iCalendar RRule format
@@ -229,7 +231,7 @@ func (m *MeetingTimeResponse) RRule() string {
 	sb := strings.Builder{}
 
 	sb.WriteString("FREQ=WEEKLY;")
-	sb.WriteString(fmt.Sprintf("UNTIL=%s;", m.EndDay().UTC().Format(ICalTimestampFormatUtc)))
+	sb.WriteString(fmt.Sprintf("UNTIL=%s;", m.EndDay().UTC().Format(config.ICalTimestampFormatUtc)))
 	sb.WriteString(fmt.Sprintf("BYDAY=%s;", m.ByDay()))
 
 	return sb.String()

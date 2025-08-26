@@ -1,8 +1,10 @@
 .env
 cover.cov
-banner
+./banner
 .*.go
 dumps/
 js/
 .vscode/
 *.prof
+.task/
+bin/

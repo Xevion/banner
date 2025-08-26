@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -14,16 +14,16 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	log "github.com/rs/zerolog/log"
-	"github.com/samber/lo"
+
+	"banner/internal/config"
 )
 
 // BuildRequestWithBody builds a request with the given method, path, parameters, and body
 func BuildRequestWithBody(method string, path string, params map[string]string, body io.Reader) *http.Request {
 	// Builds a URL for the given path and parameters
-	requestUrl := baseURL + path
+	requestUrl := config.BaseURL + path
 
 	if params != nil {
 		takenFirst := false
@@ -110,57 +110,6 @@ func DiscordGoLogger(msgL, caller int, format string, a ...interface{}) {
 // This is typically used as a query parameter to prevent request caching in the browser.
 func Nonce() string {
 	return strconv.Itoa(int(time.Now().UnixMilli()))
-}
-
-// DoRequest performs & logs the request, logging and returning the response
-func DoRequest(req *http.Request) (*http.Response, error) {
-	headerSize := 0
-	for key, values := range req.Header {
-		for _, value := range values {
-			headerSize += len(key)
-			headerSize += len(value)
-		}
-	}
-
-	bodySize := int64(0)
-	if req.Body != nil {
-		bodySize, _ = io.Copy(io.Discard, req.Body)
-	}
-
-	size := zerolog.Dict().Int64("body", bodySize).Int("header", headerSize).Int("url", len(req.URL.String()))
-
-	log.Debug().
-		Dict("size", size).
-		Str("method", strings.TrimRight(req.Method, " ")).
-		Str("url", req.URL.String()).
-		Str("query", req.URL.RawQuery).
-		Str("content-type", req.Header.Get("Content-Type")).
-		Msg("Request")
-
-	res, err := client.Do(req)
-
-	if err != nil {
-		log.Err(err).Stack().Str("method", req.Method).Msg("Request Failed")
-	} else {
-		contentLengthHeader := res.Header.Get("Content-Length")
-		contentLength := int64(-1)
-
-		// If this request was a Banner API request, reset the session timer
-		if strings.HasPrefix(req.URL.Path, "StudentRegistrationSsb/ssb/classSearch/") {
-			ResetSessionTimer()
-		}
-
-		// Get the content length
-		if contentLengthHeader != "" {
-			contentLength, err = strconv.ParseInt(contentLengthHeader, 10, 64)
-			if err != nil {
-				contentLength = -1
-			}
-		}
-
-		log.Debug().Int("status", res.StatusCode).Int64("content-length", contentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
-	}
-	return res, err
 }
 
 // Plural is a simple helper function that returns an empty string if n is 1, and "s" otherwise.
@@ -362,7 +311,7 @@ func RespondError(session *discordgo.Session, interaction *discordgo.Interaction
 
 func GetFetchedFooter(time time.Time) *discordgo.MessageEmbedFooter {
 	return &discordgo.MessageEmbedFooter{
-		Text: fmt.Sprintf("Fetched at %s", time.In(CentralTimeLocation).Format("Monday, January 2, 2006 at 3:04:05PM")),
+		Text: fmt.Sprintf("Fetched at %s", time.In(config.CentralTimeLocation).Format("Monday, January 2, 2006 at 3:04:05PM")),
 	}
 }
 
@@ -413,49 +362,6 @@ func EncodeParams(params map[string]*[]string) string {
 	}
 
 	return buf.String()
-}
-
-var terms []BannerTerm
-var lastTermUpdate time.Time
-
-// TryReloadTerms attempts to reload the terms if they are not loaded or the last update was more than 24 hours ago
-func TryReloadTerms() error {
-	if len(terms) > 0 && time.Since(lastTermUpdate) < 24*time.Hour {
-		return nil
-	}
-
-	// Load the terms
-	var err error
-	terms, err = GetTerms("", 1, 100)
-	if err != nil {
-		return errors.Wrap(err, "failed to load terms")
-	}
-
-	lastTermUpdate = time.Now()
-	return nil
-}
-
-// IsTermArchived checks if the given term is archived
-// TODO: Add error, switch missing term logic to error
-func IsTermArchived(term string) bool {
-	// Ensure the terms are loaded
-	err := TryReloadTerms()
-	if err != nil {
-		log.Err(err).Stack().Msg("Failed to reload terms")
-		return true
-	}
-
-	// Check if the term is in the list of terms
-	bannerTerm, exists := lo.Find(terms, func(t BannerTerm) bool {
-		return t.Code == term
-	})
-
-	if !exists {
-		log.Warn().Str("term", term).Msg("Term does not exist")
-		return true
-	}
-
-	return bannerTerm.Archived()
 }
 
 // Point represents a point in 2D space

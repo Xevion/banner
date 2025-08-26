@@ -1,11 +1,15 @@
-package main
+package api
 
 import (
+	"banner/internal/config"
+	"banner/internal/models"
+	"banner/internal/utils"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -13,7 +17,9 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 )
 
 var (
@@ -34,7 +40,101 @@ func ResetSessionTimer() {
 // GenerateSession generates a new session ID (nonce) for use with the Banner API.
 // Don't use this function directly, use GetSession instead.
 func GenerateSession() string {
-	return RandomString(5) + Nonce()
+	return utils.RandomString(5) + utils.Nonce()
+}
+
+// DoRequest performs & logs the request, logging and returning the response
+func DoRequest(req *http.Request) (*http.Response, error) {
+	headerSize := 0
+	for key, values := range req.Header {
+		for _, value := range values {
+			headerSize += len(key)
+			headerSize += len(value)
+		}
+	}
+
+	bodySize := int64(0)
+	if req.Body != nil {
+		bodySize, _ = io.Copy(io.Discard, req.Body)
+	}
+
+	size := zerolog.Dict().Int64("body", bodySize).Int("header", headerSize).Int("url", len(req.URL.String()))
+
+	log.Debug().
+		Dict("size", size).
+		Str("method", strings.TrimRight(req.Method, " ")).
+		Str("url", req.URL.String()).
+		Str("query", req.URL.RawQuery).
+		Str("content-type", req.Header.Get("Content-Type")).
+		Msg("Request")
+
+	res, err := config.Client.Do(req)
+
+	if err != nil {
+		log.Err(err).Stack().Str("method", req.Method).Msg("Request Failed")
+	} else {
+		contentLengthHeader := res.Header.Get("Content-Length")
+		contentLength := int64(-1)
+
+		// If this request was a Banner API request, reset the session timer
+		if strings.HasPrefix(req.URL.Path, "StudentRegistrationSsb/ssb/classSearch/") {
+			ResetSessionTimer()
+		}
+
+		// Get the content length
+		if contentLengthHeader != "" {
+			contentLength, err = strconv.ParseInt(contentLengthHeader, 10, 64)
+			if err != nil {
+				contentLength = -1
+			}
+		}
+
+		log.Debug().Int("status", res.StatusCode).Int64("content-length", contentLength).Strs("content-type", res.Header["Content-Type"]).Msg("Response")
+	}
+	return res, err
+}
+
+var terms []BannerTerm
+var lastTermUpdate time.Time
+
+// TryReloadTerms attempts to reload the terms if they are not loaded or the last update was more than 24 hours ago
+func TryReloadTerms() error {
+	if len(terms) > 0 && time.Since(lastTermUpdate) < 24*time.Hour {
+		return nil
+	}
+
+	// Load the terms
+	var err error
+	terms, err = GetTerms("", 1, 100)
+	if err != nil {
+		return fmt.Errorf("failed to load terms: %w", err)
+	}
+
+	lastTermUpdate = time.Now()
+	return nil
+}
+
+// IsTermArchived checks if the given term is archived
+// TODO: Add error, switch missing term logic to error
+func IsTermArchived(term string) bool {
+	// Ensure the terms are loaded
+	err := TryReloadTerms()
+	if err != nil {
+		log.Err(err).Stack().Msg("Failed to reload terms")
+		return true
+	}
+
+	// Check if the term is in the list of terms
+	bannerTerm, exists := lo.Find(terms, func(t BannerTerm) bool {
+		return t.Code == term
+	})
+
+	if !exists {
+		log.Warn().Str("term", term).Msg("Term does not exist")
+		return true
+	}
+
+	return bannerTerm.Archived()
 }
 
 // GetSession retrieves the current session ID if it's still valid.
@@ -47,7 +147,7 @@ func GetSession() string {
 		latestSession = GenerateSession()
 
 		// Select the current term
-		term := Default(time.Now()).ToString()
+		term := utils.Default(time.Now()).ToString()
 		log.Info().Str("term", term).Str("sessionID", latestSession).Msg("Setting selected term")
 		err := SelectTerm(term, latestSession)
 		if err != nil {
@@ -81,12 +181,12 @@ func GetTerms(search string, page int, max int) ([]BannerTerm, error) {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := BuildRequest("GET", "/classSearch/getTerms", map[string]string{
+	req := utils.BuildRequest("GET", "/classSearch/getTerms", map[string]string{
 		"searchTerm": search,
 		// Page vs Offset is not a mistake here, the API uses "offset" as the page number
 		"offset": strconv.Itoa(page),
 		"max":    strconv.Itoa(max),
-		"_":      Nonce(),
+		"_":      utils.Nonce(),
 	})
 
 	if page <= 0 {
@@ -99,9 +199,9 @@ func GetTerms(search string, page int, max int) ([]BannerTerm, error) {
 	}
 
 	// Assert that the response is JSON
-	if contentType := res.Header.Get("Content-Type"); !strings.Contains(contentType, JsonContentType) {
-		return nil, &UnexpectedContentTypeError{
-			Expected: JsonContentType,
+	if contentType := res.Header.Get("Content-Type"); !strings.Contains(contentType, models.JsonContentType) {
+		return nil, &utils.UnexpectedContentTypeError{
+			Expected: models.JsonContentType,
 			Actual:   contentType,
 		}
 	}
@@ -139,7 +239,7 @@ func SelectTerm(term string, sessionId string) error {
 		"mode": "search",
 	}
 
-	req := BuildRequestWithBody("POST", "/term/search", params, bytes.NewBufferString(form.Encode()))
+	req := utils.BuildRequestWithBody("POST", "/term/search", params, bytes.NewBufferString(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	res, err := DoRequest(req)
@@ -148,7 +248,7 @@ func SelectTerm(term string, sessionId string) error {
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		return fmt.Errorf("response was not JSON: %w", res.Header.Get("Content-Type"))
 	}
 
@@ -165,7 +265,7 @@ func SelectTerm(term string, sessionId string) error {
 	json.Unmarshal(body, &redirectResponse)
 
 	// Make a GET request to the fwdUrl
-	req = BuildRequest("GET", redirectResponse.FwdUrl, nil)
+	req = utils.BuildRequest("GET", redirectResponse.FwdUrl, nil)
 	res, err = DoRequest(req)
 	if err != nil {
 		return fmt.Errorf("failed to follow redirect: %w", err)
@@ -187,13 +287,13 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := BuildRequest("GET", "/classSearch/get_partOfTerm", map[string]string{
+	req := utils.BuildRequest("GET", "/classSearch/get_partOfTerm", map[string]string{
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": GetSession(),
-		"_":               Nonce(),
+		"_":               utils.Nonce(),
 	})
 
 	res, err := DoRequest(req)
@@ -202,7 +302,7 @@ func GetPartOfTerms(search string, term int, offset int, max int) ([]BannerTerm,
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		log.Panic().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
@@ -231,13 +331,13 @@ func GetInstructors(search string, term string, offset int, max int) ([]Instruct
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := BuildRequest("GET", "/classSearch/get_instructor", map[string]string{
+	req := utils.BuildRequest("GET", "/classSearch/get_instructor", map[string]string{
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": GetSession(),
-		"_":               Nonce(),
+		"_":               utils.Nonce(),
 	})
 
 	res, err := DoRequest(req)
@@ -246,7 +346,7 @@ func GetInstructors(search string, term string, offset int, max int) ([]Instruct
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
@@ -279,7 +379,7 @@ func GetCourseDetails(term int, crn int) *ClassDetails {
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Failed to marshal body")
 	}
-	req := BuildRequestWithBody("GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
+	req := utils.BuildRequestWithBody("GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
 
 	res, err := DoRequest(req)
 	if err != nil {
@@ -287,7 +387,7 @@ func GetCourseDetails(term int, crn int) *ClassDetails {
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
@@ -295,7 +395,7 @@ func GetCourseDetails(term int, crn int) *ClassDetails {
 }
 
 // Search invokes a search on the Banner system with the given query and returns the results.
-func Search(query *Query, sort string, sortDescending bool) (*SearchResult, error) {
+func Search(query *Query, sort string, sortDescending bool) (*models.SearchResult, error) {
 	ResetDataForm()
 
 	params := query.Paramify()
@@ -309,7 +409,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 	params["startDatepicker"] = ""
 	params["endDatepicker"] = ""
 
-	req := BuildRequest("GET", "/searchResults/searchResults", params)
+	req := utils.BuildRequest("GET", "/searchResults/searchResults", params)
 
 	res, err := DoRequest(req)
 	if err != nil {
@@ -321,7 +421,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		// for server 500 errors, parse for the error with '#dialog-message > div.message'
 		log.Error().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
@@ -332,7 +432,7 @@ func Search(query *Query, sort string, sortDescending bool) (*SearchResult, erro
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	var result SearchResult
+	var result models.SearchResult
 	err = json.Unmarshal(body, &result)
 
 	if err != nil {
@@ -351,13 +451,13 @@ func GetSubjects(search string, term string, offset int, max int) ([]Pair, error
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := BuildRequest("GET", "/classSearch/get_subject", map[string]string{
+	req := utils.BuildRequest("GET", "/classSearch/get_subject", map[string]string{
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": GetSession(),
-		"_":               Nonce(),
+		"_":               utils.Nonce(),
 	})
 
 	res, err := DoRequest(req)
@@ -366,7 +466,7 @@ func GetSubjects(search string, term string, offset int, max int) ([]Pair, error
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
@@ -395,13 +495,13 @@ func GetCampuses(search string, term int, offset int, max int) ([]Pair, error) {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := BuildRequest("GET", "/classSearch/get_campus", map[string]string{
+	req := utils.BuildRequest("GET", "/classSearch/get_campus", map[string]string{
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": GetSession(),
-		"_":               Nonce(),
+		"_":               utils.Nonce(),
 	})
 
 	res, err := DoRequest(req)
@@ -410,7 +510,7 @@ func GetCampuses(search string, term int, offset int, max int) ([]Pair, error) {
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
@@ -439,13 +539,13 @@ func GetInstructionalMethods(search string, term string, offset int, max int) ([
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := BuildRequest("GET", "/classSearch/get_instructionalMethod", map[string]string{
+	req := utils.BuildRequest("GET", "/classSearch/get_instructionalMethod", map[string]string{
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(max),
 		"uniqueSessionId": GetSession(),
-		"_":               Nonce(),
+		"_":               utils.Nonce(),
 	})
 
 	res, err := DoRequest(req)
@@ -454,7 +554,7 @@ func GetInstructionalMethods(search string, term string, offset int, max int) ([
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
@@ -473,8 +573,8 @@ func GetInstructionalMethods(search string, term string, offset int, max int) ([
 // GetCourseMeetingTime retrieves the meeting time information for a course based on the given term and course reference number (CRN).
 // It makes an HTTP GET request to the appropriate API endpoint and parses the response to extract the meeting time data.
 // The function returns a MeetingTimeResponse struct containing the extracted information.
-func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
-	req := BuildRequest("GET", "/searchResults/getFacultyMeetingTimes", map[string]string{
+func GetCourseMeetingTime(term int, crn int) ([]models.MeetingTimeResponse, error) {
+	req := utils.BuildRequest("GET", "/searchResults/getFacultyMeetingTimes", map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
 	})
@@ -485,7 +585,7 @@ func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 	}
 
 	// Assert that the response is JSON
-	if !ContentTypeMatch(res, "application/json") {
+	if !utils.ContentTypeMatch(res, "application/json") {
 		log.Fatal().Stack().Str("content-type", res.Header.Get("Content-Type")).Msg("Response was not JSON")
 	}
 
@@ -498,7 +598,7 @@ func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 
 	// Parse the JSON into a MeetingTimeResponse struct
 	var meetingTime struct {
-		Inner []MeetingTimeResponse `json:"fmt"`
+		Inner []models.MeetingTimeResponse `json:"fmt"`
 	}
 	err = json.Unmarshal(body, &meetingTime)
 	if err != nil {
@@ -510,7 +610,7 @@ func GetCourseMeetingTime(term int, crn int) ([]MeetingTimeResponse, error) {
 
 // ResetDataForm makes a POST request that needs to be made upon before new search requests can be made.
 func ResetDataForm() {
-	req := BuildRequest("POST", "/classSearch/resetDataForm", nil)
+	req := utils.BuildRequest("POST", "/classSearch/resetDataForm", nil)
 	_, err := DoRequest(req)
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Failed to reset data form")
@@ -519,9 +619,9 @@ func ResetDataForm() {
 
 // GetCourse retrieves the course information.
 // This course does not retrieve directly from the API, but rather uses scraped data stored in Redis.
-func GetCourse(crn string) (*Course, error) {
+func GetCourse(crn string) (*models.Course, error) {
 	// Retrieve raw data
-	result, err := kv.Get(ctx, fmt.Sprintf("class:%s", crn)).Result()
+	result, err := config.KV.Get(config.Ctx, fmt.Sprintf("class:%s", crn)).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, fmt.Errorf("course not found: %w", err)
@@ -530,7 +630,7 @@ func GetCourse(crn string) (*Course, error) {
 	}
 
 	// Unmarshal the raw data
-	var course Course
+	var course models.Course
 	err = json.Unmarshal([]byte(result), &course)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal course: %w", err)

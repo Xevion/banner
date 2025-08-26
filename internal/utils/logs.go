@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"io"
@@ -15,21 +15,21 @@ var (
 )
 
 // logSplitter implements zerolog.LevelWriter
-type logSplitter struct {
-	std io.Writer
-	err io.Writer
+type LogSplitter struct {
+	Std io.Writer
+	Err io.Writer
 }
 
 // Write should not be called
-func (l logSplitter) Write(p []byte) (n int, err error) {
-	return l.std.Write(p)
+func (l LogSplitter) Write(p []byte) (n int, err error) {
+	return l.Std.Write(p)
 }
 
 // WriteLevel write to the appropriate output
-func (l logSplitter) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
+func (l LogSplitter) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 	if level <= zerolog.WarnLevel {
-		return l.std.Write(p)
+		return l.Std.Write(p)
 	} else {
-		return l.err.Write(p)
+		return l.Err.Write(p)
 	}
 }

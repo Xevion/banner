@@ -1,12 +1,14 @@
-package main
+package api
 
 import (
+	"banner/internal/config"
+	"banner/internal/utils"
 	"net/url"
 
 	log "github.com/rs/zerolog/log"
 )
 
-func setup() {
+func Setup() {
 	// Makes the initial requests that sets up the session cookies for the rest of the application
 	log.Info().Msg("Setting up session...")
 
@@ -16,17 +18,17 @@ func setup() {
 	}
 
 	for _, path := range request_queue {
-		req := BuildRequest("GET", path, nil)
+		req := utils.BuildRequest("GET", path, nil)
 		DoRequest(req)
 	}
 
 	// Validate that cookies were set
-	baseUrlParsed, err := url.Parse(baseURL)
+	baseUrlParsed, err := url.Parse(config.BaseURL)
 	if err != nil {
-		log.Fatal().Stack().Str("baseURL", baseURL).Err(err).Msg("Failed to parse baseURL")
+		log.Fatal().Stack().Str("baseURL", config.BaseURL).Err(err).Msg("Failed to parse baseURL")
 	}
 
-	current_cookies := client.Jar.Cookies(baseUrlParsed)
+	current_cookies := config.Client.Jar.Cookies(baseUrlParsed)
 	required_cookies := map[string]bool{
 		"JSESSIONID": false,
 		"SSB_COOKIE": false,
