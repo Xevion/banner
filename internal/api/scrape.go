@@ -1,7 +1,6 @@
 package api
 
 import (
-	"banner/internal/config"
 	"banner/internal/models"
 	"banner/internal/utils"
 	"fmt"
@@ -25,40 +24,41 @@ var (
 	AllMajors []string
 )
 
-// Scrape is the general scraping invocation (best called within/as a goroutine) that should be called regularly to initiate scraping of the Banner system.
-func Scrape() error {
-	// Populate AllMajors if it is empty
-	if len(AncillaryMajors) == 0 {
-		term := utils.Default(time.Now()).ToString()
-		subjects, err := GetSubjects("", term, 1, 99)
-		if err != nil {
-			return fmt.Errorf("failed to get subjects: %w", err)
-		}
-
-		// Ensure subjects were found
-		if len(subjects) == 0 {
-			return fmt.Errorf("no subjects found")
-		}
-
-		// Extract major code name
-		for _, subject := range subjects {
-			// Add to AncillaryMajors if not in PriorityMajors
-			if !lo.Contains(PriorityMajors, subject.Code) {
-				AncillaryMajors = append(AncillaryMajors, subject.Code)
-			}
-		}
-
-		AllMajors = lo.Flatten([][]string{PriorityMajors, AncillaryMajors})
+// Scrape scrapes the API for all courses and stores them in Redis.
+// This is a long-running process that should be run in a goroutine.
+// TODO: Switch from hardcoded term to dynamic term
+func (a *API) Scrape() error {
+	// For each subject, retrieve all courses
+	// For each course, get the details and store it in redis
+	// Make sure to handle pagination
+	subjects, err := a.GetSubjects("", "202510", 1, 100)
+	if err != nil {
+		return fmt.Errorf("failed to get subjects: %w", err)
 	}
 
-	expiredSubjects, err := GetExpiredSubjects()
+	// Ensure subjects were found
+	if len(subjects) == 0 {
+		return fmt.Errorf("no subjects found")
+	}
+
+	// Extract major code name
+	for _, subject := range subjects {
+		// Add to AncillaryMajors if not in PriorityMajors
+		if !lo.Contains(PriorityMajors, subject.Code) {
+			AncillaryMajors = append(AncillaryMajors, subject.Code)
+		}
+	}
+
+	AllMajors = lo.Flatten([][]string{PriorityMajors, AncillaryMajors})
+
+	expiredSubjects, err := a.GetExpiredSubjects()
 	if err != nil {
 		return fmt.Errorf("failed to get scrapable majors: %w", err)
 	}
 
 	log.Info().Strs("majors", expiredSubjects).Msg("Scraping majors")
 	for _, subject := range expiredSubjects {
-		err := ScrapeMajor(subject)
+		err := a.ScrapeMajor(subject)
 		if err != nil {
 			return fmt.Errorf("failed to scrape major %s: %w", subject, err)
 		}
@@ -68,12 +68,12 @@ func Scrape() error {
 }
 
 // GetExpiredSubjects returns a list of subjects that are expired and should be scraped.
-func GetExpiredSubjects() ([]string, error) {
+func (a *API) GetExpiredSubjects() ([]string, error) {
 	term := utils.Default(time.Now()).ToString()
 	subjects := make([]string, 0)
 
 	// Get all subjects
-	values, err := config.KV.MGet(config.Ctx, lo.Map(AllMajors, func(major string, _ int) string {
+	values, err := a.config.KV.MGet(a.config.Ctx, lo.Map(AllMajors, func(major string, _ int) string {
 		return fmt.Sprintf("scraped:%s:%s", major, term)
 	})...).Result()
 	if err != nil {
@@ -97,14 +97,15 @@ func GetExpiredSubjects() ([]string, error) {
 
 // ScrapeMajor is the scraping invocation for a specific major.
 // This function does not check whether scraping is required at this time, it is assumed that the caller has already done so.
-func ScrapeMajor(subject string) error {
+func (a *API) ScrapeMajor(subject string) error {
 	offset := 0
 	totalClassCount := 0
 
 	for {
 		// Build & execute the query
 		query := NewQuery().Offset(offset).MaxResults(MaxPageSize * 2).Subject(subject)
-		result, err := Search(query, "subjectDescription", false)
+		term := utils.Default(time.Now()).ToString()
+		result, err := a.Search(term, query, "subjectDescription", false)
 		if err != nil {
 			return fmt.Errorf("search failed: %w (%s)", err, query.String())
 		}
@@ -121,7 +122,7 @@ func ScrapeMajor(subject string) error {
 		// Process each class and store it in Redis
 		for _, course := range result.Data {
 			// Store class in Redis
-			err := IntakeCourse(course)
+			err := a.IntakeCourse(course)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to store class in Redis")
 			}
@@ -153,14 +154,14 @@ func ScrapeMajor(subject string) error {
 	if totalClassCount == 0 {
 		scrapeExpiry = time.Hour * 12
 	} else {
-		scrapeExpiry = CalculateExpiry(term, totalClassCount, lo.Contains(PriorityMajors, subject))
+		scrapeExpiry = a.CalculateExpiry(term, totalClassCount, lo.Contains(PriorityMajors, subject))
 	}
 
 	// Mark the major as scraped
 	if totalClassCount == 0 {
 		totalClassCount = -1
 	}
-	err := config.KV.Set(config.Ctx, fmt.Sprintf("scraped:%s:%s", subject, term), totalClassCount, scrapeExpiry).Err()
+	err := a.config.KV.Set(a.config.Ctx, fmt.Sprintf("scraped:%s:%s", subject, term), totalClassCount, scrapeExpiry).Err()
 	if err != nil {
 		log.Error().Err(err).Msg("failed to mark major as scraped")
 	}
@@ -172,7 +173,7 @@ func ScrapeMajor(subject string) error {
 // term is the term for which the relevant course is occurring within.
 // count is the number of courses that were scraped.
 // priority is a boolean indicating whether the major is a priority major.
-func CalculateExpiry(term string, count int, priority bool) time.Duration {
+func (a *API) CalculateExpiry(term string, count int, priority bool) time.Duration {
 	// An hour for every 100 classes
 	baseExpiry := time.Hour * time.Duration(count/100)
 
@@ -190,7 +191,7 @@ func CalculateExpiry(term string, count int, priority bool) time.Duration {
 
 	// If the term is considered "view only" or "archived", then the expiry is multiplied by 5
 	var expiry = baseExpiry
-	if IsTermArchived(term) {
+	if a.IsTermArchived(term) {
 		expiry *= 5
 	}
 
@@ -212,8 +213,8 @@ func CalculateExpiry(term string, count int, priority bool) time.Duration {
 
 // IntakeCourse stores a course in Redis.
 // This function is mostly a stub for now, but will be used to handle change identification, notifications, and SQLite upserts in the future.
-func IntakeCourse(course models.Course) error {
-	err := config.KV.Set(config.Ctx, fmt.Sprintf("class:%s", course.CourseReferenceNumber), course, 0).Err()
+func (a *API) IntakeCourse(course models.Course) error {
+	err := a.config.KV.Set(a.config.Ctx, fmt.Sprintf("class:%s", course.CourseReferenceNumber), course, 0).Err()
 	if err != nil {
 		return fmt.Errorf("failed to store class in Redis: %w", err)
 	}

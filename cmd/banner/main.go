@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"flag"
-	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	_ "net/http/pprof"
@@ -25,21 +23,13 @@ import (
 
 	"banner/internal/api"
 	"banner/internal/bot"
+	"banner/internal/config"
 	"banner/internal/utils"
 )
 
 var (
-	ctx                 context.Context
-	kv                  *redis.Client
-	Session             *discordgo.Session
-	client              http.Client
-	cookies             http.CookieJar
-	isDevelopment       bool
-	baseURL             string // Base URL for all requests to the banner system
-	environment         string
-	p                   *message.Printer = message.NewPrinter(message.MatchLanguage("en"))
-	CentralTimeLocation *time.Location
-	isClosing           bool = false
+	Session *discordgo.Session
+	p       *message.Printer = message.NewPrinter(message.MatchLanguage("en"))
 )
 
 const (
@@ -54,43 +44,36 @@ func init() {
 		log.Debug().Err(err).Msg("Error loading .env file")
 	}
 
-	ctx = context.Background()
-
-	var err error
-	CentralTimeLocation, err = time.LoadLocation(CentralTimezoneName)
-	if err != nil {
-		panic(err)
-	}
-
 	// Set zerolog's timestamp function to use the central timezone
 	zerolog.TimestampFunc = func() time.Time {
-		return time.Now().In(CentralTimeLocation)
+		// TODO: Move this to config
+		loc, err := time.LoadLocation(CentralTimezoneName)
+		if err != nil {
+			panic(err)
+		}
+		return time.Now().In(loc)
 	}
 
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 
-	// Try to grab the environment variable, or default to development
-	environment = utils.GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
-	if environment == "" {
-		environment = "development"
+	// Use the custom console writer if we're in development
+	isDevelopment := utils.GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
+	if isDevelopment == "" {
+		isDevelopment = "development"
 	}
 
-	// Use the custom console writer if we're in development
-	isDevelopment = environment == "development"
-	if isDevelopment {
+	if isDevelopment == "development" {
 		log.Logger = zerolog.New(utils.LogSplitter{Std: os.Stdout, Err: os.Stderr}).With().Timestamp().Logger()
 	} else {
 		log.Logger = zerolog.New(utils.LogSplitter{Std: os.Stdout, Err: os.Stderr}).With().Timestamp().Logger()
 	}
-	log.Debug().Str("environment", environment).Msg("Loggers Setup")
+	log.Debug().Str("environment", isDevelopment).Msg("Loggers Setup")
 
 	// Set discordgo's logger to use zerolog
 	discordgo.Logger = utils.DiscordGoLogger
-
-	baseURL = os.Getenv("BANNER_BASE_URL")
 }
 
-func initRedis() {
+func initRedis(cfg *config.Config) {
 	// Setup redis
 	redisUrl := utils.GetFirstEnv("REDIS_URL", "REDIS_PRIVATE_URL")
 	if redisUrl == "" {
@@ -102,14 +85,15 @@ func initRedis() {
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Cannot parse redis url")
 	}
-	kv = redis.NewClient(options)
+	kv := redis.NewClient(options)
+	cfg.SetRedis(kv)
 
 	var lastPingErr error
 	pingCount := 0  // Nth ping being attempted
 	totalPings := 5 // Total pings to attempt
 
 	// Wait for private networking to kick in (production only)
-	if !isDevelopment {
+	if !cfg.IsDevelopment {
 		time.Sleep(250 * time.Millisecond)
 	}
 
@@ -121,7 +105,7 @@ func initRedis() {
 		}
 
 		// Ping redis
-		pong, err := kv.Ping(ctx).Result()
+		pong, err := cfg.KV.Ping(cfg.Ctx).Result()
 
 		// Failed; log error and wait 2 seconds
 		if err != nil {
@@ -140,7 +124,19 @@ func initRedis() {
 func main() {
 	flag.Parse()
 
-	initRedis()
+	cfg, err := config.New()
+	if err != nil {
+		log.Fatal().Stack().Err(err).Msg("Cannot create config")
+	}
+
+	// Try to grab the environment variable, or default to development
+	environment := utils.GetFirstEnv("ENVIRONMENT", "RAILWAY_ENVIRONMENT")
+	if environment == "" {
+		environment = "development"
+	}
+	cfg.SetEnvironment(environment)
+
+	initRedis(cfg)
 
 	if strings.EqualFold(os.Getenv("PPROF_ENABLE"), "true") {
 		// Start pprof server
@@ -156,110 +152,40 @@ func main() {
 	}
 
 	// Create cookie jar
-	var err error
-	cookies, err = cookiejar.New(nil)
+	cookies, err := cookiejar.New(nil)
 	if err != nil {
 		log.Err(err).Msg("Cannot create cookie jar")
 	}
 
 	// Create client, setup session (acquire cookies)
-	client = http.Client{Jar: cookies}
-	api.Setup()
+	client := &http.Client{Jar: cookies}
+	cfg.SetClient(client)
+
+	baseURL := os.Getenv("BANNER_BASE_URL")
+	cfg.SetBaseURL(baseURL)
+
+	apiInstance := api.New(cfg)
+	apiInstance.Setup()
 
 	// Create discord session
-	Session, err = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
+	session, err := discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
 	if err != nil {
 		log.Err(err).Msg("Invalid bot parameters")
 	}
 
+	botInstance := bot.New(session, apiInstance, cfg)
+	botInstance.RegisterHandlers()
+
 	// Open discord session
-	Session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
+	session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		log.Info().Str("username", r.User.Username).Str("discriminator", r.User.Discriminator).Str("id", r.User.ID).Str("session", s.State.SessionID).Msg("Bot is logged in")
 	})
-	err = Session.Open()
+	err = session.Open()
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Cannot open the session")
 	}
 
 	// Setup command handlers
-	Session.AddHandler(func(internalSession *discordgo.Session, interaction *discordgo.InteractionCreate) {
-		// Handle commands during restart (highly unlikely, but just in case)
-		if isClosing {
-			err := utils.RespondError(internalSession, interaction.Interaction, "Bot is currently restarting, try again later.", nil)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to respond with restart error feedback")
-			}
-			return
-		}
-
-		name := interaction.ApplicationCommandData().Name
-		if handler, ok := bot.CommandHandlers[name]; ok {
-			// Build dict of options for the log
-			options := zerolog.Dict()
-			for _, option := range interaction.ApplicationCommandData().Options {
-				options.Str(option.Name, fmt.Sprintf("%v", option.Value))
-			}
-
-			event := log.Info().Str("name", name).Str("user", utils.GetUser(interaction).Username).Dict("options", options)
-
-			// If the command was invoked in a guild, add guild & channel info to the log
-			if interaction.Member != nil {
-				guild := zerolog.Dict()
-				guild.Str("id", interaction.GuildID)
-				guild.Str("name", utils.GetGuildName(internalSession, interaction.GuildID))
-				event.Dict("guild", guild)
-
-				channel := zerolog.Dict()
-				channel.Str("id", interaction.ChannelID)
-				guild.Str("name", utils.GetChannelName(internalSession, interaction.ChannelID))
-				event.Dict("channel", channel)
-			} else {
-				// If the command was invoked in a DM, add the user info to the log
-				user := zerolog.Dict()
-				user.Str("id", interaction.User.ID)
-				user.Str("name", interaction.User.Username)
-				event.Dict("user", user)
-			}
-
-			// Log command invocation
-			event.Msg("Command Invoked")
-
-			// Prepare to recover
-			defer func() {
-				if err := recover(); err != nil {
-					log.Error().Stack().Str("commandName", name).Interface("detail", err).Msg("Command Handler Panic")
-
-					// Respond with error
-					err := utils.RespondError(internalSession, interaction.Interaction, "Unexpected Error: command handler panic", nil)
-					if err != nil {
-						log.Error().Stack().Str("commandName", name).Err(err).Msg("Failed to respond with panic error feedback")
-					}
-				}
-			}()
-
-			// Call handler
-			err := handler(internalSession, interaction)
-
-			// Log & respond error
-			if err != nil {
-				// TODO: Find a way to merge the response with the handler's error
-				log.Error().Str("commandName", name).Err(err).Msg("Command Handler Error")
-
-				// Respond with error
-				err = utils.RespondError(internalSession, interaction.Interaction, fmt.Sprintf("Unexpected Error: %s", err.Error()), nil)
-				if err != nil {
-					log.Error().Stack().Str("commandName", name).Err(err).Msg("Failed to respond with error feedback")
-				}
-			}
-
-		} else {
-			log.Error().Stack().Str("commandName", name).Msg("Command Interaction Has No Handler")
-
-			// Respond with error
-			utils.RespondError(internalSession, interaction.Interaction, "Unexpected Error: interaction has no handler", nil)
-		}
-	})
-
 	// Register commands with discord
 	arr := zerolog.Arr()
 	lo.ForEach(bot.CommandDefinitions, func(cmd *discordgo.ApplicationCommand, _ int) {
@@ -269,16 +195,16 @@ func main() {
 
 	// In development, use test server, otherwise empty (global) for command registration
 	guildTarget := ""
-	if isDevelopment {
+	if cfg.IsDevelopment {
 		guildTarget = os.Getenv("BOT_TARGET_GUILD")
 	}
 
 	// Register commands
-	existingCommands, err := Session.ApplicationCommands(Session.State.User.ID, guildTarget)
+	existingCommands, err := session.ApplicationCommands(session.State.User.ID, guildTarget)
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Cannot get existing commands")
 	}
-	newCommands, err := Session.ApplicationCommandBulkOverwrite(Session.State.User.ID, guildTarget, bot.CommandDefinitions)
+	newCommands, err := session.ApplicationCommandBulkOverwrite(session.State.User.ID, guildTarget, bot.CommandDefinitions)
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Cannot register commands")
 	}
@@ -304,7 +230,7 @@ func main() {
 	}
 
 	// Fetch terms on startup
-	err = api.TryReloadTerms()
+	err = apiInstance.TryReloadTerms()
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Cannot fetch terms on startup")
 	}
@@ -312,7 +238,7 @@ func main() {
 	// Launch a goroutine to scrape the banner system periodically
 	go func() {
 		for {
-			err := api.Scrape()
+			err := apiInstance.Scrape()
 			if err != nil {
 				log.Err(err).Stack().Msg("Periodic Scrape Failed")
 			}
@@ -322,7 +248,7 @@ func main() {
 	}()
 
 	// Close session, ensure http client closes idle connections
-	defer Session.Close()
+	defer session.Close()
 	defer client.CloseIdleConnections()
 
 	// Setup signal handler channel
@@ -332,7 +258,7 @@ func main() {
 
 	// Wait for signal (indefinite)
 	closingSignal := <-stop
-	isClosing = true // TODO: Switch to atomic lock with forced close after 10 seconds
+	botInstance.SetClosing() // TODO: Switch to atomic lock with forced close after 10 seconds
 
 	// Defers are called after this
 	log.Warn().Str("signal", closingSignal.String()).Msg("Gracefully shutting down")

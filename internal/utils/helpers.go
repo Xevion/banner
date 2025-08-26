@@ -20,10 +20,30 @@ import (
 	"banner/internal/config"
 )
 
+// Options is a map of options from a discord command.
+type Options map[string]*discordgo.ApplicationCommandInteractionDataOption
+
+// GetInt returns the integer value of an option.
+func (o Options) GetInt(key string) int64 {
+	if opt, ok := o[key]; ok {
+		return opt.IntValue()
+	}
+	return 0
+}
+
+// ParseOptions parses slash command options into a map.
+func ParseOptions(options []*discordgo.ApplicationCommandInteractionDataOption) Options {
+	optionMap := make(Options)
+	for _, opt := range options {
+		optionMap[opt.Name] = opt
+	}
+	return optionMap
+}
+
 // BuildRequestWithBody builds a request with the given method, path, parameters, and body
-func BuildRequestWithBody(method string, path string, params map[string]string, body io.Reader) *http.Request {
+func BuildRequestWithBody(cfg *config.Config, method string, path string, params map[string]string, body io.Reader) *http.Request {
 	// Builds a URL for the given path and parameters
-	requestUrl := config.BaseURL + path
+	requestUrl := cfg.BaseURL + path
 
 	if params != nil {
 		takenFirst := false
@@ -44,8 +64,8 @@ func BuildRequestWithBody(method string, path string, params map[string]string, 
 }
 
 // BuildRequest builds a request with the given method, path, and parameters and an empty body
-func BuildRequest(method string, path string, params map[string]string) *http.Request {
-	return BuildRequestWithBody(method, path, params, nil)
+func BuildRequest(cfg *config.Config, method string, path string, params map[string]string) *http.Request {
+	return BuildRequestWithBody(cfg, method, path, params, nil)
 }
 
 // AddUserAgent adds a false but consistent user agent to the request
@@ -309,9 +329,9 @@ func RespondError(session *discordgo.Session, interaction *discordgo.Interaction
 	})
 }
 
-func GetFetchedFooter(time time.Time) *discordgo.MessageEmbedFooter {
+func GetFetchedFooter(cfg *config.Config, time time.Time) *discordgo.MessageEmbedFooter {
 	return &discordgo.MessageEmbedFooter{
-		Text: fmt.Sprintf("Fetched at %s", time.In(config.CentralTimeLocation).Format("Monday, January 2, 2006 at 3:04:05PM")),
+		Text: fmt.Sprintf("Fetched at %s", time.In(cfg.CentralTimeLocation).Format("Monday, January 2, 2006 at 3:04:05PM")),
 	}
 }
 

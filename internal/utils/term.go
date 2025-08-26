@@ -30,7 +30,8 @@ var (
 )
 
 func init() {
-	SpringRange, SummerRange, FallRange = GetYearDayRange(uint16(time.Now().Year()))
+	loc, _ := time.LoadLocation(config.CentralTimezoneName)
+	SpringRange, SummerRange, FallRange = GetYearDayRange(loc, uint16(time.Now().Year()))
 
 	currentTerm, nextTerm := GetCurrentTerm(time.Now())
 	log.Debug().Str("CurrentTerm", fmt.Sprintf("%+v", currentTerm)).Str("NextTerm", fmt.Sprintf("%+v", nextTerm)).Msg("GetCurrentTerm")
@@ -46,13 +47,13 @@ type YearDayRange struct {
 // Spring: January 14th to May
 // Summer: May 25th - August 15th
 // Fall: August 18th - December 10th
-func GetYearDayRange(year uint16) (YearDayRange, YearDayRange, YearDayRange) {
-	springStart := time.Date(int(year), time.January, 14, 0, 0, 0, 0, config.CentralTimeLocation).YearDay()
-	springEnd := time.Date(int(year), time.May, 1, 0, 0, 0, 0, config.CentralTimeLocation).YearDay()
-	summerStart := time.Date(int(year), time.May, 25, 0, 0, 0, 0, config.CentralTimeLocation).YearDay()
-	summerEnd := time.Date(int(year), time.August, 15, 0, 0, 0, 0, config.CentralTimeLocation).YearDay()
-	fallStart := time.Date(int(year), time.August, 18, 0, 0, 0, 0, config.CentralTimeLocation).YearDay()
-	fallEnd := time.Date(int(year), time.December, 10, 0, 0, 0, 0, config.CentralTimeLocation).YearDay()
+func GetYearDayRange(loc *time.Location, year uint16) (YearDayRange, YearDayRange, YearDayRange) {
+	springStart := time.Date(int(year), time.January, 14, 0, 0, 0, 0, loc).YearDay()
+	springEnd := time.Date(int(year), time.May, 1, 0, 0, 0, 0, loc).YearDay()
+	summerStart := time.Date(int(year), time.May, 25, 0, 0, 0, 0, loc).YearDay()
+	summerEnd := time.Date(int(year), time.August, 15, 0, 0, 0, 0, loc).YearDay()
+	fallStart := time.Date(int(year), time.August, 18, 0, 0, 0, 0, loc).YearDay()
+	fallEnd := time.Date(int(year), time.December, 10, 0, 0, 0, 0, loc).YearDay()
 
 	return YearDayRange{
 			Start: uint16(springStart),

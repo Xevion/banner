@@ -2,7 +2,6 @@ package bot
 
 import (
 	"banner/internal/api"
-	"banner/internal/config"
 	"banner/internal/models"
 	"banner/internal/utils"
 	"fmt"
@@ -18,9 +17,16 @@ import (
 	"github.com/samber/lo"
 )
 
+const (
+	ICalTimestampFormatUtc   = "20060102T150405Z"
+	ICalTimestampFormatLocal = "20060102T150405"
+)
+
+type CommandHandler func(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error
+
 var (
 	CommandDefinitions = []*discordgo.ApplicationCommand{TermCommandDefinition, TimeCommandDefinition, SearchCommandDefinition, IcsCommandDefinition}
-	CommandHandlers    = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) error{
+	CommandHandlers    = map[string]CommandHandler{
 		TimeCommandDefinition.Name:   TimeCommandHandler,
 		TermCommandDefinition.Name:   TermCommandHandler,
 		SearchCommandDefinition.Name: SearchCommandHandler,
@@ -76,8 +82,8 @@ var SearchCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
-func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
-	data := interaction.ApplicationCommandData()
+func SearchCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	data := i.ApplicationCommandData()
 	query := api.NewQuery().Credits(3, 6)
 
 	for _, option := range data.Options {
@@ -177,9 +183,14 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		}
 	}
 
-	courses, err := api.Search(query, "", false)
+	term, err := b.GetSession()
 	if err != nil {
-		session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+		return err
+	}
+
+	courses, err := b.API.Search(term, query, "", false)
+	if err != nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "Error searching for courses",
@@ -222,12 +233,12 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 		color = 0xFF6500
 	}
 
-	err = session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      utils.GetFetchedFooter(fetch_time),
+					Footer:      utils.GetFetchedFooter(b.Config, fetch_time),
 					Description: fmt.Sprintf("%d Class%s", courses.TotalCount, utils.Plural(courses.TotalCount)),
 					Fields:      fields[:min(25, len(fields))],
 					Color:       color,
@@ -262,8 +273,8 @@ var TermCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
-func TermCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
-	data := interaction.ApplicationCommandData()
+func TermCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	data := i.ApplicationCommandData()
 
 	searchTerm := ""
 	pageNumber := 1
@@ -279,10 +290,10 @@ func TermCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 		}
 	}
 
-	termResult, err := api.GetTerms(searchTerm, pageNumber, 25)
+	termResult, err := b.API.GetTerms(searchTerm, pageNumber, 25)
 
 	if err != nil {
-		utils.RespondError(session, interaction.Interaction, "Error while fetching terms", err)
+		utils.RespondError(s, i.Interaction, "Error while fetching terms", err)
 		return err
 	}
 
@@ -302,12 +313,12 @@ func TermCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 		log.Warn().Int("count", len(fields)).Msg("Too many fields in term command (trimmed)")
 	}
 
-	err = session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      utils.GetFetchedFooter(fetch_time),
+					Footer:      utils.GetFetchedFooter(b.Config, fetch_time),
 					Description: fmt.Sprintf("%d term%s (page %d)", len(termResult), utils.Plural(len(termResult)), pageNumber),
 					Fields:      fields[:min(25, len(fields))],
 				},
@@ -332,12 +343,12 @@ var TimeCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
-func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+func TimeCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	fetch_time := time.Now()
 	crn := i.ApplicationCommandData().Options[0].IntValue()
 
 	// Fix static term
-	meetingTimes, err := api.GetCourseMeetingTime(202510, int(crn))
+	meetingTimes, err := b.API.GetCourseMeetingTime(202510, int(crn))
 	if err != nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -356,7 +367,7 @@ func TimeCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) er
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Footer:      utils.GetFetchedFooter(fetch_time),
+					Footer:      utils.GetFetchedFooter(b.Config, fetch_time),
 					Description: "",
 					Fields: []*discordgo.MessageEmbedField{
 						{
@@ -397,16 +408,18 @@ var IcsCommandDefinition = &discordgo.ApplicationCommand{
 	},
 }
 
-func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	crn := i.ApplicationCommandData().Options[0].IntValue()
+func IcsCommandHandler(b *Bot, s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	// Parse all options
+	options := utils.ParseOptions(i.ApplicationCommandData().Options)
+	crn := options.GetInt("crn")
 
-	course, err := api.GetCourse(strconv.Itoa(int(crn)))
+	course, err := b.API.GetCourse(strconv.Itoa(int(crn)))
 	if err != nil {
 		return fmt.Errorf("Error retrieving course data: %w", err)
 	}
 
 	// Fix static term
-	meetingTimes, err := api.GetCourseMeetingTime(202510, int(crn))
+	meetingTimes, err := b.API.GetCourseMeetingTime(202510, int(crn))
 	if err != nil {
 		return fmt.Errorf("Error requesting meeting time: %w", err)
 	}
@@ -433,21 +446,23 @@ func IcsCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) err
 
 	events := []string{}
 	for _, meeting := range meetingTimes {
-		now := time.Now().In(config.CentralTimeLocation)
+		now := time.Now().In(b.Config.CentralTimeLocation)
 		uid := fmt.Sprintf("%d-%s@ical.banner.xevion.dev", now.Unix(), meeting.CourseReferenceNumber)
 
 		startDay := meeting.StartDay()
 		startTime := meeting.StartTime()
 		endTime := meeting.EndTime()
-		dtStart := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(startTime.Hours), int(startTime.Minutes), 0, 0, config.CentralTimeLocation)
-		dtEnd := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(endTime.Hours), int(endTime.Minutes), 0, 0, config.CentralTimeLocation)
+		dtStart := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(startTime.Hours), int(startTime.Minutes), 0, 0, b.Config.CentralTimeLocation)
+		dtEnd := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), int(endTime.Hours), int(endTime.Minutes), 0, 0, b.Config.CentralTimeLocation)
 
-		endDay := meeting.EndDay()
-		until := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 23, 59, 59, 0, config.CentralTimeLocation)
+		// endDay := meeting.EndDay()
+		// until := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 23, 59, 59, 0, b.Config.CentralTimeLocation)
 
 		summary := fmt.Sprintf("%s %s %s", course.Subject, course.CourseNumber, course.CourseTitle)
 		description := fmt.Sprintf("Instructor: %s\nSection: %s\nCRN: %s", course.Faculty[0].DisplayName, course.SequenceNumber, meeting.CourseReferenceNumber)
 		location := meeting.PlaceString()
+
+		rrule := meeting.RRule()
 
 		event := fmt.Sprintf(`BEGIN:VEVENT
 DTSTAMP:%s
@@ -458,7 +473,7 @@ DTEND;TZID=America/Chicago:%s
 SUMMARY:%s
 DESCRIPTION:%s
 LOCATION:%s
-END:VEVENT`, now.Format(config.ICalTimestampFormatLocal), uid, dtStart.Format(config.ICalTimestampFormatLocal), meeting.ByDay(), until.Format(config.ICalTimestampFormatLocal), dtEnd.Format(config.ICalTimestampFormatLocal), summary, strings.Replace(description, "\n", `\n`, -1), location)
+END:VEVENT`, now.Format(ICalTimestampFormatLocal), uid, dtStart.Format(ICalTimestampFormatLocal), rrule.ByDay, rrule.Until, dtEnd.Format(ICalTimestampFormatLocal), summary, strings.Replace(description, "\n", `\n`, -1), location)
 
 		events = append(events, event)
 	}

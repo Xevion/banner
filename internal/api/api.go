@@ -22,6 +22,14 @@ import (
 	"github.com/samber/lo"
 )
 
+type API struct {
+	config *config.Config
+}
+
+func New(config *config.Config) *API {
+	return &API{config: config}
+}
+
 var (
 	latestSession string
 	sessionTime   time.Time
@@ -44,7 +52,7 @@ func GenerateSession() string {
 }
 
 // DoRequest performs & logs the request, logging and returning the response
-func DoRequest(req *http.Request) (*http.Response, error) {
+func (a *API) DoRequest(req *http.Request) (*http.Response, error) {
 	headerSize := 0
 	for key, values := range req.Header {
 		for _, value := range values {
@@ -68,7 +76,7 @@ func DoRequest(req *http.Request) (*http.Response, error) {
 		Str("content-type", req.Header.Get("Content-Type")).
 		Msg("Request")
 
-	res, err := config.Client.Do(req)
+	res, err := a.config.Client.Do(req)
 
 	if err != nil {
 		log.Err(err).Stack().Str("method", req.Method).Msg("Request Failed")
@@ -98,14 +106,14 @@ var terms []BannerTerm
 var lastTermUpdate time.Time
 
 // TryReloadTerms attempts to reload the terms if they are not loaded or the last update was more than 24 hours ago
-func TryReloadTerms() error {
+func (a *API) TryReloadTerms() error {
 	if len(terms) > 0 && time.Since(lastTermUpdate) < 24*time.Hour {
 		return nil
 	}
 
 	// Load the terms
 	var err error
-	terms, err = GetTerms("", 1, 100)
+	terms, err = a.GetTerms("", 1, 100)
 	if err != nil {
 		return fmt.Errorf("failed to load terms: %w", err)
 	}
@@ -116,9 +124,9 @@ func TryReloadTerms() error {
 
 // IsTermArchived checks if the given term is archived
 // TODO: Add error, switch missing term logic to error
-func IsTermArchived(term string) bool {
+func (a *API) IsTermArchived(term string) bool {
 	// Ensure the terms are loaded
-	err := TryReloadTerms()
+	err := a.TryReloadTerms()
 	if err != nil {
 		log.Err(err).Stack().Msg("Failed to reload terms")
 		return true
@@ -137,26 +145,12 @@ func IsTermArchived(term string) bool {
 	return bannerTerm.Archived()
 }
 
-// GetSession retrieves the current session ID if it's still valid.
-// If the session ID is invalid or has expired, a new one is generated and returned.
-// SessionIDs are valid for 30 minutes, but we'll be conservative and regenerate every 25 minutes.
-func GetSession() string {
-	// Check if a reset is required
+// EnsureSession ensures that a valid session is available, creating one if necessary.
+func (a *API) EnsureSession() string {
 	if latestSession == "" || time.Since(sessionTime) >= expiryTime {
-		// Generate a new session identifier
 		latestSession = GenerateSession()
-
-		// Select the current term
-		term := utils.Default(time.Now()).ToString()
-		log.Info().Str("term", term).Str("sessionID", latestSession).Msg("Setting selected term")
-		err := SelectTerm(term, latestSession)
-		if err != nil {
-			log.Fatal().Stack().Err(err).Msg("Failed to select term while generating session ID")
-		}
-
 		sessionTime = time.Now()
 	}
-
 	return latestSession
 }
 
@@ -175,13 +169,13 @@ func (term BannerTerm) Archived() bool {
 
 // GetTerms retrieves and parses the term information for a given search term.
 // Page number must be at least 1.
-func GetTerms(search string, page int, maxResults int) ([]BannerTerm, error) {
+func (a *API) GetTerms(search string, page int, maxResults int) ([]BannerTerm, error) {
 	// Ensure offset is valid
 	if page <= 0 {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest("GET", "/classSearch/getTerms", map[string]string{
+	req := utils.BuildRequest(a.config, "GET", "/classSearch/getTerms", map[string]string{
 		"searchTerm": search,
 		// Page vs Offset is not a mistake here, the API uses "offset" as the page number
 		"offset": strconv.Itoa(page),
@@ -193,7 +187,7 @@ func GetTerms(search string, page int, maxResults int) ([]BannerTerm, error) {
 		return nil, errors.New("Offset must be greater than 0")
 	}
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get terms: %w", err)
 	}
@@ -225,7 +219,7 @@ func GetTerms(search string, page int, maxResults int) ([]BannerTerm, error) {
 
 // SelectTerm selects the given term in the Banner system.
 // This function completes the initial term selection process, which is required before any other API calls can be made with the session ID.
-func SelectTerm(term string, sessionID string) error {
+func (a *API) SelectTerm(term string, sessionID string) error {
 	form := url.Values{
 		"term":            {term},
 		"studyPath":       {""},
@@ -239,10 +233,10 @@ func SelectTerm(term string, sessionID string) error {
 		"mode": "search",
 	}
 
-	req := utils.BuildRequestWithBody("POST", "/term/search", params, bytes.NewBufferString(form.Encode()))
+	req := utils.BuildRequestWithBody(a.config, "POST", "/term/search", params, bytes.NewBufferString(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return fmt.Errorf("failed to select term: %w", err)
 	}
@@ -265,8 +259,8 @@ func SelectTerm(term string, sessionID string) error {
 	json.Unmarshal(body, &redirectResponse)
 
 	// Make a GET request to the fwdUrl
-	req = utils.BuildRequest("GET", redirectResponse.FwdURL, nil)
-	res, err = DoRequest(req)
+	req = utils.BuildRequest(a.config, "GET", redirectResponse.FwdURL, nil)
+	res, err = a.DoRequest(req)
 	if err != nil {
 		return fmt.Errorf("failed to follow redirect: %w", err)
 	}
@@ -281,22 +275,22 @@ func SelectTerm(term string, sessionID string) error {
 
 // GetPartOfTerms retrieves and parses the part of term information for a given term.
 // Ensure that the offset is greater than 0.
-func GetPartOfTerms(search string, term int, offset int, maxResults int) ([]BannerTerm, error) {
+func (a *API) GetPartOfTerms(search string, term int, offset int, maxResults int) ([]BannerTerm, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest("GET", "/classSearch/get_partOfTerm", map[string]string{
+	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_partOfTerm", map[string]string{
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": GetSession(),
+		"uniqueSessionId": a.EnsureSession(),
 		"_":               utils.Nonce(),
 	})
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get part of terms: %w", err)
 	}
@@ -325,22 +319,22 @@ func GetPartOfTerms(search string, term int, offset int, maxResults int) ([]Bann
 // In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
 // This function is included for completeness, but probably isn't useful.
 // Ensure that the offset is greater than 0.
-func GetInstructors(search string, term string, offset int, maxResults int) ([]Instructor, error) {
+func (a *API) GetInstructors(search string, term string, offset int, maxResults int) ([]Instructor, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest("GET", "/classSearch/get_instructor", map[string]string{
+	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_instructor", map[string]string{
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": GetSession(),
+		"uniqueSessionId": a.EnsureSession(),
 		"_":               utils.Nonce(),
 	})
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get instructors: %w", err)
 	}
@@ -370,7 +364,7 @@ func GetInstructors(search string, term string, offset int, maxResults int) ([]I
 type ClassDetails struct {
 }
 
-func GetCourseDetails(term int, crn int) *ClassDetails {
+func (a *API) GetCourseDetails(term int, crn int) *ClassDetails {
 	body, err := json.Marshal(map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
@@ -379,9 +373,9 @@ func GetCourseDetails(term int, crn int) *ClassDetails {
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Failed to marshal body")
 	}
-	req := utils.BuildRequestWithBody("GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
+	req := utils.BuildRequestWithBody(a.config, "GET", "/searchResults/getClassDetails", nil, bytes.NewBuffer(body))
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil
 	}
@@ -395,13 +389,13 @@ func GetCourseDetails(term int, crn int) *ClassDetails {
 }
 
 // Search invokes a search on the Banner system with the given query and returns the results.
-func Search(query *Query, sort string, sortDescending bool) (*models.SearchResult, error) {
-	ResetDataForm()
+func (a *API) Search(term string, query *Query, sort string, sortDescending bool) (*models.SearchResult, error) {
+	a.ResetDataForm()
 
 	params := query.Paramify()
 
-	params["txt_term"] = "202510" // TODO: Make this automatic but dynamically specifiable
-	params["uniqueSessionId"] = GetSession()
+	params["txt_term"] = term
+	params["uniqueSessionId"] = a.EnsureSession()
 	params["sortColumn"] = sort
 	params["sortDirection"] = "asc"
 
@@ -409,9 +403,9 @@ func Search(query *Query, sort string, sortDescending bool) (*models.SearchResul
 	params["startDatepicker"] = ""
 	params["endDatepicker"] = ""
 
-	req := utils.BuildRequest("GET", "/searchResults/searchResults", params)
+	req := utils.BuildRequest(a.config, "GET", "/searchResults/searchResults", params)
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search: %w", err)
 	}
@@ -445,22 +439,22 @@ func Search(query *Query, sort string, sortDescending bool) (*models.SearchResul
 // GetSubjects retrieves and parses the subject information for a given search term.
 // The results of this response shouldn't change much, but technically could as new majors are developed, or old ones are removed.
 // Ensure that the offset is greater than 0.
-func GetSubjects(search string, term string, offset int, maxResults int) ([]Pair, error) {
+func (a *API) GetSubjects(search string, term string, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest("GET", "/classSearch/get_subject", map[string]string{
+	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_subject", map[string]string{
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": GetSession(),
+		"uniqueSessionId": a.EnsureSession(),
 		"_":               utils.Nonce(),
 	})
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get subjects: %w", err)
 	}
@@ -489,22 +483,22 @@ func GetSubjects(search string, term string, offset int, maxResults int) ([]Pair
 // In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
 // This function is included for completeness, but probably isn't useful.
 // Ensure that the offset is greater than 0.
-func GetCampuses(search string, term int, offset int, maxResults int) ([]Pair, error) {
+func (a *API) GetCampuses(search string, term int, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest("GET", "/classSearch/get_campus", map[string]string{
+	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_campus", map[string]string{
 		"searchTerm":      search,
 		"term":            strconv.Itoa(term),
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": GetSession(),
+		"uniqueSessionId": a.EnsureSession(),
 		"_":               utils.Nonce(),
 	})
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get campuses: %w", err)
 	}
@@ -533,22 +527,22 @@ func GetCampuses(search string, term int, offset int, maxResults int) ([]Pair, e
 // In my opinion, it is unclear what providing the term does, as the results should be the same regardless of the term.
 // This function is included for completeness, but probably isn't useful.
 // Ensure that the offset is greater than 0.
-func GetInstructionalMethods(search string, term string, offset int, maxResults int) ([]Pair, error) {
+func (a *API) GetInstructionalMethods(search string, term string, offset int, maxResults int) ([]Pair, error) {
 	// Ensure offset is valid
 	if offset <= 0 {
 		return nil, errors.New("offset must be greater than 0")
 	}
 
-	req := utils.BuildRequest("GET", "/classSearch/get_instructionalMethod", map[string]string{
+	req := utils.BuildRequest(a.config, "GET", "/classSearch/get_instructionalMethod", map[string]string{
 		"searchTerm":      search,
 		"term":            term,
 		"offset":          strconv.Itoa(offset),
 		"max":             strconv.Itoa(maxResults),
-		"uniqueSessionId": GetSession(),
+		"uniqueSessionId": a.EnsureSession(),
 		"_":               utils.Nonce(),
 	})
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get instructional methods: %w", err)
 	}
@@ -573,13 +567,13 @@ func GetInstructionalMethods(search string, term string, offset int, maxResults 
 // GetCourseMeetingTime retrieves the meeting time information for a course based on the given term and course reference number (CRN).
 // It makes an HTTP GET request to the appropriate API endpoint and parses the response to extract the meeting time data.
 // The function returns a MeetingTimeResponse struct containing the extracted information.
-func GetCourseMeetingTime(term int, crn int) ([]models.MeetingTimeResponse, error) {
-	req := utils.BuildRequest("GET", "/searchResults/getFacultyMeetingTimes", map[string]string{
+func (a *API) GetCourseMeetingTime(term int, crn int) ([]models.MeetingTimeResponse, error) {
+	req := utils.BuildRequest(a.config, "GET", "/searchResults/getFacultyMeetingTimes", map[string]string{
 		"term":                  strconv.Itoa(term),
 		"courseReferenceNumber": strconv.Itoa(crn),
 	})
 
-	res, err := DoRequest(req)
+	res, err := a.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get meeting time: %w", err)
 	}
@@ -609,9 +603,9 @@ func GetCourseMeetingTime(term int, crn int) ([]models.MeetingTimeResponse, erro
 }
 
 // ResetDataForm makes a POST request that needs to be made upon before new search requests can be made.
-func ResetDataForm() {
-	req := utils.BuildRequest("POST", "/classSearch/resetDataForm", nil)
-	_, err := DoRequest(req)
+func (a *API) ResetDataForm() {
+	req := utils.BuildRequest(a.config, "POST", "/classSearch/resetDataForm", nil)
+	_, err := a.DoRequest(req)
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Failed to reset data form")
 	}
@@ -619,9 +613,9 @@ func ResetDataForm() {
 
 // GetCourse retrieves the course information.
 // This course does not retrieve directly from the API, but rather uses scraped data stored in Redis.
-func GetCourse(crn string) (*models.Course, error) {
+func (a *API) GetCourse(crn string) (*models.Course, error) {
 	// Retrieve raw data
-	result, err := config.KV.Get(config.Ctx, fmt.Sprintf("class:%s", crn)).Result()
+	result, err := a.config.KV.Get(a.config.Ctx, fmt.Sprintf("class:%s", crn)).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, fmt.Errorf("course not found: %w", err)

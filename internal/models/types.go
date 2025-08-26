@@ -1,7 +1,6 @@
 package models
 
 import (
-	"banner/internal/config"
 	"banner/internal/utils"
 	"encoding/json"
 	"fmt"
@@ -226,15 +225,17 @@ func (m *MeetingTimeResponse) EndTime() *utils.NaiveTime {
 	return utils.ParseNaiveTime(value)
 }
 
+type RRule struct {
+	Until string
+	ByDay string
+}
+
 // Converts the meeting time to a string that satisfies the iCalendar RRule format
-func (m *MeetingTimeResponse) RRule() string {
-	sb := strings.Builder{}
-
-	sb.WriteString("FREQ=WEEKLY;")
-	sb.WriteString(fmt.Sprintf("UNTIL=%s;", m.EndDay().UTC().Format(config.ICalTimestampFormatUtc)))
-	sb.WriteString(fmt.Sprintf("BYDAY=%s;", m.ByDay()))
-
-	return sb.String()
+func (m *MeetingTimeResponse) RRule() RRule {
+	return RRule{
+		Until: m.EndDay().UTC().Format("20060102T150405Z"),
+		ByDay: m.ByDay(),
+	}
 }
 
 type SearchResult struct {
