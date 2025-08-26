@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	// MaxPageSize is the maximum number of courses one can scrape per page.
 	MaxPageSize = 500
 )
 
@@ -75,7 +76,7 @@ func (a *API) Scrape() error {
 // GetExpiredSubjects returns a list of subjects that have expired and should be scraped again.
 // It checks Redis for the "scraped" status of each major for the current term.
 func (a *API) GetExpiredSubjects() ([]string, error) {
-	term := Default(time.Now()).ToString()
+	term := a.DefaultTerm(time.Now()).ToString()
 	subjects := make([]string, 0)
 
 	// Create a timeout context for Redis operations
@@ -114,7 +115,7 @@ func (a *API) ScrapeMajor(subject string) error {
 	for {
 		// Build & execute the query
 		query := NewQuery().Offset(offset).MaxResults(MaxPageSize * 2).Subject(subject)
-		term := Default(time.Now()).ToString()
+		term := a.DefaultTerm(time.Now()).ToString()
 		result, err := a.Search(term, query, "subjectDescription", false)
 		if err != nil {
 			return fmt.Errorf("search failed: %w (%s)", err, query.String())
@@ -157,7 +158,7 @@ func (a *API) ScrapeMajor(subject string) error {
 		break
 	}
 
-	term := Default(time.Now()).ToString()
+	term := a.DefaultTerm(time.Now()).ToString()
 
 	// Calculate the expiry time for the scrape (1 hour for every 200 classes, random +-15%) with a minimum of 1 hour
 	var scrapeExpiry time.Duration

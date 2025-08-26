@@ -26,11 +26,9 @@ type Config struct {
 	Environment string
 	// CentralTimeLocation is the time.Location for US Central Time.
 	CentralTimeLocation *time.Location
+	// SeasonRanges is the time.Location for US Central Time.
+	SeasonRanges *SeasonRanges
 }
-
-const (
-	CentralTimezoneName = "America/Chicago"
-)
 
 // New creates a new Config instance with a cancellable context.
 func New() (*Config, error) {
@@ -42,10 +40,13 @@ func New() (*Config, error) {
 		return nil, err
 	}
 
+	seasonRanges := GetYearDayRange(loc, uint16(time.Now().Year()))
+
 	return &Config{
 		Ctx:                 ctx,
 		CancelFunc:          cancel,
 		CentralTimeLocation: loc,
+		SeasonRanges:        &seasonRanges,
 	}, nil
 }
 

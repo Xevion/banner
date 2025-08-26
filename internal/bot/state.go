@@ -32,7 +32,7 @@ func (b *Bot) SetClosing() {
 // GetSession ensures a valid session is available and selects the default term.
 func (b *Bot) GetSession() (string, error) {
 	sessionID := b.API.EnsureSession()
-	term := api.Default(time.Now()).ToString()
+	term := b.API.DefaultTerm(time.Now()).ToString()
 
 	log.Info().Str("term", term).Str("sessionID", sessionID).Msg("Setting selected term")
 	err := b.API.SelectTerm(term, sessionID)

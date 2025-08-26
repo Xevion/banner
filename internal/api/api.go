@@ -37,7 +37,7 @@ var (
 )
 
 // SessionMiddleware creates a Resty middleware that resets the session timer on each successful Banner API call.
-func SessionMiddleware(c *resty.Client, r *resty.Response) error {
+func SessionMiddleware(_ *resty.Client, r *resty.Response) error {
 	// log.Debug().Str("url", r.Request.RawRequest.URL.Path).Msg("Session middleware")
 
 	// Reset session timer on successful requests to Banner API endpoints
@@ -54,6 +54,15 @@ func SessionMiddleware(c *resty.Client, r *resty.Response) error {
 // This function should not be used directly; use EnsureSession instead.
 func GenerateSession() string {
 	return internal.RandomString(5) + internal.Nonce()
+}
+
+// DefaultTerm returns the default term, which is the current term if it exists, otherwise the next term.
+func (a *API) DefaultTerm(t time.Time) config.Term {
+	currentTerm, nextTerm := config.GetCurrentTerm(*a.config.SeasonRanges, t)
+	if currentTerm == nil {
+		return *nextTerm
+	}
+	return *currentTerm
 }
 
 var terms []BannerTerm
