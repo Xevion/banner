@@ -1,6 +1,6 @@
 use serenity::all::{ClientBuilder, GatewayIntents};
 use tokio::signal;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use crate::app_state::AppState;
@@ -132,7 +132,7 @@ async fn main() {
             // Shutdown remaining services
             match service_manager.shutdown(shutdown_timeout).await {
                 Ok(()) => {
-                    info!("Graceful shutdown complete");
+                    debug!("Graceful shutdown complete");
                 }
                 Err(pending_services) => {
                     warn!(
@@ -147,7 +147,7 @@ async fn main() {
             // User requested shutdown
             match service_manager.shutdown(shutdown_timeout).await {
                 Ok(()) => {
-                    info!("Graceful shutdown complete");
+                    debug!("Graceful shutdown complete");
                 }
                 Err(pending_services) => {
                     warn!(
@@ -160,6 +160,6 @@ async fn main() {
         }
     }
 
-    info!("Application shutdown complete (exit code: {})", exit_code);
+    info!(exit_code = exit_code, "Shutdown complete");
     std::process::exit(exit_code);
 }

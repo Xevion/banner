@@ -80,7 +80,19 @@ pub async fn gcal(
     let response: Vec<LinkDetail> = match meeting_times.len() {
         0 => Err(anyhow::anyhow!("No meeting times found for this course.")),
         1.. => {
-            let links = meeting_times
+            // Sort meeting times by start time of their TimeRange
+            let mut sorted_meeting_times = meeting_times.to_vec();
+            sorted_meeting_times.sort_unstable_by(|a, b| {
+                // Primary sort: by start time
+                match (&a.time_range, &b.time_range) {
+                    (Some(a_time), Some(b_time)) => a_time.start.cmp(&b_time.start),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => a.days.bits().cmp(&b.days.bits()),
+                }
+            });
+
+            let links = sorted_meeting_times
                 .iter()
                 .map(|m| {
                     let link = generate_gcal_url(&course, m)?;
