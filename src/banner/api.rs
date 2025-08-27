@@ -198,14 +198,11 @@ impl BannerApi {
     /// Retrieves meeting time information for a course.
     pub async fn get_course_meeting_time(
         &self,
-        term: i32,
+        term: &str,
         crn: i32,
     ) -> Result<Vec<MeetingScheduleInfo>> {
         let url = format!("{}/searchResults/getFacultyMeetingTimes", self.base_url);
-        let params = [
-            ("term", &term.to_string()),
-            ("courseReferenceNumber", &crn.to_string()),
-        ];
+        let params = [("term", term), ("courseReferenceNumber", &crn.to_string())];
 
         let response = self
             .client
