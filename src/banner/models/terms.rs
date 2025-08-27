@@ -46,7 +46,7 @@ impl Term {
     /// Returns the current term status for a specific date
     pub fn get_status_for_date(date: NaiveDate) -> TermPoint {
         let literal_year = date.year() as u32;
-        let day_of_year = date.ordinal() as u32;
+        let day_of_year = date.ordinal();
         let ranges = Self::get_season_ranges(literal_year);
 
         // If we're past the end of the summer term, we're 'in' the next school year.
@@ -115,22 +115,22 @@ impl Term {
     fn get_season_ranges(year: u32) -> SeasonRanges {
         let spring_start = NaiveDate::from_ymd_opt(year as i32, 1, 14)
             .unwrap()
-            .ordinal() as u32;
+            .ordinal();
         let spring_end = NaiveDate::from_ymd_opt(year as i32, 5, 1)
             .unwrap()
-            .ordinal() as u32;
+            .ordinal();
         let summer_start = NaiveDate::from_ymd_opt(year as i32, 5, 25)
             .unwrap()
-            .ordinal() as u32;
+            .ordinal();
         let summer_end = NaiveDate::from_ymd_opt(year as i32, 8, 15)
             .unwrap()
-            .ordinal() as u32;
+            .ordinal();
         let fall_start = NaiveDate::from_ymd_opt(year as i32, 8, 18)
             .unwrap()
-            .ordinal() as u32;
+            .ordinal();
         let fall_end = NaiveDate::from_ymd_opt(year as i32, 12, 10)
             .unwrap()
-            .ordinal() as u32;
+            .ordinal();
 
         SeasonRanges {
             spring: YearDayRange {
@@ -179,10 +179,15 @@ struct YearDayRange {
     end: u32,
 }
 
-impl ToString for Term {
+impl std::fmt::Display for Term {
     /// Returns the term in the format YYYYXX, where YYYY is the year and XX is the season code
-    fn to_string(&self) -> String {
-        format!("{}{}", self.year, self.season.to_str())
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{year}{season}",
+            year = self.year,
+            season = self.season.to_str()
+        )
     }
 }
 
@@ -215,7 +220,7 @@ impl FromStr for Season {
             "10" => Season::Fall,
             "20" => Season::Spring,
             "30" => Season::Summer,
-            _ => return Err(anyhow::anyhow!("Invalid season: {}", s)),
+            _ => return Err(anyhow::anyhow!("Invalid season: {s}")),
         };
         Ok(season)
     }

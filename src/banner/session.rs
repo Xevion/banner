@@ -38,16 +38,16 @@ impl SessionManager {
         let start_time = std::time::Instant::now();
         let mut session_guard = self.current_session.lock().unwrap();
 
-        if let Some(ref session) = *session_guard {
-            if session.created_at.elapsed() < Self::SESSION_EXPIRY {
-                let elapsed = start_time.elapsed();
-                debug!(
-                    session_id = session.session_id,
-                    elapsed = format!("{:.2?}", elapsed),
-                    "reusing existing banner session"
-                );
-                return Ok(session.session_id.clone());
-            }
+        if let Some(ref session) = *session_guard
+            && session.created_at.elapsed() < Self::SESSION_EXPIRY
+        {
+            let elapsed = start_time.elapsed();
+            debug!(
+                session_id = session.session_id,
+                elapsed = format!("{:.2?}", elapsed),
+                "reusing existing banner session"
+            );
+            return Ok(session.session_id.clone());
         }
 
         // Generate new session
@@ -58,7 +58,7 @@ impl SessionManager {
         });
 
         let elapsed = start_time.elapsed();
-        info!(
+        debug!(
             session_id = session_id,
             elapsed = format!("{:.2?}", elapsed),
             "generated new banner session"
@@ -87,7 +87,7 @@ impl SessionManager {
             let response = self
                 .client
                 .get(&url)
-                .query(&[("_", timestamp_nonce())])
+                .query(&[("_", Self::nonce())])
                 .header("User-Agent", user_agent())
                 .send()
                 .await?;
@@ -185,15 +185,15 @@ impl SessionManager {
 
         Ok(())
     }
-}
 
-/// Generates a timestamp-based nonce
-fn timestamp_nonce() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis()
-        .to_string()
+    /// Generates a timestamp-based nonce
+    pub fn nonce() -> String {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            .to_string()
+    }
 }
 
 /// Returns a browser-like user agent string

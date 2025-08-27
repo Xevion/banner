@@ -1,7 +1,7 @@
 use bitflags::{Flags, bitflags};
 use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{cmp::Ordering, str::FromStr};
+use std::{cmp::Ordering, fmt::Display, str::FromStr};
 
 use super::terms::Term;
 
@@ -148,28 +148,15 @@ pub enum DayOfWeek {
 
 impl DayOfWeek {
     /// Convert to short string representation
-    pub fn to_short_string(&self) -> &'static str {
+    pub fn to_short_string(self) -> &'static str {
         match self {
-            DayOfWeek::Monday => "M",
+            DayOfWeek::Monday => "Mo",
             DayOfWeek::Tuesday => "Tu",
-            DayOfWeek::Wednesday => "W",
+            DayOfWeek::Wednesday => "We",
             DayOfWeek::Thursday => "Th",
-            DayOfWeek::Friday => "F",
+            DayOfWeek::Friday => "Fr",
             DayOfWeek::Saturday => "Sa",
             DayOfWeek::Sunday => "Su",
-        }
-    }
-
-    /// Convert to full string representation
-    pub fn to_string(&self) -> &'static str {
-        match self {
-            DayOfWeek::Monday => "Monday",
-            DayOfWeek::Tuesday => "Tuesday",
-            DayOfWeek::Wednesday => "Wednesday",
-            DayOfWeek::Thursday => "Thursday",
-            DayOfWeek::Friday => "Friday",
-            DayOfWeek::Saturday => "Saturday",
-            DayOfWeek::Sunday => "Sunday",
         }
     }
 }
@@ -196,10 +183,9 @@ impl TryFrom<MeetingDays> for DayOfWeek {
             });
         }
 
-        return Err(anyhow::anyhow!(
-            "Cannot convert multiple days to a single day: {:?}",
-            days
-        ));
+        Err(anyhow::anyhow!(
+            "Cannot convert multiple days to a single day: {days:?}"
+        ))
     }
 }
 
@@ -252,15 +238,8 @@ impl TimeRange {
         let hour = time.hour();
         let minute = time.minute();
 
-        if hour == 0 {
-            format!("12:{:02}AM", minute)
-        } else if hour < 12 {
-            format!("{}:{:02}AM", hour, minute)
-        } else if hour == 12 {
-            format!("12:{:02}PM", minute)
-        } else {
-            format!("{}:{:02}PM", hour - 12, minute)
-        }
+        let meridiem = if hour < 12 { "AM" } else { "PM" };
+        format!("{hour}:{minute:02}{meridiem}")
     }
 
     /// Get duration in minutes
@@ -376,15 +355,20 @@ impl MeetingLocation {
             is_online,
         }
     }
+}
 
-    /// Convert to formatted string
-    pub fn to_string(&self) -> String {
+impl Display for MeetingLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_online {
-            "Online".to_string()
+            write!(f, "Online")
         } else {
-            format!(
-                "{} | {} | {} {}",
-                self.campus, self.building_description, self.building, self.room
+            write!(
+                f,
+                "{campus} | {building_name} | {building_code} {room}",
+                campus = self.campus,
+                building_name = self.building_description,
+                building_code = self.building,
+                room = self.room
             )
         }
     }

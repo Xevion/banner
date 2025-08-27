@@ -5,7 +5,6 @@ use crate::banner::Course;
 use anyhow::Result;
 use redis::AsyncCommands;
 use redis::Client;
-use serde_json;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -31,7 +30,7 @@ impl AppState {
     pub async fn get_course_or_fetch(&self, term: &str, crn: &str) -> Result<Course> {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
 
-        let key = format!("class:{}", crn);
+        let key = format!("class:{crn}");
         if let Some(serialized) = conn.get::<_, Option<String>>(&key).await? {
             let course: Course = serde_json::from_str(&serialized)?;
             return Ok(course);
@@ -44,6 +43,6 @@ impl AppState {
             return Ok(course);
         }
 
-        Err(anyhow::anyhow!("Course not found for CRN {}", crn))
+        Err(anyhow::anyhow!("Course not found for CRN {crn}"))
     }
 }

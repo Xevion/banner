@@ -39,7 +39,7 @@ impl CourseScraper {
             .context("Failed to get subjects for scraping")?;
 
         if subjects.is_empty() {
-            return Err(anyhow::anyhow!("No subjects found for term {}", term));
+            return Err(anyhow::anyhow!("no subjects found for term {term}"));
         }
 
         // Categorize subjects
@@ -58,15 +58,17 @@ impl CourseScraper {
         }
 
         info!(
-            "scraping {} subjects for term {}",
-            expired_subjects.len(),
-            term
+            "scraping {count} subjects for term {term}",
+            count = expired_subjects.len()
         );
 
         // Scrape each expired subject
         for subject in expired_subjects {
             if let Err(e) = self.scrape_subject(&subject.code, term).await {
-                error!("failed to scrape subject {}: {}", subject.code, e);
+                error!(
+                    "failed to scrape subject {subject}: {e}",
+                    subject = subject.code
+                );
             }
 
             // Rate limiting between subjects
@@ -87,7 +89,7 @@ impl CourseScraper {
         let mut expired = Vec::new();
 
         for subject in subjects {
-            let key = format!("scraped:{}:{}", subject.code, term);
+            let key = format!("scraped:{code}:{term}", code = subject.code);
             let scraped: Option<String> = conn
                 .get(&key)
                 .await
@@ -121,16 +123,12 @@ impl CourseScraper {
                 .search(term, &query, "subjectDescription", false)
                 .await
                 .with_context(|| {
-                    format!(
-                        "Failed to search for subject {} at offset {}",
-                        subject, offset
-                    )
+                    format!("failed to search for subject {subject} at offset {offset}")
                 })?;
 
             if !result.success {
                 return Err(anyhow::anyhow!(
-                    "Search marked unsuccessful for subject {}",
-                    subject
+                    "search marked unsuccessful for subject {subject}"
                 ));
             }
 
@@ -138,16 +136,16 @@ impl CourseScraper {
             total_courses += course_count;
 
             debug!(
-                "retrieved {} courses for subject {} at offset {}",
-                course_count, subject, offset
+                "retrieved {count} courses for subject {subject} at offset {offset}",
+                count = course_count
             );
 
             // Store each course in Redis
             for course in result.data.unwrap_or_default() {
                 if let Err(e) = self.store_course(&course).await {
                     error!(
-                        "failed to store course {}: {}",
-                        course.course_reference_number, e
+                        "failed to store course {crn}: {e}",
+                        crn = course.course_reference_number
                     );
                 }
             }
@@ -156,16 +154,14 @@ impl CourseScraper {
             if course_count >= MAX_PAGE_SIZE {
                 if course_count > MAX_PAGE_SIZE {
                     warn!(
-                        "course count {} exceeds max page size {}",
-                        course_count, MAX_PAGE_SIZE
+                        "course count {count} exceeds max page size {max_page_size}",
+                        count = course_count,
+                        max_page_size = MAX_PAGE_SIZE
                     );
                 }
 
                 offset += MAX_PAGE_SIZE;
-                debug!(
-                    "continuing to next page for subject {} at offset {}",
-                    subject, offset
-                );
+                debug!("continuing to next page for subject {subject} at offset {offset}");
 
                 // Rate limiting between pages
                 time::sleep(Duration::from_secs(3)).await;
@@ -176,8 +172,8 @@ impl CourseScraper {
         }
 
         info!(
-            "scraped {} total courses for subject {}",
-            total_courses, subject
+            "scraped {count} total courses for subject {subject}",
+            count = total_courses
         );
 
         // Mark subject as scraped with expiry
@@ -195,7 +191,7 @@ impl CourseScraper {
             .await
             .context("Failed to get Redis connection")?;
 
-        let key = format!("class:{}", course.course_reference_number);
+        let key = format!("class:{crn}", crn = course.course_reference_number);
         let serialized = serde_json::to_string(course).context("Failed to serialize course")?;
 
         let _: () = conn
@@ -219,19 +215,21 @@ impl CourseScraper {
             .await
             .context("Failed to get Redis connection")?;
 
-        let key = format!("scraped:{}:{}", subject, term);
+        let key = format!("scraped:{subject}:{term}", subject = subject);
         let expiry = self.calculate_expiry(subject, course_count);
 
         let value = if course_count == 0 { -1 } else { course_count };
 
         let _: () = conn
-            .set_ex(&key, value, expiry.as_secs() as u64)
+            .set_ex(&key, value, expiry.as_secs())
             .await
             .context("Failed to mark subject as scraped")?;
 
         debug!(
-            "marked subject {} as scraped with {} courses, expiry: {:?}",
-            subject, course_count, expiry
+            "marked subject {subject} as scraped with {count} courses, expiry: {expiry:?}",
+            subject = subject,
+            count = course_count,
+            expiry = expiry
         );
 
         Ok(())
@@ -251,7 +249,7 @@ impl CourseScraper {
 
         // Priority subjects get shorter expiry (more frequent updates)
         if PRIORITY_MAJORS.contains(&subject) {
-            base_expiry = base_expiry / 3;
+            base_expiry /= 3;
         }
 
         // Add random variance (±15%)
@@ -276,7 +274,7 @@ impl CourseScraper {
             .await
             .context("Failed to get Redis connection")?;
 
-        let key = format!("class:{}", crn);
+        let key = format!("class:{crn}");
         let serialized: Option<String> = conn
             .get(&key)
             .await

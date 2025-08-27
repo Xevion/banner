@@ -1,5 +1,5 @@
 use super::Service;
-use crate::web::routes::{BannerState, create_banner_router};
+use crate::web::{BannerState, create_banner_router};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;

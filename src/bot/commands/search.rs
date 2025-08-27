@@ -103,7 +103,7 @@ fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
     // Handle single course code
     if input.len() == 4 {
         let code: i32 = input.parse()?;
-        if code < 1000 || code > 9999 {
+        if !(1000..=9999).contains(&code) {
             return Err("Course codes must be between 1000 and 9999".into());
         }
         return Ok((code, code));

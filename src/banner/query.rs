@@ -270,7 +270,7 @@ impl std::fmt::Display for SearchQuery {
         let mut parts = Vec::new();
 
         if let Some(ref subject) = self.subject {
-            parts.push(format!("subject={}", subject));
+            parts.push(format!("subject={subject}"));
         }
         if let Some(ref title) = self.title {
             parts.push(format!("title={}", title.trim()));
@@ -296,21 +296,21 @@ impl std::fmt::Display for SearchQuery {
                 .map(|i| i.to_string())
                 .collect::<Vec<_>>()
                 .join(",");
-            parts.push(format!("instructor={}", instructor_str));
+            parts.push(format!("instructor={instructor_str}"));
         }
         if let Some(start_time) = self.start_time {
             let (hour, minute, meridiem) = format_time_parameter(start_time);
-            parts.push(format!("startTime={}:{}:{}", hour, minute, meridiem));
+            parts.push(format!("startTime={hour}:{minute}:{meridiem}"));
         }
         if let Some(end_time) = self.end_time {
             let (hour, minute, meridiem) = format_time_parameter(end_time);
-            parts.push(format!("endTime={}:{}:{}", hour, minute, meridiem));
+            parts.push(format!("endTime={hour}:{minute}:{meridiem}"));
         }
         if let Some(min_credits) = self.min_credits {
-            parts.push(format!("minCredits={}", min_credits));
+            parts.push(format!("minCredits={min_credits}"));
         }
         if let Some(max_credits) = self.max_credits {
-            parts.push(format!("maxCredits={}", max_credits));
+            parts.push(format!("maxCredits={max_credits}"));
         }
         if let Some(ref range) = self.course_number_range {
             parts.push(format!("courseNumberRange={}-{}", range.low, range.high));

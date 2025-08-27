@@ -65,7 +65,7 @@ impl BannerApi {
             ("searchTerm", search),
             ("offset", &page.to_string()),
             ("max", &max_results.to_string()),
-            ("_", &timestamp_nonce()),
+            ("_", &SessionManager::nonce()),
         ];
 
         let response = self
@@ -104,7 +104,7 @@ impl BannerApi {
             ("offset", &offset.to_string()),
             ("max", &max_results.to_string()),
             ("uniqueSessionId", &session_id),
-            ("_", &timestamp_nonce()),
+            ("_", &SessionManager::nonce()),
         ];
 
         let response = self
@@ -143,7 +143,7 @@ impl BannerApi {
             ("offset", &offset.to_string()),
             ("max", &max_results.to_string()),
             ("uniqueSessionId", &session_id),
-            ("_", &timestamp_nonce()),
+            ("_", &SessionManager::nonce()),
         ];
 
         let response = self
@@ -182,7 +182,7 @@ impl BannerApi {
             ("offset", &offset.to_string()),
             ("max", &max_results.to_string()),
             ("uniqueSessionId", &session_id),
-            ("_", &timestamp_nonce()),
+            ("_", &SessionManager::nonce()),
         ];
 
         let response = self
@@ -382,15 +382,6 @@ impl BannerApi {
     }
 }
 
-/// Generates a timestamp-based nonce.
-fn timestamp_nonce() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis()
-        .to_string()
-}
-
 /// Returns a browser-like user agent string.
 fn user_agent() -> &'static str {
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
@@ -402,13 +393,9 @@ fn parse_json_with_context<T: serde::de::DeserializeOwned>(body: &str) -> Result
         Ok(value) => Ok(value),
         Err(err) => {
             let (line, column) = (err.line(), err.column());
-            let snippet = build_error_snippet(body, line as usize, column as usize, 120);
+            let snippet = build_error_snippet(body, line, column, 120);
             Err(anyhow::anyhow!(
-                "{} at line {}, column {}\nSnippet:\n{}",
-                err,
-                line,
-                column,
-                snippet
+                "{err} at line {line}, column {column}\nSnippet:\n{snippet}",
             ))
         }
     }
@@ -430,5 +417,5 @@ fn build_error_snippet(body: &str, line: usize, column: usize, max_len: usize) -
         indicator.push('^');
     }
 
-    format!("{}\n{}", slice, indicator)
+    format!("{slice}\n{indicator}")
 }
