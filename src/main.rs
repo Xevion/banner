@@ -46,6 +46,10 @@ async fn main() {
     // Create BannerApi and AppState
     let banner_api =
         BannerApi::new(config.banner_base_url.clone()).expect("Failed to create BannerApi");
+    banner_api
+        .setup()
+        .await
+        .expect("Failed to set up BannerApi session");
 
     let app_state =
         AppState::new(banner_api, &config.redis_url).expect("Failed to create AppState");

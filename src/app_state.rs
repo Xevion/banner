@@ -1,7 +1,11 @@
 //! Application state shared across components (bot, web, scheduler).
 
 use crate::banner::BannerApi;
+use crate::banner::Course;
+use anyhow::Result;
+use redis::AsyncCommands;
 use redis::Client;
+use serde_json;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -20,5 +24,25 @@ impl AppState {
             banner_api: std::sync::Arc::new(banner_api),
             redis: std::sync::Arc::new(redis_client),
         })
+    }
+
+    /// Get a course by CRN with Redis cache fallback to Banner API
+    pub async fn get_course_or_fetch(&self, term: &str, crn: &str) -> Result<Course> {
+        let mut conn = self.redis.get_multiplexed_async_connection().await?;
+
+        let key = format!("class:{}", crn);
+        if let Some(serialized) = conn.get::<_, Option<String>>(&key).await? {
+            let course: Course = serde_json::from_str(&serialized)?;
+            return Ok(course);
+        }
+
+        // Fallback: fetch from Banner API
+        if let Some(course) = self.banner_api.get_course_by_crn(term, crn).await? {
+            let serialized = serde_json::to_string(&course)?;
+            let _: () = conn.set(&key, serialized).await?;
+            return Ok(course);
+        }
+
+        Err(anyhow::anyhow!("Course not found for CRN {}", crn))
     }
 }

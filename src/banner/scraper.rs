@@ -112,6 +112,9 @@ impl CourseScraper {
                 .offset(offset)
                 .max_results(MAX_PAGE_SIZE * 2);
 
+            // Ensure session term is selected before searching
+            self.api.select_term(term).await?;
+
             let result = self
                 .api
                 .search(term, &query, "subjectDescription", false)
@@ -130,7 +133,7 @@ impl CourseScraper {
                 ));
             }
 
-            let course_count = result.data.len() as i32;
+            let course_count = result.data.as_ref().map(|v| v.len() as i32).unwrap_or(0);
             total_courses += course_count;
 
             debug!(
@@ -139,7 +142,7 @@ impl CourseScraper {
             );
 
             // Store each course in Redis
-            for course in result.data {
+            for course in result.data.unwrap_or_default() {
                 if let Err(e) = self.store_course(&course).await {
                     error!(
                         "Failed to store course {}: {}",

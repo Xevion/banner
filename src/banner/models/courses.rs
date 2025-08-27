@@ -32,7 +32,7 @@ pub struct Course {
     pub campus_description: String,
     pub schedule_type_description: String,
     pub course_title: String,
-    pub credit_hours: i32,
+    pub credit_hours: Option<i32>,
     pub maximum_enrollment: i32,
     pub enrollment: i32,
     pub seats_available: i32,
@@ -53,7 +53,9 @@ pub struct Course {
     pub instructional_method: String,
     pub instructional_method_description: String,
     pub section_attributes: Vec<SectionAttribute>,
+    #[serde(default)]
     pub faculty: Vec<FacultyItem>,
+    #[serde(default)]
     pub meetings_faculty: Vec<MeetingTimeResponse>,
 }
 

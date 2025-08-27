@@ -12,7 +12,7 @@ pub struct SearchResult {
     pub page_max_size: i32,
     pub path_mode: String,
     pub search_results_config: Vec<SearchResultConfig>,
-    pub data: Vec<Course>,
+    pub data: Option<Vec<Course>>,
 }
 
 /// Search result configuration

@@ -8,7 +8,7 @@ use tracing::{error, info};
 use url::Url;
 
 /// Generate a link to create a Google Calendar event for a course
-#[poise::command(slash_command, prefix_command)]
+#[poise::command(slash_command)]
 pub async fn gcal(
     ctx: Context<'_>,
     #[description = "Course Reference Number (CRN)"] crn: i32,
@@ -25,43 +25,16 @@ pub async fn gcal(
     let current_term_status = Term::get_current();
     let term = current_term_status.inner();
 
-    // TODO: Replace with actual course data when BannerApi::get_course is implemented
-    let course = Course {
-        id: 0,
-        term: term.to_string(),
-        term_desc: term.to_long_string(),
-        course_reference_number: crn.to_string(),
-        part_of_term: "1".to_string(),
-        course_number: "0000".to_string(),
-        subject: "CS".to_string(),
-        subject_description: "Computer Science".to_string(),
-        sequence_number: "001".to_string(),
-        campus_description: "Main Campus".to_string(),
-        schedule_type_description: "Lecture".to_string(),
-        course_title: "Example Course".to_string(),
-        credit_hours: 3,
-        maximum_enrollment: 30,
-        enrollment: 25,
-        seats_available: 5,
-        wait_capacity: 10,
-        wait_count: 0,
-        cross_list: None,
-        cross_list_capacity: None,
-        cross_list_count: None,
-        cross_list_available: None,
-        credit_hour_high: None,
-        credit_hour_low: None,
-        credit_hour_indicator: None,
-        open_section: true,
-        link_identifier: None,
-        is_section_linked: false,
-        subject_course: "CS0000".to_string(),
-        reserved_seat_summary: None,
-        instructional_method: "FF".to_string(),
-        instructional_method_description: "Face to Face".to_string(),
-        section_attributes: vec![],
-        faculty: vec![],
-        meetings_faculty: vec![],
+    // Fetch live course data from Redis cache via AppState
+    let course = match app_state
+        .get_course_or_fetch(&term.to_string(), &crn.to_string())
+        .await
+    {
+        Ok(course) => course,
+        Err(e) => {
+            error!(%e, crn, "Failed to fetch course data");
+            return Err(Error::from(e));
+        }
     };
 
     // Get meeting times

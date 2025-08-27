@@ -519,6 +519,7 @@ pub struct MeetingTimeResponse {
     pub category: Option<String>,
     pub class: String,
     pub course_reference_number: String,
+    #[serde(default)]
     pub faculty: Vec<FacultyItem>,
     pub meeting_time: MeetingTime,
     pub term: String,

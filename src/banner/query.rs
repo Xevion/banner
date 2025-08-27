@@ -16,6 +16,7 @@ pub struct SearchQuery {
     subject: Option<String>,
     title: Option<String>,
     keywords: Option<Vec<String>>,
+    course_reference_number: Option<String>,
     open_only: Option<bool>,
     term_part: Option<Vec<String>>,
     campus: Option<Vec<String>>,
@@ -50,6 +51,12 @@ impl SearchQuery {
     /// Sets the title for the query
     pub fn title<S: Into<String>>(mut self, title: S) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Sets the course reference number (CRN) for the query
+    pub fn course_reference_number<S: Into<String>>(mut self, crn: S) -> Self {
+        self.course_reference_number = Some(crn.into());
         self
     }
 
@@ -163,6 +170,10 @@ impl SearchQuery {
 
         if let Some(ref title) = self.title {
             params.insert("txt_courseTitle".to_string(), title.trim().to_string());
+        }
+
+        if let Some(ref crn) = self.course_reference_number {
+            params.insert("txt_courseReferenceNumber".to_string(), crn.clone());
         }
 
         if let Some(ref keywords) = self.keywords {

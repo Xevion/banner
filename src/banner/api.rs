@@ -298,6 +298,58 @@ impl BannerApi {
         self.session_manager.select_term(term).await
     }
 
+    /// Retrieves a single course by CRN by issuing a minimal search
+    pub async fn get_course_by_crn(&self, term: &str, crn: &str) -> Result<Option<Course>> {
+        self.session_manager.reset_data_form().await?;
+        // Ensure session is configured for this term
+        self.select_term(term).await?;
+
+        let session_id = self.session_manager.ensure_session()?;
+
+        let query = SearchQuery::new()
+            .course_reference_number(crn)
+            .max_results(1);
+
+        let mut params = query.to_params();
+        params.insert("txt_term".to_string(), term.to_string());
+        params.insert("uniqueSessionId".to_string(), session_id);
+        params.insert("sortColumn".to_string(), "subjectDescription".to_string());
+        params.insert("sortDirection".to_string(), "asc".to_string());
+        params.insert("startDatepicker".to_string(), String::new());
+        params.insert("endDatepicker".to_string(), String::new());
+
+        let url = format!("{}/searchResults/searchResults", self.base_url);
+        let response = self
+            .client
+            .get(&url)
+            .query(&params)
+            .send()
+            .await
+            .context("Failed to search course by CRN")?;
+
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .with_context(|| format!("Failed to read body (status={status})"))?;
+
+        let search_result: SearchResult = parse_json_with_context(&body).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse search response for CRN (status={status}, url={url}): {e}",
+            )
+        })?;
+
+        if !search_result.success {
+            return Err(anyhow::anyhow!(
+                "Search marked as unsuccessful by Banner API"
+            ));
+        }
+
+        Ok(search_result
+            .data
+            .and_then(|courses| courses.into_iter().next()))
+    }
+
     /// Gets course details (placeholder - needs implementation).
     pub async fn get_course_details(&self, term: i32, crn: i32) -> Result<ClassDetails> {
         let body = serde_json::json!({
@@ -336,4 +388,41 @@ fn timestamp_nonce() -> String {
 /// Returns a browser-like user agent string.
 fn user_agent() -> &'static str {
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+}
+
+/// Attempt to parse JSON and, on failure, include a contextual snippet around the error location
+fn parse_json_with_context<T: serde::de::DeserializeOwned>(body: &str) -> Result<T> {
+    match serde_json::from_str::<T>(body) {
+        Ok(value) => Ok(value),
+        Err(err) => {
+            let (line, column) = (err.line(), err.column());
+            let snippet = build_error_snippet(body, line as usize, column as usize, 120);
+            Err(anyhow::anyhow!(
+                "{} at line {}, column {}\nSnippet:\n{}",
+                err,
+                line,
+                column,
+                snippet
+            ))
+        }
+    }
+}
+
+fn build_error_snippet(body: &str, line: usize, column: usize, max_len: usize) -> String {
+    let target_line = body.lines().nth(line.saturating_sub(1)).unwrap_or("");
+    if target_line.is_empty() {
+        return String::new();
+    }
+
+    let start = column.saturating_sub(max_len.min(column));
+    let end = (column + max_len).min(target_line.len());
+    let slice = &target_line[start..end];
+
+    let mut indicator = String::new();
+    if column > start {
+        indicator.push_str(&" ".repeat(column - start - 1));
+        indicator.push('^');
+    }
+
+    format!("{}\n{}", slice, indicator)
 }
