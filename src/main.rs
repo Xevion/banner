@@ -6,7 +6,7 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use crate::bot::{Data, age};
 use crate::config::Config;
 use crate::services::manager::ServiceManager;
-use crate::services::{ServiceResult, bot::BotService, dummy::DummyService, run_service};
+use crate::services::{ServiceResult, bot::BotService, run_service};
 use figment::{Figment, providers::Env};
 
 mod bot;
@@ -42,13 +42,21 @@ async fn main() {
     // Configure the client with your Discord bot token in the environment.
     let intents = GatewayIntents::non_privileged();
 
+    let bot_target_guild = config.bot_target_guild;
+
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![age()],
             ..Default::default()
         })
-        .setup(|ctx, _ready, framework| {
+        .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
+                poise::builtins::register_in_guild(
+                    ctx,
+                    &framework.options().commands,
+                    bot_target_guild.into(),
+                )
+                .await?;
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 Ok(Data {})
             })
@@ -68,13 +76,10 @@ async fn main() {
 
     // Create and add services
     let bot_service = Box::new(BotService::new(client));
-    let dummy_service = Box::new(DummyService::new("background"));
 
     let bot_handle = tokio::spawn(run_service(bot_service, service_manager.subscribe()));
-    let dummy_handle = tokio::spawn(run_service(dummy_service, service_manager.subscribe()));
 
     service_manager.add_service("bot".to_string(), bot_handle);
-    service_manager.add_service("background".to_string(), dummy_handle);
 
     // Set up CTRL+C signal handling
     let ctrl_c = async {

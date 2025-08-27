@@ -2,7 +2,6 @@ use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 pub mod bot;
-pub mod dummy;
 pub mod manager;
 
 #[derive(Debug)]
