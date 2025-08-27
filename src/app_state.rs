@@ -3,10 +3,10 @@
 use crate::banner::BannerApi;
 use redis::Client;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AppState {
     pub banner_api: std::sync::Arc<BannerApi>,
-    pub redis_client: std::sync::Arc<Client>,
+    pub redis: std::sync::Arc<Client>,
 }
 
 impl AppState {
@@ -18,7 +18,7 @@ impl AppState {
 
         Ok(Self {
             banner_api: std::sync::Arc::new(banner_api),
-            redis_client: std::sync::Arc::new(redis_client),
+            redis: std::sync::Arc::new(redis_client),
         })
     }
 }

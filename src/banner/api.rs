@@ -2,6 +2,7 @@
 
 use crate::banner::{SessionManager, models::*, query::SearchQuery};
 use anyhow::{Context, Result};
+use axum::http::HeaderValue;
 use reqwest::Client;
 use serde_json;
 
@@ -199,7 +200,7 @@ impl BannerApi {
         &self,
         term: i32,
         crn: i32,
-    ) -> Result<Vec<MeetingTimeResponse>> {
+    ) -> Result<Vec<MeetingScheduleInfo>> {
         let url = format!("{}/searchResults/getFacultyMeetingTimes", self.base_url);
         let params = [
             ("term", &term.to_string()),
@@ -214,17 +215,38 @@ impl BannerApi {
             .await
             .context("Failed to get meeting times")?;
 
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!(
+                "Failed to get meeting times: {}",
+                response.status()
+            ));
+        } else if !response
+            .headers()
+            .get("Content-Type")
+            .unwrap_or(&HeaderValue::from_static(""))
+            .to_str()
+            .unwrap_or("")
+            .starts_with("application/json")
+        {
+            return Err(anyhow::anyhow!(
+                "Unexpected content type: {:?}",
+                response
+                    .headers()
+                    .get("Content-Type")
+                    .unwrap_or(&HeaderValue::from_static("(empty)"))
+                    .to_str()
+                    .unwrap_or("(non-ascii)")
+            ));
+        }
+
         #[derive(serde::Deserialize)]
         struct ResponseWrapper {
             fmt: Vec<MeetingTimeResponse>,
         }
 
-        let wrapper: ResponseWrapper = response
-            .json()
-            .await
-            .context("Failed to parse meeting times response")?;
+        let wrapper: ResponseWrapper = response.json().await.context("Failed to parse response")?;
 
-        Ok(wrapper.fmt)
+        Ok(wrapper.fmt.into_iter().map(|m| m.schedule_info()).collect())
     }
 
     /// Performs a search for courses.

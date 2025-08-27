@@ -12,8 +12,8 @@ pub async fn search(
     #[description = "Course code (e.g. 3743, 3000-3999, 3xxx, 3000-)"] code: Option<String>,
     #[description = "Maximum number of results"] max: Option<i32>,
     #[description = "Keywords in title or description (space separated)"] keywords: Option<String>,
-    #[description = "Instructor name"] instructor: Option<String>,
-    #[description = "Subject (e.g. Computer Science/CS, Mathematics/MAT)"] subject: Option<String>,
+    // #[description = "Instructor name"] instructor: Option<String>,
+    // #[description = "Subject (e.g Computer Science/CS, Mathematics/MAT)"] subject: Option<String>,
 ) -> Result<(), Error> {
     // Defer the response since this might take a while
     ctx.defer().await?;
@@ -41,8 +41,6 @@ pub async fn search(
     }
 
     // TODO: Get current term dynamically
-    let term = "202510"; // Hardcoded for now
-
     // TODO: Get BannerApi from context or global state
     // For now, we'll return an error
     ctx.say("Search functionality not yet implemented - BannerApi integration needed")
@@ -51,11 +49,11 @@ pub async fn search(
     Ok(())
 }
 
-/// Parse course code input (e.g., "3743", "3000-3999", "3xxx", "3000-")
+/// Parse course code input (e.g, "3743", "3000-3999", "3xxx", "3000-")
 fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
     let input = input.trim();
 
-    // Handle range format (e.g., "3000-3999")
+    // Handle range format (e.g, "3000-3999")
     if input.contains('-') {
         let re = Regex::new(r"(\d{1,4})-(\d{1,4})?").unwrap();
         if let Some(captures) = re.captures(input) {
@@ -79,7 +77,7 @@ fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
         return Err("Invalid range format".into());
     }
 
-    // Handle wildcard format (e.g., "34xx")
+    // Handle wildcard format (e.g, "34xx")
     if input.contains('x') {
         if input.len() != 4 {
             return Err("Wildcard format must be exactly 4 characters".into());

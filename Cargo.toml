@@ -28,3 +28,5 @@ rand = "0.8"
 regex = "1.10"
 url = "2.5"
 compile-time = "0.2.0"
+time = "0.3.41"
+bitflags = { version = "2.9.3", features = ["serde"] }

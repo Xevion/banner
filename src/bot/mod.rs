@@ -2,6 +2,7 @@ use crate::app_state::AppState;
 
 pub mod commands;
 
+#[derive(Debug)]
 pub struct Data {
     pub app_state: AppState,
 } // User data, which is stored and accessible in all command invocations

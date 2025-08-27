@@ -1,11 +1,13 @@
 //! Google Calendar command implementation.
 
-use crate::banner::{Course, MeetingTime, MeetingTimeResponse};
+use crate::banner::{Course, MeetingScheduleInfo, TimeRange};
 use crate::bot::{Context, Error};
-use chrono::{Datelike, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
+use chrono::NaiveDate;
 use std::collections::HashMap;
 use tracing::{error, info};
 use url::Url;
+
+const TIMESTAMP_FORMAT: &str = "%Y%m%dT%H%M%SZ";
 
 /// Generate a link to create a Google Calendar event for a course
 #[poise::command(slash_command, prefix_command)]
@@ -64,102 +66,69 @@ pub async fn gcal(
     };
 
     // Get meeting times
-    let meeting_times = banner_api.get_course_meeting_time(term, crn).await?;
-
-    if meeting_times.is_empty() {
-        ctx.say("No meeting times found for this course").await?;
-        return Ok(());
-    }
-
-    // Find a meeting time that actually meets (not ID or OA types)
-    let meeting_time = meeting_times
-        .iter()
-        .find(|mt| !matches!(mt.meeting_time.meeting_type.as_str(), "ID" | "OA"))
-        .ok_or("Course does not meet at a defined moment in time")?;
-
-    // Generate the Google Calendar URL
-    match generate_gcal_url(&course, meeting_time) {
-        Ok(calendar_url) => {
-            ctx.say(format!("[Add to Google Calendar](<{}>)", calendar_url))
-                .await?;
-        }
+    let mut meeting_times = match banner_api.get_course_meeting_time(term, crn).await {
+        Ok(meeting_time) => meeting_time,
         Err(e) => {
-            error!("Failed to generate Google Calendar URL: {}", e);
-            ctx.say(format!("Error generating calendar link: {}", e))
-                .await?;
+            error!("Failed to get meeting times: {}", e);
+            return Err(Error::from(e));
         }
+    };
+
+    struct LinkDetail {
+        link: String,
+        detail: String,
     }
+
+    let response: Vec<LinkDetail> = match meeting_times.len() {
+        0 => Err(anyhow::anyhow!("No meeting times found for this course.")),
+        1.. => {
+            let links = meeting_times
+                .iter()
+                .map(|m| {
+                    let link = generate_gcal_url(&course, m)?;
+                    let detail = match &m.time_range {
+                        Some(range) => range.format_12hr(),
+                        None => m.days_string(),
+                    };
+                    Ok(LinkDetail { link, detail })
+                })
+                .collect::<Result<Vec<LinkDetail>, anyhow::Error>>()?;
+            Ok(links)
+        }
+    }?;
+
+    ctx.say(
+        response
+            .iter()
+            .map(|LinkDetail { link, detail }| {
+                format!("[Add to Google Calendar](<{link}>) ({detail})")
+            })
+            .collect::<Vec<String>>()
+            .join("\n"),
+    )
+    .await?;
 
     info!("gcal command completed for CRN: {}", crn);
     Ok(())
 }
 
 /// Generate Google Calendar URL for a course
-fn generate_gcal_url(course: &Course, meeting_time: &MeetingTimeResponse) -> Result<String, Error> {
+fn generate_gcal_url(
+    course: &Course,
+    meeting_time: &MeetingScheduleInfo,
+) -> Result<String, anyhow::Error> {
     // Get start and end dates
-    let start_date = meeting_time
-        .start_date()
-        .ok_or("Could not parse start date")?;
-    let end_date = meeting_time.end_date().ok_or("Could not parse end date")?;
-
-    // Get start and end times - parse from the time string
-    let time_str = meeting_time.time_string();
-    let time_parts: Vec<&str> = time_str.split(' ').collect();
-
-    if time_parts.len() < 2 {
-        return Err(format!(
-            "Invalid time format: expected at least 2 parts, got {} parts. Time string: '{}'",
-            time_parts.len(),
-            time_str
+    let (start, end) = {
+        let central_tz = chrono_tz::US::Central;
+        let (start, end) = meeting_time.datetime_range();
+        (
+            start.with_timezone(&central_tz),
+            end.with_timezone(&central_tz),
         )
-        .into());
-    }
-
-    let time_range = time_parts[1];
-    let times: Vec<&str> = time_range.split('-').collect();
-
-    if times.len() != 2 {
-        return Err(format!(
-            "Invalid time range format: expected 2 parts, got {} parts. Time range: '{}'",
-            times.len(),
-            time_range
-        )
-        .into());
-    }
-
-    // Create timestamps in UTC (assuming Central time)
-    let central_tz = chrono_tz::US::Central;
-
-    let dt_start = central_tz
-        .with_ymd_and_hms(
-            start_date.year(),
-            start_date.month(),
-            start_date.day(),
-            start_time.hour(),
-            start_time.minute(),
-            0,
-        )
-        .unwrap()
-        .with_timezone(&Utc);
-
-    let dt_end = central_tz
-        .with_ymd_and_hms(
-            end_date.year(),
-            end_date.month(),
-            end_date.day(),
-            end_time.hour(),
-            end_time.minute(),
-            0,
-        )
-        .unwrap()
-        .with_timezone(&Utc);
-
-    // Format times in UTC for Google Calendar
-    let start_str = dt_start.format("%Y%m%dT%H%M%SZ").to_string();
-    let end_str = dt_end.format("%Y%m%dT%H%M%SZ").to_string();
+    };
 
     // Generate RRULE for recurrence
-    let rrule = generate_rrule(meeting_time, end_date);
+    let rrule = generate_rrule(meeting_time, end.date_naive());
 
     // Build calendar URL
     let mut params = HashMap::new();
@@ -168,7 +137,7 @@ fn generate_gcal_url(course: &Course, meeting_time: &MeetingTimeResponse) -> Res
         "{} {} - {}",
         course.subject, course.course_number, course.course_title
     );
-    let dates_text = format!("{}/{}", start_str, end_str);
+    let dates_text = format!("{}/{}", start, end);
 
     // Get instructor name
     let instructor_name = if !course.faculty.is_empty() {
@@ -177,7 +146,7 @@ fn generate_gcal_url(course: &Course, meeting_time: &MeetingTimeResponse) -> Res
         "Unknown"
     };
 
-    let days_text = weekdays_to_string(&meeting_time.meeting_time);
+    let days_text = meeting_time.days_string();
     let details_text = format!(
         "CRN: {}\nInstructor: {}\nDays: {}",
         course.course_reference_number, instructor_name, days_text
@@ -205,7 +174,7 @@ fn generate_gcal_url(course: &Course, meeting_time: &MeetingTimeResponse) -> Res
 }
 
 /// Generate RRULE for recurrence
-fn generate_rrule(meeting_time: &MeetingTimeResponse, end_date: NaiveDate) -> String {
+fn generate_rrule(meeting_time: &MeetingScheduleInfo, end_date: NaiveDate) -> String {
     let by_day = meeting_time.days_string();
 
     // Handle edge cases where days_string might return "None" or empty
@@ -234,90 +203,4 @@ fn generate_rrule(meeting_time: &MeetingTimeResponse, end_date: NaiveDate) -> St
     rrule.push_str(&until);
 
     rrule
-}
-
-/// Parse time from formatted string (e.g., "8:00AM", "12:30PM")
-fn parse_time_from_formatted(time_str: &str) -> Result<NaiveTime, Error> {
-    let time_str = time_str.trim();
-
-    // Handle 12-hour format: "8:00AM", "12:30PM", etc.
-    if time_str.ends_with("AM") || time_str.ends_with("PM") {
-        let (time_part, ampm) = time_str.split_at(time_str.len() - 2);
-        let parts: Vec<&str> = time_part.split(':').collect();
-
-        if parts.len() != 2 {
-            return Err("Invalid time format".into());
-        }
-
-        let hour: u32 = parts[0].parse()?;
-        let minute: u32 = parts[1].parse()?;
-
-        let adjusted_hour = match ampm {
-            "AM" => {
-                if hour == 12 {
-                    0
-                } else {
-                    hour
-                }
-            }
-            "PM" => {
-                if hour == 12 {
-                    12
-                } else {
-                    hour + 12
-                }
-            }
-            _ => return Err("Invalid AM/PM indicator".into()),
-        };
-
-        chrono::NaiveTime::from_hms_opt(adjusted_hour, minute, 0).ok_or("Invalid time".into())
-    } else {
-        // Handle 24-hour format: "08:00", "13:30"
-        let parts: Vec<&str> = time_str.split(':').collect();
-
-        if parts.len() != 2 {
-            return Err("Invalid time format".into());
-        }
-
-        let hour: u32 = parts[0].parse()?;
-        let minute: u32 = parts[1].parse()?;
-
-        NaiveTime::from_hms_opt(hour, minute, 0).ok_or("Invalid time".into())
-    }
-}
-
-/// Convert weekdays to string representation
-fn weekdays_to_string(meeting_time: &MeetingTime) -> String {
-    let mut result = String::new();
-
-    if meeting_time.monday {
-        result.push_str("M");
-    }
-    if meeting_time.tuesday {
-        result.push_str("Tu");
-    }
-    if meeting_time.wednesday {
-        result.push_str("W");
-    }
-    if meeting_time.thursday {
-        result.push_str("Th");
-    }
-    if meeting_time.friday {
-        result.push_str("F");
-    }
-    if meeting_time.saturday {
-        result.push_str("Sa");
-    }
-    if meeting_time.sunday {
-        result.push_str("Su");
-    }
-
-    if result.is_empty() {
-        "None".to_string()
-    } else if result.len() == 14 {
-        // All days
-        "Everyday".to_string()
-    } else {
-        result
-    }
 }
