@@ -6,7 +6,7 @@ use axum::http::HeaderValue;
 use reqwest::Client;
 use serde_json;
 
-// use tracing::debug;
+use tracing::{error, info};
 
 /// Main Banner API client.
 #[derive(Debug)]
@@ -40,7 +40,13 @@ impl BannerApi {
 
     /// Sets up the API client by initializing session cookies.
     pub async fn setup(&self) -> Result<()> {
-        self.session_manager.setup().await
+        info!(base_url = self.base_url, "setting up banner api client");
+        let result = self.session_manager.setup().await;
+        match &result {
+            Ok(()) => info!("banner api client setup completed successfully"),
+            Err(e) => error!(error = ?e, "banner api client setup failed"),
+        }
+        result
     }
 
     /// Retrieves a list of terms from the Banner API.

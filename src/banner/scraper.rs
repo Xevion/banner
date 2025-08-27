@@ -53,12 +53,12 @@ impl CourseScraper {
         expired_subjects.extend(self.get_expired_subjects(&other_subjects, term).await?);
 
         if expired_subjects.is_empty() {
-            info!("No expired subjects found, skipping scrape");
+            info!("no expired subjects found, skipping scrape");
             return Ok(());
         }
 
         info!(
-            "Scraping {} subjects for term {}",
+            "scraping {} subjects for term {}",
             expired_subjects.len(),
             term
         );
@@ -66,7 +66,7 @@ impl CourseScraper {
         // Scrape each expired subject
         for subject in expired_subjects {
             if let Err(e) = self.scrape_subject(&subject.code, term).await {
-                error!("Failed to scrape subject {}: {}", subject.code, e);
+                error!("failed to scrape subject {}: {}", subject.code, e);
             }
 
             // Rate limiting between subjects
@@ -138,7 +138,7 @@ impl CourseScraper {
             total_courses += course_count;
 
             debug!(
-                "Retrieved {} courses for subject {} at offset {}",
+                "retrieved {} courses for subject {} at offset {}",
                 course_count, subject, offset
             );
 
@@ -146,7 +146,7 @@ impl CourseScraper {
             for course in result.data.unwrap_or_default() {
                 if let Err(e) = self.store_course(&course).await {
                     error!(
-                        "Failed to store course {}: {}",
+                        "failed to store course {}: {}",
                         course.course_reference_number, e
                     );
                 }
@@ -156,14 +156,14 @@ impl CourseScraper {
             if course_count >= MAX_PAGE_SIZE {
                 if course_count > MAX_PAGE_SIZE {
                     warn!(
-                        "Course count {} exceeds max page size {}",
+                        "course count {} exceeds max page size {}",
                         course_count, MAX_PAGE_SIZE
                     );
                 }
 
                 offset += MAX_PAGE_SIZE;
                 debug!(
-                    "Continuing to next page for subject {} at offset {}",
+                    "continuing to next page for subject {} at offset {}",
                     subject, offset
                 );
 
@@ -176,7 +176,7 @@ impl CourseScraper {
         }
 
         info!(
-            "Scraped {} total courses for subject {}",
+            "scraped {} total courses for subject {}",
             total_courses, subject
         );
 
@@ -230,7 +230,7 @@ impl CourseScraper {
             .context("Failed to mark subject as scraped")?;
 
         debug!(
-            "Marked subject {} as scraped with {} courses, expiry: {:?}",
+            "marked subject {} as scraped with {} courses, expiry: {:?}",
             subject, course_count, expiry
         );
 

@@ -1,7 +1,7 @@
 use super::Service;
 use serenity::Client;
 use std::sync::Arc;
-use tracing::{error, warn};
+use tracing::{debug, error};
 
 /// Discord bot service implementation
 pub struct BotService {
@@ -28,11 +28,11 @@ impl Service for BotService {
     async fn run(&mut self) -> Result<(), anyhow::Error> {
         match self.client.start().await {
             Ok(()) => {
-                warn!(service = "bot", "Stopped early.");
+                debug!(service = "bot", "stopped early.");
                 Err(anyhow::anyhow!("bot stopped early"))
             }
             Err(e) => {
-                error!(service = "bot", "Error: {e:?}");
+                error!(service = "bot", "error: {e:?}");
                 Err(e.into())
             }
         }

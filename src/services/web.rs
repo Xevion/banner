@@ -36,13 +36,13 @@ impl Service for WebService {
         info!(
             service = "web",
             link = format!("http://localhost:{}", addr.port()),
-            "Starting web server",
+            "starting web server",
         );
 
         let listener = TcpListener::bind(addr).await?;
         debug!(
             service = "web",
-            "Web server listening on {}",
+            "web server listening on {}",
             format!("http://{}", addr)
         );
 
@@ -56,12 +56,12 @@ impl Service for WebService {
                 let _ = shutdown_rx.recv().await;
                 debug!(
                     service = "web",
-                    "Received shutdown signal, starting graceful shutdown"
+                    "received shutdown signal, starting graceful shutdown"
                 );
             })
             .await?;
 
-        info!(service = "web", "Web server stopped");
+        info!(service = "web", "web server stopped");
         Ok(())
     }
 
@@ -71,7 +71,7 @@ impl Service for WebService {
         } else {
             warn!(
                 service = "web",
-                "No shutdown channel found, cannot trigger graceful shutdown"
+                "no shutdown channel found, cannot trigger graceful shutdown"
             );
         }
         Ok(())

@@ -3,6 +3,7 @@
 use axum::{Router, extract::State, response::Json, routing::get};
 use serde_json::{Value, json};
 use std::sync::Arc;
+use tracing::{debug, info};
 
 /// Shared application state for web server
 #[derive(Clone)]
@@ -15,6 +16,7 @@ pub struct BannerState {
 pub fn create_banner_router(state: BannerState) -> Router {
     Router::new()
         .route("/", get(root))
+        .route("/health", get(health))
         .route("/status", get(status))
         .route("/metrics", get(metrics))
         .with_state(state)
@@ -22,6 +24,7 @@ pub fn create_banner_router(state: BannerState) -> Router {
 
 /// Root endpoint - shows API info
 async fn root() -> Json<Value> {
+    debug!("root endpoint accessed");
     Json(json!({
         "message": "Banner Discord Bot API",
         "version": "0.1.0",
@@ -30,6 +33,15 @@ async fn root() -> Json<Value> {
             "status": "/status",
             "metrics": "/metrics"
         }
+    }))
+}
+
+/// Health check endpoint
+async fn health() -> Json<Value> {
+    info!("health check requested");
+    Json(json!({
+        "status": "healthy",
+        "timestamp": chrono::Utc::now().to_rfc3339()
     }))
 }
 

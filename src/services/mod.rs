@@ -33,16 +33,16 @@ pub async fn run_service(
     mut shutdown_rx: broadcast::Receiver<()>,
 ) -> ServiceResult {
     let name = service.name();
-    info!(service = name, "Service started");
+    info!(service = name, "service started");
 
     let work = async {
         match service.run().await {
             Ok(()) => {
-                warn!(service = name, "Service completed unexpectedly");
+                warn!(service = name, "service completed unexpectedly");
                 ServiceResult::NormalCompletion
             }
             Err(e) => {
-                error!(service = name, "Service failed: {e}");
+                error!(service = name, "service failed: {e}");
                 ServiceResult::Error(e)
             }
         }
@@ -51,18 +51,18 @@ pub async fn run_service(
     tokio::select! {
         result = work => result,
         _ = shutdown_rx.recv() => {
-            info!(service = name, "Shutting down...");
+            info!(service = name, "shutting down...");
             let start_time = std::time::Instant::now();
 
             match service.shutdown().await {
                 Ok(()) => {
                     let elapsed = start_time.elapsed();
-                    info!(service = name, "Shutdown completed in {elapsed:.2?}");
+                    info!(service = name, "shutdown completed in {elapsed:.2?}");
                     ServiceResult::GracefulShutdown
                 }
                 Err(e) => {
                     let elapsed = start_time.elapsed();
-                    error!(service = name, "Shutdown failed after {elapsed:.2?}: {e}");
+                    error!(service = name, "shutdown failed after {elapsed:.2?}: {e}");
                     ServiceResult::Error(e)
                 }
             }

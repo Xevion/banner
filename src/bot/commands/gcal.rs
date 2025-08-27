@@ -32,7 +32,7 @@ pub async fn gcal(
     {
         Ok(course) => course,
         Err(e) => {
-            error!(%e, crn, "Failed to fetch course data");
+            error!(%e, crn, "failed to fetch course data");
             return Err(Error::from(e));
         }
     };
@@ -44,7 +44,7 @@ pub async fn gcal(
     {
         Ok(meeting_time) => meeting_time,
         Err(e) => {
-            error!("Failed to get meeting times: {}", e);
+            error!("failed to get meeting times: {}", e);
             return Err(Error::from(e));
         }
     };

@@ -35,10 +35,17 @@ impl SessionManager {
 
     /// Ensures a valid session is available, creating one if necessary
     pub fn ensure_session(&self) -> Result<String> {
+        let start_time = std::time::Instant::now();
         let mut session_guard = self.current_session.lock().unwrap();
 
         if let Some(ref session) = *session_guard {
             if session.created_at.elapsed() < Self::SESSION_EXPIRY {
+                let elapsed = start_time.elapsed();
+                debug!(
+                    session_id = session.session_id,
+                    elapsed = format!("{:.2?}", elapsed),
+                    "reusing existing banner session"
+                );
                 return Ok(session.session_id.clone());
             }
         }
@@ -50,7 +57,12 @@ impl SessionManager {
             created_at: Instant::now(),
         });
 
-        debug!("Generated new Banner session: {}", session_id);
+        let elapsed = start_time.elapsed();
+        info!(
+            session_id = session_id,
+            elapsed = format!("{:.2?}", elapsed),
+            "generated new banner session"
+        );
         Ok(session_id)
     }
 
@@ -66,7 +78,7 @@ impl SessionManager {
 
     /// Sets up initial session cookies by making required Banner API requests
     pub async fn setup(&self) -> Result<()> {
-        info!("Setting up Banner session...");
+        info!("setting up banner session...");
 
         let request_paths = ["/registration/registration", "/selfServiceMenu/data"];
 
@@ -90,7 +102,7 @@ impl SessionManager {
         }
 
         // Note: Cookie validation would require additional setup in a real implementation
-        debug!("Session setup complete");
+        debug!("session setup complete");
         Ok(())
     }
 
@@ -150,7 +162,7 @@ impl SessionManager {
             ));
         }
 
-        debug!("Successfully selected term: {}", term);
+        debug!("successfully selected term: {}", term);
         Ok(())
     }
 

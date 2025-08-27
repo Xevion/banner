@@ -1,6 +1,6 @@
 use serenity::all::{ClientBuilder, GatewayIntents};
 use tokio::signal;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use crate::app_state::AppState;
@@ -39,13 +39,32 @@ async fn main() {
         }
     }
     .with_env_filter(filter)
+    .with_target(true)
     .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
+    // Log application startup context
+    info!(
+        version = env!("CARGO_PKG_VERSION"),
+        environment = if cfg!(debug_assertions) {
+            "development"
+        } else {
+            "production"
+        },
+        "starting banner system"
+    );
 
     let config: Config = Figment::new()
         .merge(Env::prefixed("APP_"))
         .extract()
         .expect("Failed to load config");
+
+    info!(
+        port = config.port,
+        shutdown_timeout = format!("{:.2?}", config.shutdown_timeout),
+        banner_base_url = config.banner_base_url,
+        "configuration loaded"
+    );
 
     // Create BannerApi and AppState
     let banner_api =
@@ -121,61 +140,67 @@ async fn main() {
         signal::ctrl_c()
             .await
             .expect("Failed to install CTRL+C signal handler");
-        info!("Received CTRL+C, gracefully shutting down...");
+        info!("received ctrl+c, gracefully shutting down...");
     };
 
     // Main application loop - wait for services or CTRL+C
     let mut exit_code = 0;
-
-    let join = |strings: Vec<String>| {
-        strings
-            .iter()
-            .map(|s| format!("\"{}\"", s))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
 
     tokio::select! {
         (service_name, result) = service_manager.run() => {
             // A service completed unexpectedly
             match result {
                 ServiceResult::GracefulShutdown => {
-                    info!(service = service_name, "Service completed gracefully");
+                    info!(service = service_name, "service completed gracefully");
                 }
                 ServiceResult::NormalCompletion => {
-                    warn!(service = service_name, "Service completed unexpectedly");
+                    warn!(service = service_name, "service completed unexpectedly");
                     exit_code = 1;
                 }
                 ServiceResult::Error(e) => {
-                    error!(service = service_name, "Service failed: {e}");
+                    error!(service = service_name, error = ?e, "service failed");
                     exit_code = 1;
                 }
             }
 
             // Shutdown remaining services
             match service_manager.shutdown(shutdown_timeout).await {
-                Ok(()) => {
-                    debug!("Graceful shutdown complete");
+                Ok(elapsed) => {
+                    info!(
+                        remaining = format!("{:.2?}", shutdown_timeout - elapsed),
+                        "graceful shutdown complete"
+                    );
                 }
                 Err(pending_services) => {
                     warn!(
-                        "Graceful shutdown elapsed - the following service(s) did not complete: {}",
-                        join(pending_services)
+                        pending_count = pending_services.len(),
+                        pending_services = ?pending_services,
+                        "graceful shutdown elapsed - {} service(s) did not complete",
+                        pending_services.len()
                     );
+
+                    // Non-zero exit code, default to 2 if not set
                     exit_code = if exit_code == 0 { 2 } else { exit_code };
                 }
             }
         }
         _ = ctrl_c => {
             // User requested shutdown
+            info!("user requested shutdown via ctrl+c");
             match service_manager.shutdown(shutdown_timeout).await {
-                Ok(()) => {
-                    debug!("Graceful shutdown complete");
+                Ok(elapsed) => {
+                    info!(
+                        remaining = format!("{:.2?}", shutdown_timeout - elapsed),
+                        "graceful shutdown complete"
+                    );
+                    info!("graceful shutdown complete");
                 }
                 Err(pending_services) => {
                     warn!(
-                        "Graceful shutdown elapsed - the following service(s) did not complete: {}",
-                        join(pending_services)
+                        pending_count = pending_services.len(),
+                        pending_services = ?pending_services,
+                        "graceful shutdown elapsed - {} service(s) did not complete",
+                        pending_services.len()
                     );
                     exit_code = 2;
                 }
@@ -183,6 +208,6 @@ async fn main() {
         }
     }
 
-    info!(exit_code = exit_code, "Shutdown complete");
+    info!(exit_code, "application shutdown complete");
     std::process::exit(exit_code);
 }
