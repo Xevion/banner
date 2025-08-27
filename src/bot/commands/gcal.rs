@@ -1,6 +1,6 @@
 //! Google Calendar command implementation.
 
-use crate::banner::{Course, DayOfWeek, MeetingScheduleInfo};
+use crate::banner::{Course, DayOfWeek, MeetingScheduleInfo, Term};
 use crate::bot::{Context, Error};
 use chrono::NaiveDate;
 use std::collections::HashMap;
@@ -21,14 +21,15 @@ pub async fn gcal(
     let app_state = &ctx.data().app_state;
     let banner_api = &app_state.banner_api;
 
-    // TODO: Get current term dynamically
-    let term = 202610; // Hardcoded for now
+    // Get current term dynamically
+    let current_term_status = Term::get_current();
+    let term = current_term_status.inner();
 
     // TODO: Replace with actual course data when BannerApi::get_course is implemented
     let course = Course {
         id: 0,
         term: term.to_string(),
-        term_desc: "Fall 2026".to_string(),
+        term_desc: term.to_long_string(),
         course_reference_number: crn.to_string(),
         part_of_term: "1".to_string(),
         course_number: "0000".to_string(),
@@ -64,7 +65,10 @@ pub async fn gcal(
     };
 
     // Get meeting times
-    let meeting_times = match banner_api.get_course_meeting_time(term, crn).await {
+    let meeting_times = match banner_api
+        .get_course_meeting_time(&term.to_string(), crn)
+        .await
+    {
         Ok(meeting_time) => meeting_time,
         Err(e) => {
             error!("Failed to get meeting times: {}", e);
@@ -127,27 +131,19 @@ fn generate_gcal_url(
     course: &Course,
     meeting_time: &MeetingScheduleInfo,
 ) -> Result<String, anyhow::Error> {
-    // Get start and end dates
-    let (start, end) = {
-        let central_tz = chrono_tz::US::Central;
-        let (start, end) = meeting_time.datetime_range();
-        (
-            start.with_timezone(&central_tz),
-            end.with_timezone(&central_tz),
-        )
-    };
-
-    // Generate RRULE for recurrence
-    let rrule = generate_rrule(meeting_time, end.date_naive());
-
-    // Build calendar URL
-    let mut params = HashMap::new();
-
     let course_text = format!(
         "{} {} - {}",
         course.subject, course.course_number, course.course_title
     );
-    let dates_text = format!("{}/{}", start, end);
+
+    let dates_text = {
+        let (start, end) = meeting_time.datetime_range();
+        format!(
+            "{}/{}",
+            start.format("%Y%m%dT%H%M%S"),
+            end.format("%Y%m%dT%H%M%S")
+        )
+    };
 
     // Get instructor name
     let instructor_name = if !course.faculty.is_empty() {
@@ -156,15 +152,21 @@ fn generate_gcal_url(
         "Unknown"
     };
 
-    let days_text = meeting_time.days_string();
+    // The event description
     let details_text = format!(
         "CRN: {}\nInstructor: {}\nDays: {}",
-        course.course_reference_number, instructor_name, days_text
+        course.course_reference_number,
+        instructor_name,
+        meeting_time.days_string()
     );
 
+    // The event location
     let location_text = meeting_time.place_string();
-    let recur_text = format!("RRULE:{}", rrule);
 
+    // The event recurrence rule
+    let recur_text = generate_rrule(meeting_time, meeting_time.date_range.end);
+
+    let mut params = HashMap::new();
     params.insert("action", "TEMPLATE");
     params.insert("text", &course_text);
     params.insert("dates", &dates_text);
@@ -174,13 +176,7 @@ fn generate_gcal_url(
     params.insert("ctz", "America/Chicago");
     params.insert("recur", &recur_text);
 
-    // Build URL
-    let mut url = Url::parse("https://calendar.google.com/calendar/render")?;
-    for (key, value) in params {
-        url.query_pairs_mut().append_pair(key, value);
-    }
-
-    Ok(url.to_string())
+    Ok(Url::parse_with_params("https://calendar.google.com/calendar/render", &params)?.to_string())
 }
 
 /// Generate RRULE for recurrence
@@ -201,7 +197,7 @@ fn generate_rrule(meeting_time: &MeetingScheduleInfo, end_date: NaiveDate) -> St
         .join(",");
 
     // Format end date for RRULE (YYYYMMDD format)
-    let until = end_date.format("%Y%m%d").to_string();
+    let until = end_date.format("%Y%m%dT000000Z").to_string();
 
     format!("RRULE:FREQ=WEEKLY;BYDAY={by_day};UNTIL={until}")
 }
