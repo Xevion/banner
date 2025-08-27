@@ -3,6 +3,7 @@
 use crate::banner::{api::BannerApi, models::*, query::SearchQuery};
 use anyhow::{Context, Result};
 use redis::AsyncCommands;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
 use tracing::{debug, error, info, warn};
@@ -15,13 +16,13 @@ const MAX_PAGE_SIZE: i32 = 500;
 
 /// Course scraper for Banner API
 pub struct CourseScraper {
-    api: BannerApi,
+    api: Arc<BannerApi>,
     redis_client: redis::Client,
 }
 
 impl CourseScraper {
     /// Creates a new course scraper
-    pub fn new(api: BannerApi, redis_url: &str) -> Result<Self> {
+    pub fn new(api: Arc<BannerApi>, redis_url: &str) -> Result<Self> {
         let redis_client =
             redis::Client::open(redis_url).context("Failed to create Redis client")?;
 

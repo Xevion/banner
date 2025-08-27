@@ -3,6 +3,7 @@ use tracing::{error, info, warn};
 
 pub mod bot;
 pub mod manager;
+pub mod web;
 
 #[derive(Debug)]
 pub enum ServiceResult {
@@ -21,6 +22,8 @@ pub trait Service: Send + Sync {
     async fn run(&mut self) -> Result<(), anyhow::Error>;
 
     /// Gracefully shutdown the service
+    ///
+    /// An 'Ok' result does not mean the service has completed shutdown, it merely means that the service shutdown was initiated.
     async fn shutdown(&mut self) -> Result<(), anyhow::Error>;
 }
 

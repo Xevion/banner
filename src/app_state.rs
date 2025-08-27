@@ -6,23 +6,24 @@ use anyhow::Result;
 use redis::AsyncCommands;
 use redis::Client;
 use serde_json;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
-    pub banner_api: std::sync::Arc<BannerApi>,
-    pub redis: std::sync::Arc<Client>,
+    pub banner_api: Arc<BannerApi>,
+    pub redis: Arc<Client>,
 }
 
 impl AppState {
     pub fn new(
-        banner_api: BannerApi,
+        banner_api: Arc<BannerApi>,
         redis_url: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let redis_client = Client::open(redis_url)?;
 
         Ok(Self {
-            banner_api: std::sync::Arc::new(banner_api),
-            redis: std::sync::Arc::new(redis_client),
+            banner_api,
+            redis: Arc::new(redis_client),
         })
     }
 

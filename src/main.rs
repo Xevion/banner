@@ -5,17 +5,21 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use crate::app_state::AppState;
 use crate::banner::BannerApi;
+use crate::banner::scraper::CourseScraper;
 use crate::bot::{Data, get_commands};
 use crate::config::Config;
 use crate::services::manager::ServiceManager;
-use crate::services::{ServiceResult, bot::BotService, run_service};
+use crate::services::{ServiceResult, bot::BotService, web::WebService};
+use crate::web::routes::BannerState;
 use figment::{Figment, providers::Env};
+use std::sync::Arc;
 
 mod app_state;
 mod banner;
 mod bot;
 mod config;
 mod services;
+mod web;
 
 #[tokio::main]
 async fn main() {
@@ -51,8 +55,19 @@ async fn main() {
         .await
         .expect("Failed to set up BannerApi session");
 
-    let app_state =
-        AppState::new(banner_api, &config.redis_url).expect("Failed to create AppState");
+    let banner_api_arc = Arc::new(banner_api);
+    let app_state = AppState::new(banner_api_arc.clone(), &config.redis_url)
+        .expect("Failed to create AppState");
+
+    // Create CourseScraper for web service
+    let scraper = CourseScraper::new(banner_api_arc.clone(), &config.redis_url)
+        .expect("Failed to create CourseScraper");
+
+    // Create BannerState for web service
+    let banner_state = BannerState {
+        api: banner_api_arc,
+        scraper: Arc::new(scraper),
+    };
 
     // Configure the client with your Discord bot token in the environment
     let intents = GatewayIntents::non_privileged();
@@ -86,16 +101,20 @@ async fn main() {
 
     // Extract shutdown timeout before moving config
     let shutdown_timeout = config.shutdown_timeout;
+    let port = config.port;
 
     // Create service manager
     let mut service_manager = ServiceManager::new();
 
-    // Create and add services
+    // Register services with the manager
     let bot_service = Box::new(BotService::new(client));
+    let web_service = Box::new(WebService::new(port, banner_state));
 
-    let bot_handle = tokio::spawn(run_service(bot_service, service_manager.subscribe()));
+    service_manager.register_service("bot", bot_service);
+    service_manager.register_service("web", web_service);
 
-    service_manager.add_service("bot".to_string(), bot_handle);
+    // Spawn all registered services
+    service_manager.spawn_all();
 
     // Set up CTRL+C signal handling
     let ctrl_c = async {

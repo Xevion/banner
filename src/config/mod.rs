@@ -3,8 +3,6 @@
 //! This module handles loading and parsing configuration from environment variables
 //! using the figment crate. It supports flexible duration parsing that accepts both
 //! numeric values (interpreted as seconds) and duration strings with units.
-//!
-//! All configuration is loaded from environment variables with the `APP_` prefix:
 
 use fundu::{DurationParser, TimeUnit};
 use serde::{Deserialize, Deserializer};
@@ -15,6 +13,9 @@ use std::time::Duration;
 pub struct Config {
     /// Discord bot token for authentication
     pub bot_token: String,
+    /// Port for the web server
+    #[serde(default = "default_port")]
+    pub port: u16,
     /// Database connection URL
     pub database_url: String,
     /// Redis connection URL
@@ -34,6 +35,11 @@ pub struct Config {
         deserialize_with = "deserialize_duration"
     )]
     pub shutdown_timeout: Duration,
+}
+
+/// Default port of 3000
+fn default_port() -> u16 {
+    3000
 }
 
 /// Default shutdown timeout of 8 seconds
