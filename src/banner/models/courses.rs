@@ -1,0 +1,64 @@
+use serde::{Deserialize, Serialize};
+
+use super::meetings::FacultyItem;
+use super::meetings::MeetingTimeResponse;
+
+/// Course section attribute
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionAttribute {
+    pub class: String,
+    pub course_reference_number: String,
+    pub code: String,
+    pub description: String,
+    pub term_code: String,
+    #[serde(rename = "isZTCAttribute")]
+    pub is_ztc_attribute: bool,
+}
+
+/// Represents a single course returned from a search
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Course {
+    pub id: i32,
+    pub term: String,
+    pub term_desc: String,
+    pub course_reference_number: String,
+    pub part_of_term: String,
+    pub course_number: String,
+    pub subject: String,
+    pub subject_description: String,
+    pub sequence_number: String,
+    pub campus_description: String,
+    pub schedule_type_description: String,
+    pub course_title: String,
+    pub credit_hours: i32,
+    pub maximum_enrollment: i32,
+    pub enrollment: i32,
+    pub seats_available: i32,
+    pub wait_capacity: i32,
+    pub wait_count: i32,
+    pub cross_list: Option<String>,
+    pub cross_list_capacity: Option<i32>,
+    pub cross_list_count: Option<i32>,
+    pub cross_list_available: Option<i32>,
+    pub credit_hour_high: Option<i32>,
+    pub credit_hour_low: Option<i32>,
+    pub credit_hour_indicator: Option<String>,
+    pub open_section: bool,
+    pub link_identifier: Option<String>,
+    pub is_section_linked: bool,
+    pub subject_course: String,
+    pub reserved_seat_summary: Option<String>,
+    pub instructional_method: String,
+    pub instructional_method_description: String,
+    pub section_attributes: Vec<SectionAttribute>,
+    pub faculty: Vec<FacultyItem>,
+    pub meetings_faculty: Vec<MeetingTimeResponse>,
+}
+
+/// Class details (to be implemented)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassDetails {
+    // TODO: Implement based on Banner API response
+}

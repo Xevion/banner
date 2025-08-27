@@ -10,7 +10,7 @@ use fundu::{DurationParser, TimeUnit};
 use serde::{Deserialize, Deserializer};
 use std::time::Duration;
 
-/// Application configuration loaded from environment variables.
+/// Application configuration loaded from environment variables
 #[derive(Deserialize)]
 pub struct Config {
     /// Discord bot token for authentication
@@ -27,8 +27,8 @@ pub struct Config {
     pub bot_app_id: u64,
     /// Graceful shutdown timeout duration
     ///
-    /// Accepts both numeric values (seconds) and duration strings.
-    /// Defaults to 8 seconds if not specified.
+    /// Accepts both numeric values (seconds) and duration strings
+    /// Defaults to 8 seconds if not specified
     #[serde(
         default = "default_shutdown_timeout",
         deserialize_with = "deserialize_duration"
@@ -36,12 +36,12 @@ pub struct Config {
     pub shutdown_timeout: Duration,
 }
 
-/// Default shutdown timeout of 8 seconds.
+/// Default shutdown timeout of 8 seconds
 fn default_shutdown_timeout() -> Duration {
     Duration::from_secs(8)
 }
 
-/// Duration parser configured to handle various time units with seconds as default.
+/// Duration parser configured to handle various time units with seconds as default
 ///
 /// Supports:
 /// - Seconds (s) - default unit
@@ -49,9 +49,9 @@ fn default_shutdown_timeout() -> Duration {
 /// - Minutes (m)
 /// - Hours (h)
 ///
-/// Does not support fractions, exponents, or infinity values.
-/// Allows for whitespace between the number and the time unit.
-/// Allows for multiple time units to be specified (summed together, e.g. "10s 2m" = 120 + 10 = 130 seconds)
+/// Does not support fractions, exponents, or infinity values
+/// Allows for whitespace between the number and the time unit
+/// Allows for multiple time units to be specified (summed together, e.g "10s 2m" = 120 + 10 = 130 seconds)
 const DURATION_PARSER: DurationParser<'static> = DurationParser::builder()
     .time_units(&[TimeUnit::Second, TimeUnit::MilliSecond, TimeUnit::Minute])
     .parse_multiple(None)
@@ -62,7 +62,7 @@ const DURATION_PARSER: DurationParser<'static> = DurationParser::builder()
     .default_unit(TimeUnit::Second)
     .build();
 
-/// Custom deserializer for duration fields that accepts both numeric and string values.
+/// Custom deserializer for duration fields that accepts both numeric and string values
 ///
 /// This deserializer handles the flexible duration parsing by accepting:
 /// - Unsigned integers (interpreted as seconds)
@@ -74,7 +74,7 @@ const DURATION_PARSER: DurationParser<'static> = DurationParser::builder()
 /// - `1` -> 1 second
 /// - `"30s"` -> 30 seconds  
 /// - `"2 m"` -> 2 minutes
-/// - `"1500ms"` -> 1.5 seconds
+/// - `"1500ms"` -> 15 seconds
 fn deserialize_duration<'de, D>(deserializer: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,

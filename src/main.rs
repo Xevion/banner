@@ -3,12 +3,16 @@ use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use crate::bot::{Data, age};
+use crate::app_state::AppState;
+use crate::banner::BannerApi;
+use crate::bot::{Data, get_commands};
 use crate::config::Config;
 use crate::services::manager::ServiceManager;
 use crate::services::{ServiceResult, bot::BotService, run_service};
 use figment::{Figment, providers::Env};
 
+mod app_state;
+mod banner;
 mod bot;
 mod config;
 mod services;
@@ -39,17 +43,25 @@ async fn main() {
         .extract()
         .expect("Failed to load config");
 
-    // Configure the client with your Discord bot token in the environment.
+    // Create BannerApi and AppState
+    let banner_api =
+        BannerApi::new(config.banner_base_url.clone()).expect("Failed to create BannerApi");
+
+    let app_state =
+        AppState::new(banner_api, &config.redis_url).expect("Failed to create AppState");
+
+    // Configure the client with your Discord bot token in the environment
     let intents = GatewayIntents::non_privileged();
 
     let bot_target_guild = config.bot_target_guild;
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![age()],
+            commands: get_commands(),
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {
+            let app_state = app_state.clone();
             Box::pin(async move {
                 poise::builtins::register_in_guild(
                     ctx,
@@ -58,7 +70,7 @@ async fn main() {
                 )
                 .await?;
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                Ok(Data {})
+                Ok(Data { app_state })
             })
         })
         .build();
