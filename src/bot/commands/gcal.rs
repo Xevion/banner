@@ -1,13 +1,11 @@
 //! Google Calendar command implementation.
 
-use crate::banner::{Course, MeetingScheduleInfo, TimeRange};
+use crate::banner::{Course, DayOfWeek, MeetingScheduleInfo};
 use crate::bot::{Context, Error};
 use chrono::NaiveDate;
 use std::collections::HashMap;
 use tracing::{error, info};
 use url::Url;
-
-const TIMESTAMP_FORMAT: &str = "%Y%m%dT%H%M%SZ";
 
 /// Generate a link to create a Google Calendar event for a course
 #[poise::command(slash_command, prefix_command)]
@@ -66,7 +64,7 @@ pub async fn gcal(
     };
 
     // Get meeting times
-    let mut meeting_times = match banner_api.get_course_meeting_time(term, crn).await {
+    let meeting_times = match banner_api.get_course_meeting_time(term, crn).await {
         Ok(meeting_time) => meeting_time,
         Err(e) => {
             error!("Failed to get meeting times: {}", e);
@@ -87,7 +85,7 @@ pub async fn gcal(
                 .map(|m| {
                     let link = generate_gcal_url(&course, m)?;
                     let detail = match &m.time_range {
-                        Some(range) => range.format_12hr(),
+                        Some(range) => format!("{} {}", m.days_string(), range.format_12hr()),
                         None => m.days_string(),
                     };
                     Ok(LinkDetail { link, detail })
@@ -175,32 +173,23 @@ fn generate_gcal_url(
 
 /// Generate RRULE for recurrence
 fn generate_rrule(meeting_time: &MeetingScheduleInfo, end_date: NaiveDate) -> String {
-    let by_day = meeting_time.days_string();
-
-    // Handle edge cases where days_string might return "None" or empty
-    let by_day = if by_day.is_empty() || by_day == "None" {
-        "MO".to_string() // Default to Monday
-    } else {
-        // Convert our day format to Google Calendar format
-        by_day
-            .replace("M", "MO")
-            .replace("Tu", "TU")
-            .replace("W", "WE")
-            .replace("Th", "TH")
-            .replace("F", "FR")
-            .replace("Sa", "SA")
-            .replace("Su", "SU")
-    };
+    let days_of_week = meeting_time.days_of_week();
+    let by_day = days_of_week
+        .iter()
+        .map(|day| match day {
+            DayOfWeek::Monday => "MO",
+            DayOfWeek::Tuesday => "TU",
+            DayOfWeek::Wednesday => "WE",
+            DayOfWeek::Thursday => "TH",
+            DayOfWeek::Friday => "FR",
+            DayOfWeek::Saturday => "SA",
+            DayOfWeek::Sunday => "SU",
+        })
+        .collect::<Vec<&str>>()
+        .join(",");
 
     // Format end date for RRULE (YYYYMMDD format)
     let until = end_date.format("%Y%m%d").to_string();
 
-    // Build the RRULE string manually to avoid formatting issues
-    let mut rrule = String::new();
-    rrule.push_str("FREQ=WEEKLY;BYDAY=");
-    rrule.push_str(&by_day);
-    rrule.push_str(";UNTIL=");
-    rrule.push_str(&until);
-
-    rrule
+    format!("RRULE:FREQ=WEEKLY;BYDAY={by_day};UNTIL={until}")
 }

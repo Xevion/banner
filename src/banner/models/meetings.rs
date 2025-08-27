@@ -487,52 +487,6 @@ impl MeetingScheduleInfo {
 
         (start.and_utc(), end.and_utc())
     }
-
-    /// Get formatted time string
-    pub fn time_string(&self) -> String {
-        match &self.time_range {
-            Some(time_range) => format!("{} {}", self.days_string(), time_range.format_12hr()),
-            None => "No Time".to_string(),
-        }
-    }
-
-    /// Get formatted schedule string
-    pub fn schedule_string(&self) -> String {
-        match self.meeting_type {
-            MeetingType::HybridBlended => {
-                format!(
-                    "{}\nHybrid {}",
-                    self.time_string(),
-                    self.location.to_string()
-                )
-            }
-            MeetingType::OnlineSynchronous => {
-                format!("{}\nOnline Only", self.time_string())
-            }
-            MeetingType::OnlineAsynchronous => "No Time\nOnline Asynchronous".to_string(),
-            MeetingType::OnlineHybrid => {
-                format!("{}\nOnline Partial", self.time_string())
-            }
-            MeetingType::IndependentStudy => "To Be Arranged".to_string(),
-            MeetingType::FaceToFace => {
-                format!("{}\n{}", self.time_string(), self.location.to_string())
-            }
-            MeetingType::Unknown(_) => "Unknown".to_string(),
-        }
-    }
-
-    pub fn occurs_on_day(&self, day: DayOfWeek) -> bool {
-        self.days.contains(MeetingDays::from(day))
-    }
-
-    /// Get meeting duration in minutes
-    pub fn duration_minutes(&self) -> Option<i64> {
-        if let Some(time_range) = &self.time_range {
-            Some(time_range.duration_minutes())
-        } else {
-            None
-        }
-    }
 }
 
 impl PartialEq for MeetingScheduleInfo {
