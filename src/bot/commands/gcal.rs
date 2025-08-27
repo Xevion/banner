@@ -1,7 +1,7 @@
 //! Google Calendar command implementation.
 
-use crate::banner::{Course, DayOfWeek, MeetingScheduleInfo, Term};
-use crate::bot::{Context, Error};
+use crate::banner::{Course, DayOfWeek, MeetingScheduleInfo};
+use crate::bot::{Context, Error, utils};
 use chrono::NaiveDate;
 use std::collections::HashMap;
 use tracing::{error, info};
@@ -18,34 +18,21 @@ pub async fn gcal(
 
     ctx.defer().await?;
 
-    let app_state = &ctx.data().app_state;
-    let banner_api = &app_state.banner_api;
-
-    // Get current term dynamically
-    let current_term_status = Term::get_current();
-    let term = current_term_status.inner();
-
-    // Fetch live course data from Redis cache via AppState
-    let course = match app_state
-        .get_course_or_fetch(&term.to_string(), &crn.to_string())
-        .await
-    {
-        Ok(course) => course,
-        Err(e) => {
-            error!(%e, crn, "failed to fetch course data");
-            return Err(Error::from(e));
-        }
-    };
+    let course = utils::get_course_by_crn(&ctx, crn).await?;
+    let term = course.term.clone();
 
     // Get meeting times
-    let meeting_times = match banner_api
-        .get_course_meeting_time(&term.to_string(), crn)
+    let meeting_times = match ctx
+        .data()
+        .app_state
+        .banner_api
+        .get_course_meeting_time(&term, &crn.to_string())
         .await
     {
         Ok(meeting_time) => meeting_time,
         Err(e) => {
             error!("failed to get meeting times: {}", e);
-            return Err(Error::from(e));
+            return Err(e);
         }
     };
 
@@ -74,8 +61,10 @@ pub async fn gcal(
                 .map(|m| {
                     let link = generate_gcal_url(&course, m)?;
                     let detail = match &m.time_range {
-                        Some(range) => format!("{} {}", m.days_string(), range.format_12hr()),
-                        None => m.days_string(),
+                        Some(range) => {
+                            format!("{} {}", m.days_string().unwrap(), range.format_12hr())
+                        }
+                        None => m.days_string().unwrap(),
                     };
                     Ok(LinkDetail { link, detail })
                 })
@@ -104,10 +93,7 @@ fn generate_gcal_url(
     course: &Course,
     meeting_time: &MeetingScheduleInfo,
 ) -> Result<String, anyhow::Error> {
-    let course_text = format!(
-        "{} {} - {}",
-        course.subject, course.course_number, course.course_title
-    );
+    let course_text = course.display_title();
 
     let dates_text = {
         let (start, end) = meeting_time.datetime_range();
@@ -119,18 +105,14 @@ fn generate_gcal_url(
     };
 
     // Get instructor name
-    let instructor_name = if !course.faculty.is_empty() {
-        &course.faculty[0].display_name
-    } else {
-        "Unknown"
-    };
+    let instructor_name = course.primary_instructor_name();
 
     // The event description
     let details_text = format!(
         "CRN: {}\nInstructor: {}\nDays: {}",
         course.course_reference_number,
         instructor_name,
-        meeting_time.days_string()
+        meeting_time.days_string().unwrap()
     );
 
     // The event location

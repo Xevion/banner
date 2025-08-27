@@ -1,6 +1,7 @@
 //! ICS command implementation for generating calendar files.
 
-use crate::bot::{Context, Error};
+use crate::bot::{Context, Error, utils};
+use tracing::info;
 
 /// Generate an ICS file for a course
 #[poise::command(slash_command, prefix_command)]
@@ -10,16 +11,15 @@ pub async fn ics(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
-    // TODO: Get BannerApi from context or global state
-    // TODO: Get current term dynamically
-    let term = 202510; // Hardcoded for now
+    let course = utils::get_course_by_crn(&ctx, crn).await?;
 
     // TODO: Implement actual ICS file generation
     ctx.say(format!(
-        "ICS command not yet implemented - BannerApi integration needed\nCRN: {}, Term: {}",
-        crn, term
+        "ICS generation for '{}' is not yet implemented.",
+        course.display_title()
     ))
     .await?;
 
+    info!("ics command completed for CRN: {}", crn);
     Ok(())
 }

@@ -59,6 +59,24 @@ pub struct Course {
     pub meetings_faculty: Vec<MeetingTimeResponse>,
 }
 
+impl Course {
+    /// Returns the course title in the format "SUBJ #### - Course Title"
+    pub fn display_title(&self) -> String {
+        format!(
+            "{} {} - {}",
+            self.subject, self.course_number, self.course_title
+        )
+    }
+
+    /// Returns the name of the primary instructor, or "Unknown" if not available
+    pub fn primary_instructor_name(&self) -> &str {
+        self.faculty
+            .first()
+            .map(|f| f.display_name.as_str())
+            .unwrap_or("Unknown")
+    }
+}
+
 /// Class details (to be implemented)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClassDetails {

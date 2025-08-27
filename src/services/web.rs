@@ -1,5 +1,5 @@
 use super::Service;
-use crate::web::{BannerState, create_banner_router};
+use crate::web::{BannerState, create_router};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
@@ -30,7 +30,7 @@ impl Service for WebService {
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
         // Create the main router with Banner API routes
-        let app = create_banner_router(self.banner_state.clone());
+        let app = create_router(self.banner_state.clone());
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.port));
         info!(

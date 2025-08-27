@@ -18,6 +18,7 @@ mod app_state;
 mod banner;
 mod bot;
 mod config;
+mod error;
 mod services;
 mod web;
 

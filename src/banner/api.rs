@@ -1,6 +1,6 @@
 //! Main Banner API client implementation.
 
-use crate::banner::{SessionManager, models::*, query::SearchQuery};
+use crate::banner::{models::*, query::SearchQuery, session::SessionManager, util::user_agent};
 use anyhow::{Context, Result};
 use axum::http::HeaderValue;
 use reqwest::Client;
@@ -166,7 +166,7 @@ impl BannerApi {
     pub async fn get_campuses(
         &self,
         search: &str,
-        term: i32,
+        term: &str,
         offset: i32,
         max_results: i32,
     ) -> Result<Vec<Pair>> {
@@ -178,7 +178,7 @@ impl BannerApi {
         let url = format!("{}/classSearch/get_campus", self.base_url);
         let params = [
             ("searchTerm", search),
-            ("term", &term.to_string()),
+            ("term", term),
             ("offset", &offset.to_string()),
             ("max", &max_results.to_string()),
             ("uniqueSessionId", &session_id),
@@ -205,10 +205,10 @@ impl BannerApi {
     pub async fn get_course_meeting_time(
         &self,
         term: &str,
-        crn: i32,
+        crn: &str,
     ) -> Result<Vec<MeetingScheduleInfo>> {
         let url = format!("{}/searchResults/getFacultyMeetingTimes", self.base_url);
-        let params = [("term", term), ("courseReferenceNumber", &crn.to_string())];
+        let params = [("term", term), ("courseReferenceNumber", crn)];
 
         let response = self
             .client
@@ -242,14 +242,14 @@ impl BannerApi {
             ));
         }
 
-        #[derive(serde::Deserialize)]
-        struct ResponseWrapper {
-            fmt: Vec<MeetingTimeResponse>,
-        }
+        let response: MeetingTimesApiResponse =
+            response.json().await.context("Failed to parse response")?;
 
-        let wrapper: ResponseWrapper = response.json().await.context("Failed to parse response")?;
-
-        Ok(wrapper.fmt.into_iter().map(|m| m.schedule_info()).collect())
+        Ok(response
+            .fmt
+            .into_iter()
+            .map(|m| m.schedule_info())
+            .collect())
     }
 
     /// Performs a search for courses.
@@ -357,10 +357,10 @@ impl BannerApi {
     }
 
     /// Gets course details (placeholder - needs implementation).
-    pub async fn get_course_details(&self, term: i32, crn: i32) -> Result<ClassDetails> {
+    pub async fn get_course_details(&self, term: &str, crn: &str) -> Result<ClassDetails> {
         let body = serde_json::json!({
-            "term": term.to_string(),
-            "courseReferenceNumber": crn.to_string(),
+            "term": term,
+            "courseReferenceNumber": crn,
             "first": "first"
         });
 
@@ -380,11 +380,6 @@ impl BannerApi {
 
         Ok(details)
     }
-}
-
-/// Returns a browser-like user agent string.
-fn user_agent() -> &'static str {
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
 }
 
 /// Attempt to parse JSON and, on failure, include a contextual snippet around the error location

@@ -1,5 +1,6 @@
 //! Session management for Banner API.
 
+use crate::banner::util::user_agent;
 use anyhow::Result;
 use rand::distributions::{Alphanumeric, DistString};
 use reqwest::Client;
@@ -194,9 +195,4 @@ impl SessionManager {
             .as_millis()
             .to_string()
     }
-}
-
-/// Returns a browser-like user agent string
-fn user_agent() -> &'static str {
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
 }

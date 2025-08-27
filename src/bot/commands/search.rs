@@ -1,8 +1,10 @@
 //! Course search command implementation.
 
-use crate::banner::SearchQuery;
+use crate::banner::{SearchQuery, Term};
 use crate::bot::{Context, Error};
+use anyhow::anyhow;
 use regex::Regex;
+use tracing::info;
 
 /// Search for courses with various filters
 #[poise::command(slash_command, prefix_command)]
@@ -40,12 +42,37 @@ pub async fn search(
         query = query.max_results(max_results.min(25)); // Cap at 25
     }
 
-    // TODO: Get current term dynamically
-    // TODO: Get BannerApi from context or global state
-    // For now, we'll return an error
-    ctx.say("Search functionality not yet implemented - BannerApi integration needed")
+    let term = Term::get_current().inner().to_string();
+    let search_result = ctx
+        .data()
+        .app_state
+        .banner_api
+        .search(&term, &query, "subjectDescription", false)
         .await?;
 
+    let response = if let Some(courses) = search_result.data {
+        if courses.is_empty() {
+            "No courses found with the specified criteria.".to_string()
+        } else {
+            courses
+                .iter()
+                .map(|course| {
+                    format!(
+                        "**{}**: {} ({})",
+                        course.display_title(),
+                        course.primary_instructor_name(),
+                        course.course_reference_number
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+    } else {
+        "No courses found with the specified criteria.".to_string()
+    };
+
+    ctx.say(response).await?;
+    info!("search command completed");
     Ok(())
 }
 
@@ -65,22 +92,24 @@ fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
             };
 
             if low > high {
-                return Err("Invalid range: low value greater than high value".into());
+                return Err(anyhow!(
+                    "Invalid range: low value greater than high value"
+                ));
             }
 
             if low < 1000 || high > 9999 {
-                return Err("Course codes must be between 1000 and 9999".into());
+                return Err(anyhow!("Course codes must be between 1000 and 9999"));
             }
 
             return Ok((low, high));
         }
-        return Err("Invalid range format".into());
+        return Err(anyhow!("Invalid range format"));
     }
 
     // Handle wildcard format (e.g, "34xx")
     if input.contains('x') {
         if input.len() != 4 {
-            return Err("Wildcard format must be exactly 4 characters".into());
+            return Err(anyhow!("Wildcard format must be exactly 4 characters"));
         }
 
         let re = Regex::new(r"(\d+)(x+)").unwrap();
@@ -92,22 +121,22 @@ fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
             let high = low + 10_i32.pow(x_count as u32) - 1;
 
             if low < 1000 || high > 9999 {
-                return Err("Course codes must be between 1000 and 9999".into());
+                return Err(anyhow!("Course codes must be between 1000 and 9999"));
             }
 
             return Ok((low, high));
         }
-        return Err("Invalid wildcard format".into());
+        return Err(anyhow!("Invalid wildcard format"));
     }
 
     // Handle single course code
     if input.len() == 4 {
         let code: i32 = input.parse()?;
         if !(1000..=9999).contains(&code) {
-            return Err("Course codes must be between 1000 and 9999".into());
+            return Err(anyhow!("Course codes must be between 1000 and 9999"));
         }
         return Ok((code, code));
     }
 
-    Err("Invalid course code format".into())
+    Err(anyhow!("Invalid course code format"))
 }

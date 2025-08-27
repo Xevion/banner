@@ -1,7 +1,7 @@
 use bitflags::{Flags, bitflags};
 use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{cmp::Ordering, fmt::Display, str::FromStr};
+use std::{cmp::Ordering, collections::HashSet, fmt::Display, str::FromStr};
 
 use super::terms::Term;
 
@@ -157,6 +157,19 @@ impl DayOfWeek {
             DayOfWeek::Friday => "Fr",
             DayOfWeek::Saturday => "Sa",
             DayOfWeek::Sunday => "Su",
+        }
+    }
+
+    /// Convert to full string representation
+    pub fn to_full_string(self) -> &'static str {
+        match self {
+            DayOfWeek::Monday => "Monday",
+            DayOfWeek::Tuesday => "Tuesday",
+            DayOfWeek::Wednesday => "Wednesday",
+            DayOfWeek::Thursday => "Thursday",
+            DayOfWeek::Friday => "Friday",
+            DayOfWeek::Saturday => "Saturday",
+            DayOfWeek::Sunday => "Sunday",
         }
     }
 }
@@ -423,18 +436,36 @@ impl MeetingScheduleInfo {
     }
 
     /// Get formatted days string
-    pub fn days_string(&self) -> String {
+    pub fn days_string(&self) -> Option<String> {
         if self.days.is_empty() {
-            "None".to_string()
-        } else if self.days.is_all() {
-            "Everyday".to_string()
-        } else {
-            self.days_of_week()
-                .iter()
-                .map(|day| day.to_short_string())
-                .collect::<Vec<_>>()
-                .join("")
+            return None;
         }
+        if self.days.is_all() {
+            return Some("Everyday".to_string());
+        }
+
+        let days_of_week = self.days_of_week();
+        if days_of_week.len() == 1 {
+            return Some(days_of_week[0].to_full_string().to_string());
+        }
+
+        // Mapper function to get the short string representation of the day of week
+        let mapper = {
+            let ambiguous = self.days.intersects(
+                MeetingDays::Tuesday
+                    | MeetingDays::Thursday
+                    | MeetingDays::Saturday
+                    | MeetingDays::Sunday,
+            );
+
+            if ambiguous {
+                |day: &DayOfWeek| day.to_short_string().to_string()
+            } else {
+                |day: &DayOfWeek| day.to_short_string().chars().next().unwrap().to_string()
+            }
+        };
+
+        Some(days_of_week.iter().map(mapper).collect::<String>())
     }
 
     /// Returns a formatted string representing the location of the meeting
