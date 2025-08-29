@@ -1,3 +1,30 @@
+pub mod sql_types {
+    #[derive(diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "scrape_priority"))]
+    pub struct ScrapePriority;
+
+    #[derive(diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "target_type"))]
+    pub struct TargetType;
+}
+
+use super::models::{ScrapePriorityMapping, TargetTypeMapping};
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::{ScrapePriorityMapping, TargetTypeMapping};
+
+    scrape_jobs (id) {
+        id -> Int4,
+        target_type -> TargetTypeMapping,
+        target_payload -> Jsonb,
+        priority -> ScrapePriorityMapping,
+        execute_at -> Timestamptz,
+        created_at -> Timestamptz,
+        locked_at -> Nullable<Timestamptz>,
+    }
+}
+
 diesel::table! {
     courses (id) {
         id -> Int4,
@@ -39,4 +66,4 @@ diesel::table! {
 diesel::joinable!(course_metrics -> courses (course_id));
 diesel::joinable!(course_audits -> courses (course_id));
 
-diesel::allow_tables_to_appear_in_same_query!(courses, course_metrics, course_audits,);
+diesel::allow_tables_to_appear_in_same_query!(courses, course_metrics, course_audits, scrape_jobs,);

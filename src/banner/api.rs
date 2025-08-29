@@ -11,15 +11,15 @@ use tracing::{error, info};
 /// Main Banner API client.
 #[derive(Debug)]
 pub struct BannerApi {
-    session_manager: SessionManager,
-    client: Client,
+    sessions: SessionManager,
+    http: Client,
     base_url: String,
 }
 
 impl BannerApi {
     /// Creates a new Banner API client.
     pub fn new(base_url: String) -> Result<Self> {
-        let client = Client::builder()
+        let http = Client::builder()
             .cookie_store(true)
             .user_agent(user_agent())
             .tcp_keepalive(Some(std::time::Duration::from_secs(60 * 5)))
@@ -29,11 +29,11 @@ impl BannerApi {
             .build()
             .context("Failed to create HTTP client")?;
 
-        let session_manager = SessionManager::new(base_url.clone(), client.clone());
+        let session_manager = SessionManager::new(base_url.clone(), http.clone());
 
         Ok(Self {
-            session_manager,
-            client,
+            sessions: session_manager,
+            http,
             base_url,
         })
     }
@@ -41,7 +41,7 @@ impl BannerApi {
     /// Sets up the API client by initializing session cookies.
     pub async fn setup(&self) -> Result<()> {
         info!(base_url = self.base_url, "setting up banner api client");
-        let result = self.session_manager.setup().await;
+        let result = self.sessions.setup().await;
         match &result {
             Ok(()) => info!("banner api client setup completed successfully"),
             Err(e) => error!(error = ?e, "banner api client setup failed"),
@@ -69,7 +69,7 @@ impl BannerApi {
         ];
 
         let response = self
-            .client
+            .http
             .get(&url)
             .query(&params)
             .send()
@@ -96,7 +96,7 @@ impl BannerApi {
             return Err(anyhow::anyhow!("Offset must be greater than 0"));
         }
 
-        let session_id = self.session_manager.ensure_session()?;
+        let session_id = self.sessions.ensure_session()?;
         let url = format!("{}/classSearch/get_subject", self.base_url);
         let params = [
             ("searchTerm", search),
@@ -108,7 +108,7 @@ impl BannerApi {
         ];
 
         let response = self
-            .client
+            .http
             .get(&url)
             .query(&params)
             .send()
@@ -135,7 +135,7 @@ impl BannerApi {
             return Err(anyhow::anyhow!("Offset must be greater than 0"));
         }
 
-        let session_id = self.session_manager.ensure_session()?;
+        let session_id = self.sessions.ensure_session()?;
         let url = format!("{}/classSearch/get_instructor", self.base_url);
         let params = [
             ("searchTerm", search),
@@ -147,7 +147,7 @@ impl BannerApi {
         ];
 
         let response = self
-            .client
+            .http
             .get(&url)
             .query(&params)
             .send()
@@ -174,7 +174,7 @@ impl BannerApi {
             return Err(anyhow::anyhow!("Offset must be greater than 0"));
         }
 
-        let session_id = self.session_manager.ensure_session()?;
+        let session_id = self.sessions.ensure_session()?;
         let url = format!("{}/classSearch/get_campus", self.base_url);
         let params = [
             ("searchTerm", search),
@@ -186,7 +186,7 @@ impl BannerApi {
         ];
 
         let response = self
-            .client
+            .http
             .get(&url)
             .query(&params)
             .send()
@@ -211,7 +211,7 @@ impl BannerApi {
         let params = [("term", term), ("courseReferenceNumber", crn)];
 
         let response = self
-            .client
+            .http
             .get(&url)
             .query(&params)
             .send()
@@ -260,9 +260,9 @@ impl BannerApi {
         sort: &str,
         sort_descending: bool,
     ) -> Result<SearchResult> {
-        self.session_manager.reset_data_form().await?;
+        self.sessions.reset_data_form().await?;
 
-        let session_id = self.session_manager.ensure_session()?;
+        let session_id = self.sessions.ensure_session()?;
         let mut params = query.to_params();
 
         // Add additional parameters
@@ -278,7 +278,7 @@ impl BannerApi {
 
         let url = format!("{}/searchResults/searchResults", self.base_url);
         let response = self
-            .client
+            .http
             .get(&url)
             .query(&params)
             .send()
@@ -301,16 +301,16 @@ impl BannerApi {
 
     /// Selects a term for the current session.
     pub async fn select_term(&self, term: &str) -> Result<()> {
-        self.session_manager.select_term(term).await
+        self.sessions.select_term(term).await
     }
 
     /// Retrieves a single course by CRN by issuing a minimal search
     pub async fn get_course_by_crn(&self, term: &str, crn: &str) -> Result<Option<Course>> {
-        self.session_manager.reset_data_form().await?;
+        self.sessions.reset_data_form().await?;
         // Ensure session is configured for this term
         self.select_term(term).await?;
 
-        let session_id = self.session_manager.ensure_session()?;
+        let session_id = self.sessions.ensure_session()?;
 
         let query = SearchQuery::new()
             .course_reference_number(crn)
@@ -326,7 +326,7 @@ impl BannerApi {
 
         let url = format!("{}/searchResults/searchResults", self.base_url);
         let response = self
-            .client
+            .http
             .get(&url)
             .query(&params)
             .send()
@@ -366,7 +366,7 @@ impl BannerApi {
 
         let url = format!("{}/searchResults/getClassDetails", self.base_url);
         let response = self
-            .client
+            .http
             .post(&url)
             .json(&body)
             .send()

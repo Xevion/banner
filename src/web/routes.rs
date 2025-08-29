@@ -5,11 +5,12 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use tracing::info;
 
+use crate::banner::BannerApi;
+
 /// Shared application state for web server
 #[derive(Clone)]
 pub struct BannerState {
-    pub api: Arc<crate::banner::BannerApi>,
-    pub scraper: Arc<crate::banner::scraper::CourseScraper>,
+    pub api: Arc<BannerApi>,
 }
 
 /// Creates the web server router

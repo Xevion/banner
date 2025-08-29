@@ -8,7 +8,7 @@ tokio = { version = "1.47.1", features = ["full"] }
 axum = "0.8.4"
 serenity = { version = "0.12.4", features = ["rustls_backend"] }
 reqwest = { version = "0.12.23", features = ["json", "cookies"] }
-diesel = { version = "2.2.12", features = ["chrono", "postgres", "uuid"] }
+diesel = { version = "2.2.12", features = ["chrono", "postgres", "r2d2", "uuid", "serde_json"] }
 redis = { version = "0.32.5", features = ["tokio-comp"] }
 figment = { version = "0.10.19", features = ["toml", "env"] }
 serde_json = "1.0.143"
@@ -30,3 +30,5 @@ url = "2.5"
 compile-time = "0.2.0"
 time = "0.3.41"
 bitflags = { version = "2.9.3", features = ["serde"] }
+diesel_derives = "2.2.7"
+diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }

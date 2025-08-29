@@ -5,7 +5,6 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use crate::app_state::AppState;
 use crate::banner::BannerApi;
-use crate::banner::scraper::CourseScraper;
 use crate::bot::{Data, get_commands};
 use crate::config::Config;
 use crate::services::manager::ServiceManager;
@@ -80,14 +79,9 @@ async fn main() {
     let app_state = AppState::new(banner_api_arc.clone(), &config.redis_url)
         .expect("Failed to create AppState");
 
-    // Create CourseScraper for web service
-    let scraper = CourseScraper::new(banner_api_arc.clone(), &config.redis_url)
-        .expect("Failed to create CourseScraper");
-
     // Create BannerState for web service
     let banner_state = BannerState {
         api: banner_api_arc,
-        scraper: Arc::new(scraper),
     };
 
     // Configure the client with your Discord bot token in the environment

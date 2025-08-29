@@ -1,8 +1,9 @@
 //! Diesel models for the database schema.
 
-use crate::data::schema::{course_audits, course_metrics, courses};
+use crate::data::schema::{course_audits, course_metrics, courses, scrape_jobs};
 use chrono::{DateTime, Utc};
-use diesel::{Insertable, Queryable, Selectable};
+use diesel::{Insertable, Queryable, QueryableByName, Selectable};
+use serde_json::Value;
 
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = courses)]
@@ -77,4 +78,46 @@ pub struct NewCourseAudit<'a> {
     pub field_changed: &'a str,
     pub old_value: &'a str,
     pub new_value: &'a str,
+}
+
+/// The priority level of a scrape job.
+#[derive(diesel_derive_enum::DbEnum, Copy, Debug, Clone)]
+pub enum ScrapePriority {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// The type of target for a scrape job, determining how the payload is interpreted.
+#[derive(diesel_derive_enum::DbEnum, Copy, Debug, Clone)]
+pub enum TargetType {
+    Subject,
+    CourseRange,
+    CrnList,
+    SingleCrn,
+}
+
+/// Represents a queryable job from the database.
+#[derive(Debug, Clone, Queryable, QueryableByName)]
+#[diesel(table_name = scrape_jobs)]
+pub struct ScrapeJob {
+    pub id: i32,
+    pub target_type: TargetType,
+    pub target_payload: Value,
+    pub priority: ScrapePriority,
+    pub execute_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub locked_at: Option<DateTime<Utc>>,
+}
+
+/// Represents a new job to be inserted into the database.
+#[derive(Debug, Clone, Insertable)]
+#[diesel(table_name = scrape_jobs)]
+pub struct NewScrapeJob {
+    pub target_type: TargetType,
+    #[diesel(sql_type = diesel::sql_types::Jsonb)]
+    pub target_payload: Value,
+    pub priority: ScrapePriority,
+    pub execute_at: DateTime<Utc>,
 }

@@ -11,7 +11,6 @@
 pub mod api;
 pub mod models;
 pub mod query;
-pub mod scraper;
 pub mod session;
 pub mod util;
 
