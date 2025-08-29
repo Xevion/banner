@@ -11,9 +11,6 @@ bitflags = { version = "2.9.3", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10.4"
 compile-time = "0.2.0"
-diesel = { version = "2.2.12", features = ["chrono", "postgres", "r2d2", "uuid", "serde_json"] }
-diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }
-diesel_derives = "2.2.7"
 dotenvy = "0.15.7"
 figment = { version = "0.10.19", features = ["toml", "env"] }
 fundu = "2.0.1"
