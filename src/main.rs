@@ -1,4 +1,4 @@
-use serenity::all::{ClientBuilder, GatewayIntents};
+use serenity::all::{CacheHttp, ClientBuilder, GatewayIntents};
 use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -92,6 +92,50 @@ async fn main() {
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: get_commands(),
+            pre_command: |ctx| {
+                Box::pin(async move {
+                    let content = match ctx {
+                        poise::Context::Application(_) => ctx.invocation_string(),
+                        poise::Context::Prefix(prefix) => prefix.msg.content.to_string(),
+                    };
+                    let channel_name = ctx
+                        .channel_id()
+                        .name(ctx.http())
+                        .await
+                        .unwrap_or("unknown".to_string());
+
+                    let span = tracing::Span::current();
+                    span.record("command_name", ctx.command().qualified_name.as_str());
+                    span.record("invocation", ctx.invocation_string());
+                    span.record("msg.content", content.as_str());
+                    span.record("msg.author", ctx.author().tag().as_str());
+                    span.record("msg.id", ctx.id());
+                    span.record("msg.channel_id", ctx.channel_id().get());
+                    span.record("msg.channel", &channel_name.as_str());
+
+                    tracing::info!(
+                        command_name = ctx.command().qualified_name.as_str(),
+                        invocation = ctx.invocation_string(),
+                        msg.content = %content,
+                        msg.author = %ctx.author().tag(),
+                        msg.author_id = %ctx.author().id,
+                        msg.id = %ctx.id(),
+                        msg.channel = %channel_name.as_str(),
+                        msg.channel_id = %ctx.channel_id(),
+                        "{} invoked by {}",
+                        ctx.command().name,
+                        ctx.author().tag()
+                    );
+                })
+            },
+            on_error: |error| {
+                Box::pin(async move {
+                    if let Err(e) = poise::builtins::on_error(error).await {
+                        tracing::error!("Fatal error while sending error message: {}", e);
+                    }
+                    // error!(error = ?error, "command error");
+                })
+            },
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {

@@ -4,7 +4,7 @@ use crate::banner::{Course, DayOfWeek, MeetingScheduleInfo};
 use crate::bot::{Context, Error, utils};
 use chrono::NaiveDate;
 use std::collections::HashMap;
-use tracing::{error, info};
+use tracing::info;
 use url::Url;
 
 /// Generate a link to create a Google Calendar event for a course
@@ -22,19 +22,12 @@ pub async fn gcal(
     let term = course.term.clone();
 
     // Get meeting times
-    let meeting_times = match ctx
+    let meeting_times = ctx
         .data()
         .app_state
         .banner_api
         .get_course_meeting_time(&term, &crn.to_string())
-        .await
-    {
-        Ok(meeting_time) => meeting_time,
-        Err(e) => {
-            error!("failed to get meeting times: {}", e);
-            return Err(e);
-        }
-    };
+        .await?;
 
     struct LinkDetail {
         link: String,
