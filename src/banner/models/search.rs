@@ -10,8 +10,8 @@ pub struct SearchResult {
     pub total_count: i32,
     pub page_offset: i32,
     pub page_max_size: i32,
-    pub path_mode: String,
-    pub search_results_config: Vec<SearchResultConfig>,
+    pub path_mode: Option<String>,
+    pub search_results_config: Option<Vec<SearchResultConfig>>,
     pub data: Option<Vec<Course>>,
 }
 

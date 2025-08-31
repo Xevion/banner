@@ -1,87 +1,96 @@
 //! Main Banner API client implementation.
 
-use crate::banner::{models::*, query::SearchQuery, session::SessionManager, util::user_agent};
-use anyhow::{Context, Result};
-use axum::http::HeaderValue;
-use reqwest::Client;
-use serde_json;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
-use tracing::{error, info};
+use crate::banner::{
+    BannerSession, SessionPool, models::*, nonce, query::SearchQuery, util::user_agent,
+};
+use anyhow::{Context, Result, anyhow};
+use axum::http::{Extensions, HeaderValue};
+use cookie::Cookie;
+use dashmap::DashMap;
+use reqwest::{Client, Request, Response};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
+use serde_json;
+use tracing::{Level, Metadata, Span, debug, error, field::ValueSet, info, span};
+
+#[derive(Debug, thiserror::Error)]
+pub enum BannerApiError {
+    #[error("Banner session is invalid or expired")]
+    InvalidSession,
+    #[error(transparent)]
+    RequestFailed(#[from] anyhow::Error),
+}
 
 /// Main Banner API client.
-#[derive(Debug)]
 pub struct BannerApi {
-    sessions: SessionManager,
-    http: Client,
+    pub sessions: SessionPool,
+    http: ClientWithMiddleware,
     base_url: String,
+}
+
+pub struct TransparentMiddleware;
+
+#[async_trait::async_trait]
+impl Middleware for TransparentMiddleware {
+    async fn handle(
+        &self,
+        req: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> std::result::Result<Response, reqwest_middleware::Error> {
+        debug!(
+            domain = req.url().domain(),
+            "{method} {path}",
+            method = req.method().to_string(),
+            path = req.url().path(),
+        );
+        let response = next.run(req, extensions).await;
+
+        match &response {
+            Ok(response) => {
+                debug!(
+                    "{code} {reason} {path}",
+                    code = response.status().as_u16(),
+                    reason = response.status().canonical_reason().unwrap_or("??"),
+                    path = response.url().path(),
+                );
+            }
+            Err(error) => {
+                debug!("!!! {error}");
+            }
+        }
+
+        response
+    }
 }
 
 impl BannerApi {
     /// Creates a new Banner API client.
     pub fn new(base_url: String) -> Result<Self> {
-        let http = Client::builder()
-            .cookie_store(true)
-            .user_agent(user_agent())
-            .tcp_keepalive(Some(std::time::Duration::from_secs(60 * 5)))
-            .read_timeout(std::time::Duration::from_secs(10))
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .context("Failed to create HTTP client")?;
-
-        let session_manager = SessionManager::new(base_url.clone(), http.clone());
+        let http = ClientBuilder::new(
+            Client::builder()
+                .cookie_store(true)
+                .user_agent(user_agent())
+                .tcp_keepalive(Some(std::time::Duration::from_secs(60 * 5)))
+                .read_timeout(std::time::Duration::from_secs(10))
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .context("Failed to create HTTP client")?,
+        )
+        .with(TransparentMiddleware)
+        .build();
 
         Ok(Self {
-            sessions: session_manager,
+            sessions: SessionPool::new(http.clone(), base_url.clone()),
             http,
             base_url,
         })
-    }
-
-    /// Sets up the API client by initializing session cookies.
-    pub async fn setup(&self) -> Result<()> {
-        info!(base_url = self.base_url, "setting up banner api client");
-        let result = self.sessions.setup().await;
-        match &result {
-            Ok(()) => info!("banner api client setup completed successfully"),
-            Err(e) => error!(error = ?e, "banner api client setup failed"),
-        }
-        result
-    }
-
-    /// Retrieves a list of terms from the Banner API.
-    pub async fn get_terms(
-        &self,
-        search: &str,
-        page: i32,
-        max_results: i32,
-    ) -> Result<Vec<BannerTerm>> {
-        if page <= 0 {
-            return Err(anyhow::anyhow!("Page must be greater than 0"));
-        }
-
-        let url = format!("{}/classSearch/getTerms", self.base_url);
-        let params = [
-            ("searchTerm", search),
-            ("offset", &page.to_string()),
-            ("max", &max_results.to_string()),
-            ("_", &SessionManager::nonce()),
-        ];
-
-        let response = self
-            .http
-            .get(&url)
-            .query(&params)
-            .send()
-            .await
-            .context("Failed to get terms")?;
-
-        let terms: Vec<BannerTerm> = response
-            .json()
-            .await
-            .context("Failed to parse terms response")?;
-
-        Ok(terms)
     }
 
     /// Retrieves a list of subjects from the Banner API.
@@ -96,15 +105,15 @@ impl BannerApi {
             return Err(anyhow::anyhow!("Offset must be greater than 0"));
         }
 
-        let session_id = self.sessions.ensure_session()?;
+        let session = self.sessions.acquire(term.parse()?).await?;
         let url = format!("{}/classSearch/get_subject", self.base_url);
         let params = [
             ("searchTerm", search),
             ("term", term),
             ("offset", &offset.to_string()),
             ("max", &max_results.to_string()),
-            ("uniqueSessionId", &session_id),
-            ("_", &SessionManager::nonce()),
+            ("uniqueSessionId", &session.id()),
+            ("_", &nonce()),
         ];
 
         let response = self
@@ -135,15 +144,15 @@ impl BannerApi {
             return Err(anyhow::anyhow!("Offset must be greater than 0"));
         }
 
-        let session_id = self.sessions.ensure_session()?;
+        let session = self.sessions.acquire(term.parse()?).await?;
         let url = format!("{}/classSearch/get_instructor", self.base_url);
         let params = [
             ("searchTerm", search),
             ("term", term),
             ("offset", &offset.to_string()),
             ("max", &max_results.to_string()),
-            ("uniqueSessionId", &session_id),
-            ("_", &SessionManager::nonce()),
+            ("uniqueSessionId", &session.id()),
+            ("_", &nonce()),
         ];
 
         let response = self
@@ -174,15 +183,15 @@ impl BannerApi {
             return Err(anyhow::anyhow!("Offset must be greater than 0"));
         }
 
-        let session_id = self.sessions.ensure_session()?;
+        let session = self.sessions.acquire(term.parse()?).await?;
         let url = format!("{}/classSearch/get_campus", self.base_url);
         let params = [
             ("searchTerm", search),
             ("term", term),
             ("offset", &offset.to_string()),
             ("max", &max_results.to_string()),
-            ("uniqueSessionId", &session_id),
-            ("_", &SessionManager::nonce()),
+            ("uniqueSessionId", &session.id()),
+            ("_", &nonce()),
         ];
 
         let response = self
@@ -259,15 +268,15 @@ impl BannerApi {
         query: &SearchQuery,
         sort: &str,
         sort_descending: bool,
-    ) -> Result<SearchResult> {
-        self.sessions.reset_data_form().await?;
+    ) -> Result<SearchResult, BannerApiError> {
+        // self.sessions.reset_data_form().await?;
 
-        let session_id = self.sessions.ensure_session()?;
+        let session = self.sessions.acquire(term.parse()?).await?;
         let mut params = query.to_params();
 
         // Add additional parameters
         params.insert("txt_term".to_string(), term.to_string());
-        params.insert("uniqueSessionId".to_string(), session_id);
+        params.insert("uniqueSessionId".to_string(), session.id());
         params.insert("sortColumn".to_string(), sort.to_string());
         params.insert(
             "sortDirection".to_string(),
@@ -280,37 +289,50 @@ impl BannerApi {
         let response = self
             .http
             .get(&url)
+            .header("Cookie", session.cookie())
             .query(&params)
             .send()
             .await
             .context("Failed to search courses")?;
 
-        let search_result: SearchResult = response
-            .json()
+        let status = response.status();
+        let url = response.url().clone();
+        let body = response
+            .text()
             .await
-            .context("Failed to parse search response")?;
+            .with_context(|| format!("Failed to read body (status={status})"))?;
+
+        let search_result: SearchResult = parse_json_with_context(&body).map_err(|e| {
+            BannerApiError::RequestFailed(anyhow!(
+                "Failed to parse search response (status={status}, url={url}): {e}\nBody: {body}"
+            ))
+        })?;
+
+        // Check for signs of an invalid session, based on docs/Sessions.md
+        if search_result.path_mode.is_none() || search_result.data.is_none() {
+            return Err(BannerApiError::InvalidSession);
+        }
 
         if !search_result.success {
-            return Err(anyhow::anyhow!(
+            return Err(BannerApiError::RequestFailed(anyhow!(
                 "Search marked as unsuccessful by Banner API"
-            ));
+            )));
         }
 
         Ok(search_result)
     }
 
-    /// Selects a term for the current session.
-    pub async fn select_term(&self, term: &str) -> Result<()> {
-        self.sessions.select_term(term).await
-    }
-
     /// Retrieves a single course by CRN by issuing a minimal search
-    pub async fn get_course_by_crn(&self, term: &str, crn: &str) -> Result<Option<Course>> {
-        self.sessions.reset_data_form().await?;
+    pub async fn get_course_by_crn(
+        &self,
+        term: &str,
+        crn: &str,
+    ) -> Result<Option<Course>, BannerApiError> {
+        // self.sessions.reset_data_form().await?;
         // Ensure session is configured for this term
-        self.select_term(term).await?;
+        // self.select_term(term).await?;
 
-        let session_id = self.sessions.ensure_session()?;
+        let session = self.sessions.acquire(term.parse()?).await?;
 
         let query = SearchQuery::new()
             .course_reference_number(crn)
@@ -318,7 +340,7 @@ impl BannerApi {
 
         let mut params = query.to_params();
         params.insert("txt_term".to_string(), term.to_string());
-        params.insert("uniqueSessionId".to_string(), session_id);
+        params.insert("uniqueSessionId".to_string(), session.id());
         params.insert("sortColumn".to_string(), "subjectDescription".to_string());
         params.insert("sortDirection".to_string(), "asc".to_string());
         params.insert("startDatepicker".to_string(), String::new());
@@ -328,27 +350,36 @@ impl BannerApi {
         let response = self
             .http
             .get(&url)
+            .header("Cookie", session.cookie())
             .query(&params)
             .send()
             .await
             .context("Failed to search course by CRN")?;
 
         let status = response.status();
+        let url = response.url().clone();
         let body = response
             .text()
             .await
             .with_context(|| format!("Failed to read body (status={status})"))?;
 
         let search_result: SearchResult = parse_json_with_context(&body).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to parse search response for CRN (status={status}, url={url}): {e}",
-            )
+            BannerApiError::RequestFailed(anyhow!(
+                "Failed to parse search response for CRN (status={status}, url={url}): {e}"
+            ))
         })?;
 
+        // Check for signs of an invalid session, based on docs/Sessions.md
+        if search_result.path_mode == Some("registration".to_string())
+            && search_result.data.is_none()
+        {
+            return Err(BannerApiError::InvalidSession);
+        }
+
         if !search_result.success {
-            return Err(anyhow::anyhow!(
+            return Err(BannerApiError::RequestFailed(anyhow!(
                 "Search marked as unsuccessful by Banner API"
-            ));
+            )));
         }
 
         Ok(search_result
@@ -382,13 +413,14 @@ impl BannerApi {
     }
 }
 
-/// Attempt to parse JSON and, on failure, include a contextual snippet around the error location
+/// Attempt to parse JSON and, on failure, include a contextual snippet of the
+/// line where the error occurred. This prevents dumping huge JSON bodies to logs.
 fn parse_json_with_context<T: serde::de::DeserializeOwned>(body: &str) -> Result<T> {
     match serde_json::from_str::<T>(body) {
         Ok(value) => Ok(value),
         Err(err) => {
             let (line, column) = (err.line(), err.column());
-            let snippet = build_error_snippet(body, line, column, 120);
+            let snippet = build_error_snippet(body, line, column, 80);
             Err(anyhow::anyhow!(
                 "{err} at line {line}, column {column}\nSnippet:\n{snippet}",
             ))
@@ -396,21 +428,23 @@ fn parse_json_with_context<T: serde::de::DeserializeOwned>(body: &str) -> Result
     }
 }
 
-fn build_error_snippet(body: &str, line: usize, column: usize, max_len: usize) -> String {
+fn build_error_snippet(body: &str, line: usize, column: usize, context_len: usize) -> String {
     let target_line = body.lines().nth(line.saturating_sub(1)).unwrap_or("");
     if target_line.is_empty() {
-        return String::new();
+        return "(empty line)".to_string();
     }
 
-    let start = column.saturating_sub(max_len.min(column));
-    let end = (column + max_len).min(target_line.len());
+    // column is 1-based, convert to 0-based for slicing
+    let error_idx = column.saturating_sub(1);
+
+    let half_len = context_len / 2;
+    let start = error_idx.saturating_sub(half_len);
+    let end = (error_idx + half_len).min(target_line.len());
+
     let slice = &target_line[start..end];
+    let indicator_pos = error_idx - start;
 
-    let mut indicator = String::new();
-    if column > start {
-        indicator.push_str(&" ".repeat(column - start - 1));
-        indicator.push('^');
-    }
+    let indicator = " ".repeat(indicator_pos) + "^";
 
-    format!("{slice}\n{indicator}")
+    format!("...{slice}...\n   {indicator}")
 }

@@ -4,7 +4,6 @@ use crate::error::Error;
 pub mod commands;
 pub mod utils;
 
-#[derive(Debug)]
 pub struct Data {
     pub app_state: AppState,
 } // User data, which is stored and accessible in all command invocations

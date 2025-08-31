@@ -7,7 +7,7 @@ use redis::AsyncCommands;
 use redis::Client;
 use std::sync::Arc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AppState {
     pub banner_api: Arc<BannerApi>,
     pub redis: Arc<Client>,

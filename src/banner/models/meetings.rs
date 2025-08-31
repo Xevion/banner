@@ -42,11 +42,11 @@ pub struct FacultyItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeetingTime {
-    pub start_date: String, // MM/DD/YYYY, e.g 08/26/2025
-    pub end_date: String,   // MM/DD/YYYY, e.g 08/26/2025
-    pub begin_time: String, // HHMM, e.g 1000
-    pub end_time: String,   // HHMM, e.g 1100
-    pub category: String,   // unknown meaning, e.g. 01, 02, etc
+    pub start_date: String,         // MM/DD/YYYY, e.g 08/26/2025
+    pub end_date: String,           // MM/DD/YYYY, e.g 08/26/2025
+    pub begin_time: Option<String>, // HHMM, e.g 1000
+    pub end_time: Option<String>,   // HHMM, e.g 1100
+    pub category: String,           // unknown meaning, e.g. 01, 02, etc
     pub class: String, // internal class name, e.g. net.hedtech.banner.general.overallMeetingTimeDecorator
     pub monday: bool,  // true if the meeting time occurs on Monday
     pub tuesday: bool, // true if the meeting time occurs on Tuesday
@@ -55,13 +55,13 @@ pub struct MeetingTime {
     pub friday: bool,  // true if the meeting time occurs on Friday
     pub saturday: bool, // true if the meeting time occurs on Saturday
     pub sunday: bool,  // true if the meeting time occurs on Sunday
-    pub room: String,  // e.g. 1238
+    pub room: Option<String>, // e.g. 1.238
     #[serde(deserialize_with = "deserialize_string_to_term")]
     pub term: Term, // e.g 202510
-    pub building: String, // e.g NPB
-    pub building_description: String, // e.g North Paseo Building
-    pub campus: String, // campus code, e.g 11
-    pub campus_description: String, // name of campus, e.g Main Campus
+    pub building: Option<String>, // e.g NPB
+    pub building_description: Option<String>, // e.g North Paseo Building
+    pub campus: Option<String>, // campus code, e.g 11
+    pub campus_description: Option<String>, // name of campus, e.g Main Campus
     pub course_reference_number: String, // CRN, e.g 27294
     pub credit_hour_session: f64, // e.g. 30
     pub hours_week: f64, // e.g. 30
@@ -347,42 +347,58 @@ impl MeetingType {
 
 /// Meeting location information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MeetingLocation {
-    pub campus: String,
-    pub building: String,
-    pub building_description: String,
-    pub room: String,
-    pub is_online: bool,
+pub enum MeetingLocation {
+    Online,
+    InPerson {
+        campus: String,
+        campus_description: String,
+        building: String,
+        building_description: String,
+        room: String,
+    },
 }
 
 impl MeetingLocation {
     /// Create from raw MeetingTime data
     pub fn from_meeting_time(meeting_time: &MeetingTime) -> Self {
-        let is_online = meeting_time.room.is_empty();
+        if meeting_time.campus.is_none()
+            || meeting_time.building.is_none()
+            || meeting_time.building_description.is_none()
+            || meeting_time.room.is_none()
+            || meeting_time.campus_description.is_none()
+            || meeting_time
+                .campus_description
+                .eq(&Some("Internet".to_string()))
+        {
+            return MeetingLocation::Online;
+        }
 
-        MeetingLocation {
-            campus: meeting_time.campus_description.clone(),
-            building: meeting_time.building.clone(),
-            building_description: meeting_time.building_description.clone(),
-            room: meeting_time.room.clone(),
-            is_online,
+        MeetingLocation::InPerson {
+            campus: meeting_time.campus.as_ref().unwrap().clone(),
+            campus_description: meeting_time.campus_description.as_ref().unwrap().clone(),
+            building: meeting_time.building.as_ref().unwrap().clone(),
+            building_description: meeting_time.building_description.as_ref().unwrap().clone(),
+            room: meeting_time.room.as_ref().unwrap().clone(),
         }
     }
 }
 
 impl Display for MeetingLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_online {
-            write!(f, "Online")
-        } else {
-            write!(
+        match self {
+            MeetingLocation::Online => write!(f, "Online"),
+            MeetingLocation::InPerson {
+                campus,
+                building,
+                building_description,
+                room,
+                ..
+            } => write!(
                 f,
                 "{campus} | {building_name} | {building_code} {room}",
-                campus = self.campus,
-                building_name = self.building_description,
-                building_code = self.building,
-                room = self.room
-            )
+                building_name = building_description,
+                building_code = building,
+            ),
         }
     }
 }
@@ -402,7 +418,11 @@ impl MeetingScheduleInfo {
     /// Create from raw MeetingTime data
     pub fn from_meeting_time(meeting_time: &MeetingTime) -> Self {
         let days = MeetingDays::from_meeting_time(meeting_time);
-        let time_range = TimeRange::from_hhmm(&meeting_time.begin_time, &meeting_time.end_time);
+        let time_range = match (&meeting_time.begin_time, &meeting_time.end_time) {
+            (Some(begin), Some(end)) => TimeRange::from_hhmm(&begin, &end),
+            _ => None,
+        };
+
         let date_range =
             DateRange::from_mm_dd_yyyy(&meeting_time.start_date, &meeting_time.end_date)
                 .unwrap_or_else(|| {
@@ -470,16 +490,18 @@ impl MeetingScheduleInfo {
 
     /// Returns a formatted string representing the location of the meeting
     pub fn place_string(&self) -> String {
-        if self.location.room.is_empty() {
-            "Online".to_string()
-        } else {
-            format!(
+        match &self.location {
+            MeetingLocation::Online => "Online".to_string(),
+            MeetingLocation::InPerson {
+                campus,
+                building,
+                building_description,
+                room,
+                ..
+            } => format!(
                 "{} | {} | {} {}",
-                self.location.campus,
-                self.location.building_description,
-                self.location.building,
-                self.location.room
-            )
+                campus, building_description, building, room
+            ),
         }
     }
 

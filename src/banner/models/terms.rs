@@ -13,7 +13,7 @@ const CURRENT_YEAR: u32 = compile_time::date!().year() as u32;
 const VALID_YEARS: RangeInclusive<u32> = 2007..=(CURRENT_YEAR + 10);
 
 /// Represents a term in the Banner system
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Term {
     pub year: u32, // 2024, 2025, etc
     pub season: Season,
@@ -29,7 +29,7 @@ pub enum TermPoint {
 }
 
 /// Represents a season within a term
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Season {
     Fall,
     Spring,

@@ -21,6 +21,7 @@ pub async fn terms(
         .data()
         .app_state
         .banner_api
+        .sessions
         .get_terms(&search_term, page_number, max_results)
         .await?;
 
@@ -46,7 +47,11 @@ fn format_term(term: &BannerTerm, current_term_code: &str) -> String {
     } else {
         ""
     };
-    let is_archived = if term.is_archived() { " (archived)" } else { "" };
+    let is_archived = if term.is_archived() {
+        " (archived)"
+    } else {
+        ""
+    };
     format!(
         "- `{}`: {}{}{}",
         term.code, term.description, is_current, is_archived
