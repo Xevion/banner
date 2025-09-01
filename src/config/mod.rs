@@ -11,6 +11,14 @@ use std::time::Duration;
 /// Application configuration loaded from environment variables
 #[derive(Deserialize)]
 pub struct Config {
+    /// Log level for the application
+    ///
+    /// This value is used to set the log level for this application's target specifically.
+    /// e.g. "debug" would be similar to "warn,banner=debug,..."
+    ///
+    /// Valid values are: "trace", "debug", "info", "warn", "error"
+    /// Defaults to "info" if not specified
+    pub log_level: String,
     /// Discord bot token for authentication
     pub bot_token: String,
     /// Port for the web server
@@ -24,8 +32,6 @@ pub struct Config {
     pub banner_base_url: String,
     /// Target Discord guild ID where the bot operates
     pub bot_target_guild: u64,
-    /// Discord application ID
-    pub bot_app_id: u64,
     /// Graceful shutdown timeout duration
     ///
     /// Accepts both numeric values (seconds) and duration strings

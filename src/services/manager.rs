@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::services::{Service, ServiceResult, run_service};
 
@@ -36,6 +36,7 @@ impl ServiceManager {
         for (name, service) in self.registered_services.drain() {
             let shutdown_rx = self.shutdown_tx.subscribe();
             let handle = tokio::spawn(run_service(service, shutdown_rx));
+            trace!(service = name, id = ?handle.id(), "service spawned",);
             self.running_services.insert(name, handle);
         }
 

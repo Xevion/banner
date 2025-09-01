@@ -1,4 +1,3 @@
-pub mod app_state;
 pub mod banner;
 pub mod bot;
 pub mod config;
@@ -6,4 +5,5 @@ pub mod data;
 pub mod error;
 pub mod scraper;
 pub mod services;
+pub mod state;
 pub mod web;

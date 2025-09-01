@@ -1,25 +1,28 @@
-use serenity::all::{CacheHttp, ClientBuilder, GatewayIntents};
+use serenity::all::{ClientBuilder, GatewayIntents};
 use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use crate::app_state::AppState;
 use crate::banner::BannerApi;
 use crate::bot::{Data, get_commands};
 use crate::config::Config;
+use crate::scraper::ScraperService;
 use crate::services::manager::ServiceManager;
 use crate::services::{ServiceResult, bot::BotService, web::WebService};
+use crate::state::AppState;
 use crate::web::routes::BannerState;
 use figment::{Figment, providers::Env};
+use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 
-mod app_state;
 mod banner;
 mod bot;
 mod config;
 mod data;
 mod error;
+mod scraper;
 mod services;
+mod state;
 mod web;
 
 #[tokio::main]
@@ -52,13 +55,21 @@ async fn main() {
         } else {
             "production"
         },
-        "starting banner system"
+        "starting banner"
     );
 
     let config: Config = Figment::new()
+        .merge(Env::raw().only(&["DATABASE_URL"]))
         .merge(Env::prefixed("APP_"))
         .extract()
         .expect("Failed to load config");
+
+    // Create database connection pool
+    let db_pool = PgPoolOptions::new()
+        .max_connections(10)
+        .connect(&config.database_url)
+        .await
+        .expect("Failed to create database pool");
 
     info!(
         port = config.port,
@@ -70,10 +81,6 @@ async fn main() {
     // Create BannerApi and AppState
     let banner_api =
         BannerApi::new(config.banner_base_url.clone()).expect("Failed to create BannerApi");
-    banner_api
-        .setup()
-        .await
-        .expect("Failed to set up BannerApi session");
 
     let banner_api_arc = Arc::new(banner_api);
     let app_state = AppState::new(banner_api_arc.clone(), &config.redis_url)
@@ -81,7 +88,7 @@ async fn main() {
 
     // Create BannerState for web service
     let banner_state = BannerState {
-        api: banner_api_arc,
+        api: banner_api_arc.clone(),
     };
 
     // Configure the client with your Discord bot token in the environment
@@ -168,9 +175,11 @@ async fn main() {
     // Register services with the manager
     let bot_service = Box::new(BotService::new(client));
     let web_service = Box::new(WebService::new(port, banner_state));
+    let scraper_service = Box::new(ScraperService::new(db_pool.clone(), banner_api_arc.clone()));
 
     service_manager.register_service("bot", bot_service);
     service_manager.register_service("web", web_service);
+    service_manager.register_service("scraper", scraper_service);
 
     // Spawn all registered services
     service_manager.spawn_all();
