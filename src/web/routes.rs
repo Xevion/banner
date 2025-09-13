@@ -2,8 +2,8 @@
 
 use axum::{
     Router,
-    extract::State,
-    http::{StatusCode, Uri},
+    extract::{Request, State},
+    http::{HeaderMap, HeaderValue, StatusCode, Uri},
     response::{Html, IntoResponse, Json, Response},
     routing::get,
 };
@@ -16,9 +16,45 @@ use tower_http::{
 };
 use tracing::info;
 
-use crate::web::assets::{WebAssets, get_mime_type_cached};
+use crate::web::assets::{WebAssets, get_asset_metadata_cached};
 
 use crate::banner::BannerApi;
+
+/// Set appropriate caching headers based on asset type
+fn set_caching_headers(response: &mut Response, path: &str, etag: &str) {
+    let headers = response.headers_mut();
+
+    // Set ETag
+    if let Ok(etag_value) = HeaderValue::from_str(etag) {
+        headers.insert(header::ETAG, etag_value);
+    }
+
+    // Set Cache-Control based on asset type
+    let cache_control = if path.starts_with("assets/") {
+        // Static assets with hashed filenames - long-term cache
+        "public, max-age=31536000, immutable"
+    } else if path == "index.html" {
+        // HTML files - short-term cache
+        "public, max-age=300"
+    } else {
+        match path.split_once('.').map(|(_, extension)| extension) {
+            Some(ext) => match ext {
+                // CSS/JS files - medium-term cache
+                "css" | "js" => "public, max-age=86400",
+                // Images - long-term cache
+                "png" | "jpg" | "jpeg" | "gif" | "svg" | "ico" => "public, max-age=2592000",
+                // Default for other files
+                _ => "public, max-age=3600",
+            },
+            // Default for files without an extension
+            None => "public, max-age=3600",
+        }
+    };
+
+    if let Ok(cache_control_value) = HeaderValue::from_str(cache_control) {
+        headers.insert(header::CACHE_CONTROL, cache_control_value);
+    }
+}
 
 /// Shared application state for web server
 #[derive(Clone)]
@@ -51,7 +87,7 @@ pub fn create_router(state: BannerState) -> Router {
         Router::new()
             .route("/", get(root))
             .nest("/api", api_router)
-            .fallback(handle_spa_fallback)
+            .fallback(fallback)
             .layer(TraceLayer::new_for_http())
     }
 }
@@ -73,28 +109,50 @@ async fn root() -> Response {
         .into_response()
     } else {
         // Production mode: serve the SPA index.html
-        handle_spa_fallback(Uri::from_static("/")).await
+        handle_spa_fallback_with_headers(Uri::from_static("/"), HeaderMap::new()).await
     }
 }
 
+/// Handler that extracts request information for caching
+async fn fallback(request: Request) -> Response {
+    let uri = request.uri().clone();
+    let headers = request.headers().clone();
+    handle_spa_fallback_with_headers(uri, headers).await
+}
+
 /// Handles SPA routing by serving index.html for non-API, non-asset requests
-async fn handle_spa_fallback(uri: Uri) -> Response {
+/// This version includes HTTP caching headers and ETag support
+async fn handle_spa_fallback_with_headers(uri: Uri, request_headers: HeaderMap) -> Response {
     let path = uri.path().trim_start_matches('/');
 
     if let Some(content) = WebAssets::get(path) {
-        let data = content.data.to_vec();
+        // Get asset metadata (MIME type and hash) with caching
+        let metadata = get_asset_metadata_cached(path, &content.data);
+
+        // Check if client has a matching ETag (conditional request)
+        if let Some(etag) = request_headers.get(header::IF_NONE_MATCH)
+            && metadata.etag_matches(etag.to_str().unwrap())
+        {
+            return StatusCode::NOT_MODIFIED.into_response();
+        }
 
         // Use cached MIME type, only set Content-Type if we have a valid MIME type
-        let mime_type = get_mime_type_cached(path);
-        return (
+        let mut response = (
             [(
                 header::CONTENT_TYPE,
                 // For unknown types, set to application/octet-stream
-                mime_type.unwrap_or("application/octet-stream".to_string()),
+                metadata
+                    .mime_type
+                    .unwrap_or("application/octet-stream".to_string()),
             )],
-            data,
+            content.data,
         )
             .into_response();
+
+        // Set caching headers
+        set_caching_headers(&mut response, path, &metadata.hash.quoted());
+
+        return response;
     } else {
         // Any assets that are not found should be treated as a 404, not falling back to the SPA index.html
         if path.starts_with("assets/") {
@@ -105,9 +163,18 @@ async fn handle_spa_fallback(uri: Uri) -> Response {
     // Fall back to the SPA index.html
     match WebAssets::get("index.html") {
         Some(content) => {
-            let data = content.data.to_vec();
-            let html_content = String::from_utf8_lossy(&data).to_string();
-            Html(html_content).into_response()
+            let metadata = get_asset_metadata_cached("index.html", &content.data);
+
+            // Check if client has a matching ETag for index.html
+            if let Some(etag) = request_headers.get(header::IF_NONE_MATCH)
+                && metadata.etag_matches(etag.to_str().unwrap())
+            {
+                return StatusCode::NOT_MODIFIED.into_response();
+            }
+
+            let mut response = Html(content.data).into_response();
+            set_caching_headers(&mut response, "index.html", &metadata.hash.quoted());
+            response
         }
         None => (
             StatusCode::INTERNAL_SERVER_ERROR,
