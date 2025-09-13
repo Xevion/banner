@@ -1,9 +1,9 @@
 use clap::Parser;
 use figment::value::UncasedStr;
 use num_format::{Locale, ToFormattedString};
-use serenity::all::{ActivityData, ClientBuilder, Context, GatewayIntents};
+use serenity::all::{ActivityData, ClientBuilder, GatewayIntents};
 use tokio::signal;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use crate::banner::BannerApi;
@@ -17,6 +17,7 @@ use crate::web::routes::BannerState;
 use figment::{Figment, providers::Env};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
+use std::time::Duration;
 
 mod banner;
 mod bot;
@@ -126,18 +127,6 @@ fn determine_enabled_services(args: &Args) -> Result<Vec<ServiceName>, anyhow::E
             ))
         }
     }
-}
-
-async fn update_bot_status(ctx: &Context, app_state: &AppState) -> Result<(), anyhow::Error> {
-    let course_count = app_state.get_course_count().await?;
-
-    ctx.set_activity(Some(ActivityData::playing(format!(
-        "Querying {:} classes",
-        course_count.to_formatted_string(&Locale::en)
-    ))));
-
-    tracing::info!(course_count = course_count, "Updated bot status");
-    Ok(())
 }
 
 #[tokio::main]
@@ -311,19 +300,59 @@ async fn main() {
                 let status_app_state = app_state.clone();
                 let status_ctx = ctx.clone();
                 tokio::spawn(async move {
-                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+                    let max_interval = Duration::from_secs(300); // 5 minutes
+                    let base_interval = Duration::from_secs(30);
+                    let mut interval = tokio::time::interval(base_interval);
+                    let mut previous_course_count: Option<i64> = None;
 
-                    // Update status immediately on startup
-                    if let Err(e) = update_bot_status(&status_ctx, &status_app_state).await {
-                        tracing::error!(error = %e, "Failed to update status on startup");
-                    }
-
+                    // This runs once immediately on startup, then with adaptive intervals
                     loop {
                         interval.tick().await;
 
-                        if let Err(e) = update_bot_status(&status_ctx, &status_app_state).await {
-                            tracing::error!(error = %e, "Failed to update bot status");
+                        // Get the course count, update the activity if it has changed/hasn't been set this session
+                        let course_count = status_app_state.get_course_count().await.unwrap();
+                        if previous_course_count.is_none()
+                            || previous_course_count != Some(course_count)
+                        {
+                            status_ctx.set_activity(Some(ActivityData::playing(format!(
+                                "Querying {:} classes",
+                                course_count.to_formatted_string(&Locale::en)
+                            ))));
                         }
+
+                        // Increase or reset the interval
+                        interval = tokio::time::interval(
+                            // Avoid logging the first 'change'
+                            if course_count != previous_course_count.unwrap_or(0) {
+                                if previous_course_count.is_some() {
+                                    debug!(
+                                        new_course_count = course_count,
+                                        last_interval = interval.period().as_secs(),
+                                        "Course count changed, resetting interval"
+                                    );
+                                }
+
+                                // Record the new course count
+                                previous_course_count = Some(course_count);
+
+                                // Reset to base interval
+                                base_interval
+                            } else {
+                                // Increase interval by 10% (up to maximum)
+                                let new_interval = interval.period().mul_f32(1.1).min(max_interval);
+                                debug!(
+                                    current_course_count = course_count,
+                                    last_interval = interval.period().as_secs(),
+                                    new_interval = new_interval.as_secs(),
+                                    "Course count unchanged, increasing interval"
+                                );
+
+                                new_interval
+                            },
+                        );
+
+                        // Reset the interval, otherwise it will tick again immediately
+                        interval.reset();
                     }
                 });
 
