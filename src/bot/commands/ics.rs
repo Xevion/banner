@@ -62,7 +62,7 @@ impl Holiday {
 }
 
 /// University holidays that should be excluded from class schedules
-const UNIVERSITY_HOLIDAYS: &[(&'static str, Holiday)] = &[
+const UNIVERSITY_HOLIDAYS: &[(&str, Holiday)] = &[
     ("Labor Day", Holiday::Single { month: 9, day: 1 }),
     (
         "Fall Break",
