@@ -2,72 +2,22 @@
 target/
 **/target/
 
-# Development files
-.env
-.env.local
-.env.*.local
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Git
-.git/
-.gitignore
-
 # Documentation
 README.md
 docs/
 *.md
 
-# Go files (since this is a Rust project)
+# Old Go codebase
 go/
-
-# Database migrations (if not needed at runtime)
-migrations/
-diesel_migrations/
-diesel.toml
 
 # Development configuration
 bacon.toml
-.cargo/config.toml
+.env
 
-# Logs
-*.log
-logs/
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-
-# Test files
-tests/
-**/tests/
-*_test.rs
-*_tests.rs
-
-# Coverage reports
-coverage/
-*.gcov
-*.gcno
-*.gcda
-
-# Profiling
-*.prof
-
-# Backup files
-*.bak
-*.backup
+# Frontend build artifacts and cache
+web/node_modules/
+web/dist/
+web/.vite/
+web/.tanstack/
+web/.vscode/
+.vscode/

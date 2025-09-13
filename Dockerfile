@@ -1,5 +1,27 @@
-# Build Stage
+# Build arguments
 ARG RUST_VERSION=1.89.0
+
+# Frontend Build Stage
+FROM node:22-bookworm-slim AS frontend-builder
+
+# Install pnpm
+RUN npm install -g pnpm
+
+WORKDIR /app
+
+# Copy frontend package files
+COPY ./web/package.json ./web/pnpm-lock.yaml ./
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy frontend source code
+COPY ./web ./
+
+# Build frontend
+RUN pnpm run build
+
+# Rust Build Stage
 FROM rust:${RUST_VERSION}-bookworm AS builder
 
 # Install build dependencies
@@ -18,9 +40,14 @@ COPY ./Cargo.toml ./Cargo.lock* ./
 # Build empty app with downloaded dependencies to produce a stable image layer for next build
 RUN cargo build --release
 
-# Build web app with own code
+# Copy source code
 RUN rm src/*.rs
 COPY ./src ./src
+
+# Copy built frontend assets
+COPY --from=frontend-builder /app/dist ./web/dist
+
+# Build web app with embedded assets
 RUN rm ./target/release/deps/banner*
 RUN cargo build --release
 
@@ -50,7 +77,7 @@ RUN addgroup --gid $GID $APP_USER \
     && adduser --uid $UID --disabled-password --gecos "" --ingroup $APP_USER $APP_USER \
     && mkdir -p ${APP}
 
-# Copy application files
+# Copy application binary
 COPY --from=builder --chown=$APP_USER:$APP_USER /usr/src/banner/target/release/banner ${APP}/banner
 
 # Set proper permissions
@@ -73,4 +100,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 ENV HOSTS=0.0.0.0,[::]
 
 # Implicitly uses PORT environment variable
-CMD ["sh", "-c", "exec ./banner --server ${HOSTS}"]
+# temporary: running without 'scraper' service
+CMD ["sh", "-c", "exec ./banner --services web,bot"]
