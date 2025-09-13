@@ -3,7 +3,7 @@ use crate::web::{BannerState, create_router};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
-use tracing::{debug, info, warn};
+use tracing::{info, warn, trace};
 
 /// Web server service implementation
 pub struct WebService {
@@ -40,10 +40,10 @@ impl Service for WebService {
         );
 
         let listener = TcpListener::bind(addr).await?;
-        debug!(
+        info!(
             service = "web",
-            "web server listening on {}",
-            format!("http://{}", addr)
+            address = %addr,
+            "web server listening"
         );
 
         // Create internal shutdown channel for axum graceful shutdown
@@ -54,7 +54,7 @@ impl Service for WebService {
         axum::serve(listener, app)
             .with_graceful_shutdown(async move {
                 let _ = shutdown_rx.recv().await;
-                debug!(
+                trace!(
                     service = "web",
                     "received shutdown signal, starting graceful shutdown"
                 );

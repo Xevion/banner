@@ -16,7 +16,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 use url::Url;
 
 const SESSION_EXPIRY: Duration = Duration::from_secs(25 * 60); // 25 minutes
@@ -82,7 +82,7 @@ impl BannerSession {
 
     /// Updates the last activity timestamp
     pub fn touch(&mut self) {
-        debug!(id = self.unique_session_id, "Session was used");
+        trace!(id = self.unique_session_id, "Session was used");
         self.last_activity = Some(Instant::now());
     }
 
@@ -162,7 +162,7 @@ impl TermPool {
     async fn release(&self, session: BannerSession) {
         let id = session.unique_session_id.clone();
         if session.is_expired() {
-            debug!(id = id, "Session is now expired, dropping.");
+            trace!(id = id, "Session is now expired, dropping.");
             // Wake up a waiter, as it might need to create a new session
             // if this was the last one.
             self.notifier.notify_one();
@@ -174,10 +174,7 @@ impl TermPool {
         let queue_size = queue.len();
         drop(queue); // Release lock before notifying
 
-        debug!(
-            id = id,
-            "Session returned to pool. Queue size is now {queue_size}."
-        );
+        trace!(id = id, queue_size, "Session returned to pool");
         self.notifier.notify_one();
     }
 }
@@ -213,13 +210,13 @@ impl SessionPool {
                 let mut queue = term_pool.sessions.lock().await;
                 if let Some(session) = queue.pop_front() {
                     if !session.is_expired() {
-                        debug!(id = session.unique_session_id, "Reusing session from pool");
+                        trace!(id = session.unique_session_id, "Reusing session from pool");
                         return Ok(PooledSession {
                             session: Some(session),
                             pool: Arc::clone(&term_pool),
                         });
                     } else {
-                        debug!(
+                        trace!(
                             id = session.unique_session_id,
                             "Popped an expired session, discarding."
                         );
@@ -232,7 +229,7 @@ impl SessionPool {
             if *is_creating_guard {
                 // Another task is already creating a session. Release the lock and wait.
                 drop(is_creating_guard);
-                debug!("Another task is creating a session, waiting for notification...");
+                trace!("Another task is creating a session, waiting for notification...");
                 term_pool.notifier.notified().await;
                 // Loop back to the top to try the fast path again.
                 continue;
@@ -243,12 +240,12 @@ impl SessionPool {
             drop(is_creating_guard);
 
             // Race: wait for a session to be returned OR for the rate limiter to allow a new one.
-            debug!("Pool empty, racing notifier vs rate limiter...");
+            trace!("Pool empty, racing notifier vs rate limiter...");
             tokio::select! {
                 _ = term_pool.notifier.notified() => {
                     // A session was returned while we were waiting!
                     // We are no longer the creator. Reset the flag and loop to race for the new session.
-                    debug!("Notified that a session was returned. Looping to retry.");
+                    trace!("Notified that a session was returned. Looping to retry.");
                     let mut guard = term_pool.is_creating.lock().await;
                     *guard = false;
                     drop(guard);
@@ -256,7 +253,7 @@ impl SessionPool {
                 }
                 _ = SESSION_CREATION_RATE_LIMITER.until_ready() => {
                     // The rate limit has elapsed. It's our job to create the session.
-                    debug!("Rate limiter ready. Proceeding to create a new session.");
+                    trace!("Rate limiter ready. Proceeding to create a new session.");
                     let new_session_result = self.create_session(&term).await;
 
                     // After creation, we are no longer the creator. Reset the flag
@@ -286,7 +283,7 @@ impl SessionPool {
 
     /// Sets up initial session cookies by making required Banner API requests
     pub async fn create_session(&self, term: &Term) -> Result<BannerSession> {
-        info!("setting up banner session for term {term}");
+        info!(term = %term, "setting up banner session");
 
         // The 'register' or 'search' registration page
         let initial_registration = self
@@ -317,7 +314,7 @@ impl SessionPool {
         let ssb_cookie = cookies.get("SSB_COOKIE").unwrap();
         let cookie_header = format!("JSESSIONID={}; SSB_COOKIE={}", jsessionid, ssb_cookie);
 
-        debug!(
+        trace!(
             jsessionid = jsessionid,
             ssb_cookie = ssb_cookie,
             "New session cookies acquired"
@@ -457,7 +454,7 @@ impl SessionPool {
             ));
         }
 
-        debug!(term = term, "successfully selected term");
+        trace!(term = term, "successfully selected term");
         Ok(())
     }
 }

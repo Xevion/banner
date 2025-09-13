@@ -6,7 +6,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
-use tracing::{error, info};
+use tracing::{error, info, debug, trace};
 
 /// Periodically analyzes data and enqueues prioritized scrape jobs.
 pub struct Scheduler {
@@ -24,12 +24,12 @@ impl Scheduler {
 
     /// Runs the scheduler's main loop.
     pub async fn run(&self) {
-        info!("Scheduler service started.");
+        info!("Scheduler service started");
         let mut interval = time::interval(Duration::from_secs(60)); // Runs every minute
 
         loop {
             interval.tick().await;
-            info!("Scheduler waking up to analyze and schedule jobs...");
+            // Scheduler analyzing data...
             if let Err(e) = self.schedule_jobs().await {
                 error!(error = ?e, "Failed to schedule jobs");
             }
@@ -44,12 +44,10 @@ impl Scheduler {
         // 3. If no job exists, create a new, low-priority job to be executed in the near future.
         let term = Term::get_current().inner().to_string();
 
-        info!(
-            term = term,
-            "[Scheduler] Enqueuing baseline subject scrape jobs..."
-        );
+        debug!(term = term, "Enqueuing subject jobs");
 
         let subjects = self.banner_api.get_subjects("", &term, 1, 500).await?;
+        debug!(subject_count = subjects.len(), "Retrieved subjects from API");
 
         for subject in subjects {
             let payload = json!({ "subject": subject.code });
@@ -63,6 +61,7 @@ impl Scheduler {
             .await?;
 
             if existing_job.is_some() {
+                trace!(subject = subject.code, "Job already exists, skipping");
                 continue;
             }
 
@@ -76,10 +75,10 @@ impl Scheduler {
             .execute(&self.db_pool)
             .await?;
 
-            info!(subject = subject.code, "[Scheduler] Enqueued new job");
+            debug!(subject = subject.code, "New job enqueued for subject");
         }
 
-        info!("[Scheduler] Job scheduling complete.");
+        debug!("Job scheduling complete");
         Ok(())
     }
 }

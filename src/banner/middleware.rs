@@ -41,7 +41,7 @@ impl Middleware for TransparentMiddleware {
                 }
             }
             Err(error) => {
-                warn!(?error, "Request failed (middleware)");
+                warn!(error = ?error, "Request failed (middleware)");
                 Err(error)
             }
         }

@@ -20,6 +20,6 @@ pub async fn time(
     ))
     .await?;
 
-    info!("time command completed for CRN: {}", crn);
+    info!(crn = %crn, "time command completed");
     Ok(())
 }

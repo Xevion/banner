@@ -35,14 +35,14 @@ impl ScraperService {
 
     /// Starts the scheduler and a pool of workers.
     pub fn start(&mut self) {
-        info!("ScraperService starting...");
+        info!("ScraperService starting");
 
         let scheduler = Scheduler::new(self.db_pool.clone(), self.banner_api.clone());
         let scheduler_handle = tokio::spawn(async move {
             scheduler.run().await;
         });
         self.scheduler_handle = Some(scheduler_handle);
-        info!("Scheduler task spawned.");
+        info!("Scheduler task spawned");
 
         let worker_count = 4; // This could be configurable
         for i in 0..worker_count {
@@ -52,19 +52,22 @@ impl ScraperService {
             });
             self.worker_handles.push(worker_handle);
         }
-        info!("Spawned {} worker tasks.", self.worker_handles.len());
+        info!(
+            worker_count = self.worker_handles.len(),
+            "Spawned worker tasks"
+        );
     }
 
     /// Signals all child tasks to gracefully shut down.
     pub async fn shutdown(&mut self) {
-        info!("Shutting down scraper service...");
+        info!("Shutting down scraper service");
         if let Some(handle) = self.scheduler_handle.take() {
             handle.abort();
         }
         for handle in self.worker_handles.drain(..) {
             handle.abort();
         }
-        info!("Scraper service shutdown.");
+        info!("Scraper service shutdown");
     }
 }
 

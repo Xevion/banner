@@ -160,6 +160,16 @@ impl SearchQuery {
         self
     }
 
+    /// Gets the subject field
+    pub fn get_subject(&self) -> Option<&String> {
+        self.subject.as_ref()
+    }
+
+    /// Gets the max_results field
+    pub fn get_max_results(&self) -> i32 {
+        self.max_results
+    }
+
     /// Converts the query into URL parameters for the Banner API
     pub fn to_params(&self) -> HashMap<String, String> {
         let mut params = HashMap::new();

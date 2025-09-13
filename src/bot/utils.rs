@@ -18,7 +18,7 @@ pub async fn get_course_by_crn(ctx: &Context<'_>, crn: i32) -> Result<Course> {
         .get_course_or_fetch(&term.to_string(), &crn.to_string())
         .await
         .map_err(|e| {
-            error!(%e, crn, "failed to fetch course data");
+            error!(error = %e, crn = %crn, "failed to fetch course data");
             e
         })
 }

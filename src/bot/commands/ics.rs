@@ -20,6 +20,6 @@ pub async fn ics(
     ))
     .await?;
 
-    info!("ics command completed for CRN: {}", crn);
+    info!(crn = %crn, "ics command completed");
     Ok(())
 }

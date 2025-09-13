@@ -6,7 +6,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 /// A single worker instance.
 ///
@@ -34,7 +34,7 @@ impl Worker {
             match self.fetch_and_lock_job().await {
                 Ok(Some(job)) => {
                     let job_id = job.id;
-                    info!(worker_id = self.id, job_id = job.id, "Processing job");
+                    debug!(worker_id = self.id, job_id = job.id, "Processing job");
                     if let Err(e) = self.process_job(job).await {
                         // Check if the error is due to an invalid session
                         if let Some(BannerApiError::InvalidSession(_)) =
@@ -58,7 +58,7 @@ impl Worker {
                             );
                         }
                     } else {
-                        info!(worker_id = self.id, job_id, "Job processed successfully");
+                        debug!(worker_id = self.id, job_id, "Job completed");
                         // If successful, delete the job.
                         if let Err(delete_err) = self.delete_job(job_id).await {
                             error!(
@@ -72,6 +72,7 @@ impl Worker {
                 }
                 Ok(None) => {
                     // No job found, wait for a bit before polling again.
+                    trace!(worker_id = self.id, "No jobs available, waiting");
                     time::sleep(Duration::from_secs(5)).await;
                 }
                 Err(e) => {
@@ -127,7 +128,7 @@ impl Worker {
         info!(
             worker_id = self.id,
             subject = subject_code,
-            "Processing subject job"
+            "Scraping subject"
         );
 
         let term = Term::get_current().inner().to_string();
@@ -143,7 +144,7 @@ impl Worker {
                 worker_id = self.id,
                 subject = subject_code,
                 count = courses_from_api.len(),
-                "Found courses to upsert"
+                "Found courses"
             );
             for course in courses_from_api {
                 self.upsert_course(&course).await?;
@@ -190,7 +191,6 @@ impl Worker {
             .bind(job_id)
             .execute(&self.db_pool)
             .await?;
-        info!(worker_id = self.id, job_id, "Job deleted");
         Ok(())
     }
 
@@ -199,7 +199,7 @@ impl Worker {
             .bind(job_id)
             .execute(&self.db_pool)
             .await?;
-        info!(worker_id = self.id, job_id, "Job unlocked after failure");
+        info!(worker_id = self.id, job_id, "Job unlocked for retry");
         Ok(())
     }
 }

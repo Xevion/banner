@@ -175,10 +175,9 @@ impl BannerApi {
 
         debug!(
             term = term,
-            query = ?query,
-            sort = sort,
-            sort_descending = sort_descending,
-            "Searching for courses with params: {:?}", params
+            subject = query.get_subject().map(|s| s.as_str()).unwrap_or("all"),
+            max_results = query.get_max_results(),
+            "Searching for courses"
         );
 
         let response = self
@@ -199,7 +198,7 @@ impl BannerApi {
 
         let search_result: SearchResult = parse_json_with_context(&body).map_err(|e| {
             BannerApiError::RequestFailed(anyhow!(
-                "Failed to parse search response (status={status}, url={url}): {e}\nBody: {body}"
+                "Failed to parse search response (status={status}, url={url}): {e}"
             ))
         })?;
 
@@ -318,6 +317,12 @@ impl BannerApi {
         sort: &str,
         sort_descending: bool,
     ) -> Result<SearchResult, BannerApiError> {
+        debug!(
+            term = term,
+            subject = query.get_subject().map(|s| s.as_str()).unwrap_or("all"),
+            max_results = query.get_max_results(),
+            "Starting course search"
+        );
         self.perform_search(term, query, sort, sort_descending)
             .await
     }
@@ -328,6 +333,8 @@ impl BannerApi {
         term: &str,
         crn: &str,
     ) -> Result<Option<Course>, BannerApiError> {
+        debug!(term = term, crn = crn, "Looking up course by CRN");
+
         let query = SearchQuery::new()
             .course_reference_number(crn)
             .max_results(1);

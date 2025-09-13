@@ -42,7 +42,7 @@ impl ServiceManager {
         for (name, service) in self.registered_services.drain() {
             let shutdown_rx = self.shutdown_tx.subscribe();
             let handle = tokio::spawn(run_service(service, shutdown_rx));
-            trace!(service = name, id = ?handle.id(), "service spawned",);
+            debug!(service = name, id = ?handle.id(), "service spawned");
             self.running_services.insert(name, handle);
         }
 
@@ -127,7 +127,7 @@ impl ServiceManager {
         for (name, handle) in self.running_services.drain() {
             match tokio::time::timeout(timeout, handle).await {
                 Ok(Ok(_)) => {
-                    debug!(service = name, "service shutdown completed");
+                    trace!(service = name, "service shutdown completed");
                 }
                 Ok(Err(e)) => {
                     warn!(service = name, error = ?e, "service shutdown failed");

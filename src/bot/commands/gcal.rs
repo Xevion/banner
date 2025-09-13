@@ -77,7 +77,7 @@ pub async fn gcal(
     )
     .await?;
 
-    info!("gcal command completed for CRN: {}", crn);
+    info!(crn = %crn, "gcal command completed");
     Ok(())
 }
 

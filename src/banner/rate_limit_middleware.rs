@@ -4,7 +4,7 @@ use crate::banner::rate_limiter::{RequestType, SharedRateLimiter};
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use tracing::{debug, warn};
+use tracing::{debug, warn, trace};
 use url::Url;
 
 /// Middleware that enforces rate limiting based on request URL patterns
@@ -53,7 +53,7 @@ impl Middleware for RateLimitMiddleware {
     ) -> std::result::Result<Response, reqwest_middleware::Error> {
         let request_type = Self::get_request_type(req.url());
 
-        debug!(
+        trace!(
             url = %req.url(),
             request_type = ?request_type,
             "Rate limiting request"
@@ -62,7 +62,7 @@ impl Middleware for RateLimitMiddleware {
         // Wait for permission to make the request
         self.rate_limiter.wait_for_permission(request_type).await;
 
-        debug!(
+        trace!(
             url = %req.url(),
             request_type = ?request_type,
             "Rate limit permission granted, making request"
@@ -74,7 +74,7 @@ impl Middleware for RateLimitMiddleware {
         match response_result {
             Ok(response) => {
                 if response.status().is_success() {
-                    debug!(
+                    trace!(
                         url = %response.url(),
                         status = response.status().as_u16(),
                         "Request completed successfully"

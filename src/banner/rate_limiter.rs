@@ -8,7 +8,7 @@ use governor::{
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 /// Different types of Banner API requests with different rate limits
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -101,12 +101,12 @@ impl BannerRateLimiter {
             RequestType::Reset => &self.reset_limiter,
         };
 
-        debug!(request_type = ?request_type, "Waiting for rate limit permission");
+        trace!(request_type = ?request_type, "Waiting for rate limit permission");
 
         // Wait until we can make the request
         limiter.until_ready().await;
 
-        debug!(request_type = ?request_type, "Rate limit permission granted");
+        trace!(request_type = ?request_type, "Rate limit permission granted");
     }
 
     /// Checks if a request of the given type would be allowed immediately

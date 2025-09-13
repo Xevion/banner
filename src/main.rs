@@ -20,6 +20,7 @@ mod bot;
 mod config;
 mod data;
 mod error;
+mod formatter;
 mod scraper;
 mod services;
 mod state;
@@ -29,21 +30,36 @@ mod web;
 async fn main() {
     dotenvy::dotenv().ok();
 
-    // Configure logging
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn,banner=debug"));
+    // Load configuration first to get log level
+    let config: Config = Figment::new()
+        .merge(Env::raw().only(&["DATABASE_URL"]))
+        .merge(Env::prefixed("APP_"))
+        .extract()
+        .expect("Failed to load config");
+
+    // Configure logging based on config
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        let base_level = &config.log_level;
+        EnvFilter::new(&format!(
+            "warn,banner={},banner::rate_limiter=warn,banner::session=warn,banner::rate_limit_middleware=warn",
+            base_level
+        ))
+    });
     let subscriber = {
         #[cfg(debug_assertions)]
         {
             FmtSubscriber::builder()
+                .with_target(true)
+                .event_format(formatter::CustomFormatter)
         }
         #[cfg(not(debug_assertions))]
         {
-            FmtSubscriber::builder().json()
+            FmtSubscriber::builder()
+                .with_target(true)
+                .event_format(formatter::CustomJsonFormatter)
         }
     }
     .with_env_filter(filter)
-    .with_target(true)
     .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
@@ -57,12 +73,6 @@ async fn main() {
         },
         "starting banner"
     );
-
-    let config: Config = Figment::new()
-        .merge(Env::raw().only(&["DATABASE_URL"]))
-        .merge(Env::prefixed("APP_"))
-        .extract()
-        .expect("Failed to load config");
 
     // Create database connection pool
     let db_pool = PgPoolOptions::new()
@@ -82,7 +92,8 @@ async fn main() {
     let banner_api = BannerApi::new_with_config(
         config.banner_base_url.clone(),
         config.rate_limiting.clone().into(),
-    ).expect("Failed to create BannerApi");
+    )
+    .expect("Failed to create BannerApi");
 
     let banner_api_arc = Arc::new(banner_api);
     let app_state = AppState::new(banner_api_arc.clone(), &config.redis_url)
@@ -140,7 +151,7 @@ async fn main() {
             on_error: |error| {
                 Box::pin(async move {
                     if let Err(e) = poise::builtins::on_error(error).await {
-                        tracing::error!("Fatal error while sending error message: {}", e);
+                        tracing::error!(error = %e, "Fatal error while sending error message");
                     }
                     // error!(error = ?error, "command error");
                 })

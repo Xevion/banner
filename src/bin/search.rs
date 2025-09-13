@@ -69,11 +69,11 @@ async fn main() -> Result<()> {
         ),
     ];
 
-    info!("Executing {} concurrent searches", queries.len());
+    info!(query_count = queries.len(), "Executing concurrent searches");
 
     // Execute all searches concurrently
     let search_futures = queries.into_iter().map(|(label, query)| {
-        info!("Starting search: {}", label);
+        info!(label = %label, "Starting search");
         let banner_api = &banner_api;
         let term = &term;
         async move {
