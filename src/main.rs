@@ -1,5 +1,6 @@
 use figment::value::UncasedStr;
-use serenity::all::{ClientBuilder, GatewayIntents};
+use num_format::{Locale, ToFormattedString};
+use serenity::all::{ActivityData, ClientBuilder, GatewayIntents};
 use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -26,6 +27,21 @@ mod scraper;
 mod services;
 mod state;
 mod web;
+
+async fn update_bot_status(
+    ctx: &serenity::all::Context,
+    app_state: &AppState,
+) -> Result<(), anyhow::Error> {
+    let course_count = app_state.get_course_count().await?;
+
+    ctx.set_activity(Some(ActivityData::playing(format!(
+        "Querying {:} classes",
+        course_count.to_formatted_string(&Locale::en)
+    ))));
+
+    tracing::info!(course_count = course_count, "Updated bot status");
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() {
@@ -102,7 +118,7 @@ async fn main() {
     .expect("Failed to create BannerApi");
 
     let banner_api_arc = Arc::new(banner_api);
-    let app_state = AppState::new(banner_api_arc.clone(), &config.redis_url)
+    let app_state = AppState::new(banner_api_arc.clone(), &config.redis_url, db_pool.clone())
         .expect("Failed to create AppState");
 
     // Create BannerState for web service
@@ -174,6 +190,27 @@ async fn main() {
                 )
                 .await?;
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+
+                // Start status update task
+                let status_app_state = app_state.clone();
+                let status_ctx = ctx.clone();
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+
+                    // Update status immediately on startup
+                    if let Err(e) = update_bot_status(&status_ctx, &status_app_state).await {
+                        tracing::error!(error = %e, "Failed to update status on startup");
+                    }
+
+                    loop {
+                        interval.tick().await;
+
+                        if let Err(e) = update_bot_status(&status_ctx, &status_app_state).await {
+                            tracing::error!(error = %e, "Failed to update bot status");
+                        }
+                    }
+                });
+
                 Ok(Data { app_state })
             })
         })

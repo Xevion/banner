@@ -86,7 +86,7 @@ impl SubjectJob {
         .execute(db_pool)
         .await
         .map(|result| {
-            trace!(result = ?result, "Course upserted");
+            trace!(subject = course.subject, crn = course.course_reference_number, result = ?result, "Course upserted");
         })
         .map_err(|e| anyhow::anyhow!("Failed to upsert course: {e}"))
     }

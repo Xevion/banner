@@ -5,24 +5,28 @@ use crate::banner::Course;
 use anyhow::Result;
 use redis::AsyncCommands;
 use redis::Client;
+use sqlx::PgPool;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
     pub banner_api: Arc<BannerApi>,
     pub redis: Arc<Client>,
+    pub db_pool: PgPool,
 }
 
 impl AppState {
     pub fn new(
         banner_api: Arc<BannerApi>,
         redis_url: &str,
+        db_pool: PgPool,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let redis_client = Client::open(redis_url)?;
 
         Ok(Self {
             banner_api,
             redis: Arc::new(redis_client),
+            db_pool,
         })
     }
 
@@ -44,5 +48,13 @@ impl AppState {
         }
 
         Err(anyhow::anyhow!("Course not found for CRN {crn}"))
+    }
+
+    /// Get the total number of courses in the database
+    pub async fn get_course_count(&self) -> Result<i64> {
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM courses")
+            .fetch_one(&self.db_pool)
+            .await?;
+        Ok(count.0)
     }
 }
