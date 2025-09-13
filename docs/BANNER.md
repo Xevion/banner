@@ -1,11 +1,17 @@
-# Sessions
+# Banner
+
+All notes on the internal workings of the Banner system by Ellucian.
+
+## Sessions
 
 All notes on the internal workings of Sessions in the Banner system.
 
 - Sessions are generated on demand with a random string of characters.
+  - The format `{5 random characters}{milliseconds since epoch}`
+  - Example: ``
 - Sessions are invalidated after 30 minutes, but may change.
   - This delay can be found in the original HTML returned, find `meta[name="maxInactiveInterval"]` and read the `content` attribute.
-  - This is read at runtime by the javascript on initialization.
+  - This is read at runtime (in the browser, by javascript) on initialization.
 - Multiple timers exist, one is for the Inactivity Timer.
   - A dialog will appear asking the user to continue their session.
   - If they click the button, the session will be extended via the keepAliveURL (see `meta[name="keepAliveURL"]`).
