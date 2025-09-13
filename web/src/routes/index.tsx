@@ -234,27 +234,54 @@ function App() {
             </Flex>
           </Card>
         )}
-        {status?.git?.commit && (
-          <Flex justify="center" style={{ marginTop: "12px" }}>
-            <Text
-              size="1"
-              style={{
-                color: "#8B949E",
-                textDecoration: "none",
-              }}
-            >
-              <a
-                href={`https://github.com/Xevion/banner/commit/${status.git.commit}`}
-                target="_blank"
-                rel="noopener noreferrer"
+        {(status?.git?.commit || status?.version) && (
+          <Flex
+            justify="center"
+            style={{ marginTop: "12px" }}
+            gap="2"
+            align="center"
+          >
+            {status?.version && (
+              <Text
+                size="1"
                 style={{
-                  color: "inherit",
+                  color: "#8B949E",
+                }}
+              >
+                v{status.version}
+              </Text>
+            )}
+            {status?.version && status?.git?.commit && (
+              <div
+                style={{
+                  width: "1px",
+                  height: "12px",
+                  backgroundColor: "#8B949E",
+                  opacity: 0.3,
+                }}
+              />
+            )}
+            {status?.git?.commit && (
+              <Text
+                size="1"
+                style={{
+                  color: "#8B949E",
                   textDecoration: "none",
                 }}
               >
-                GitHub
-              </a>
-            </Text>
+                <a
+                  href={`https://github.com/Xevion/banner/commit/${status.git.commit}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: "inherit",
+                    textDecoration: "none",
+                  }}
+                >
+                  GitHub
+                </a>
+              </Text>
+            )}
           </Flex>
         )}
       </Flex>

@@ -8,6 +8,7 @@ export interface HealthResponse {
 
 export interface StatusResponse {
   status: string;
+  version: string;
   bot: {
     status: string;
     uptime: string;

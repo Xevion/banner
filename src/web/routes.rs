@@ -102,9 +102,8 @@ pub fn create_router(state: BannerState) -> Router {
                     };
 
                     // Format latency, status, and code
-                    let (latency_str, status, code) = (
+                    let (latency_str, status) = (
                         format!("{latency:.2?}"),
-                        response.status().as_u16(),
                         format!(
                             "{} {}",
                             response.status().as_u16(),
@@ -114,19 +113,9 @@ pub fn create_router(state: BannerState) -> Router {
 
                     // Log in warn if latency is above threshold, otherwise debug
                     if latency > latency_threshold {
-                        warn!(
-                            latency = latency_str,
-                            status = status,
-                            code = code,
-                            "Response"
-                        );
+                        warn!(latency = latency_str, status = status, "Response");
                     } else {
-                        debug!(
-                            latency = latency_str,
-                            status = status,
-                            code = code,
-                            "Response"
-                        );
+                        debug!(latency = latency_str, status = status, "Response");
                     }
                 },
             )
@@ -227,6 +216,7 @@ async fn status(State(_state): State<BannerState>) -> Json<Value> {
     // For now, return basic status without accessing private fields
     Json(json!({
         "status": "operational",
+        "version": env!("CARGO_PKG_VERSION"),
         "bot": {
             "status": "running",
             "uptime": "TODO: implement uptime tracking"
