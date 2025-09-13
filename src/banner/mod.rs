@@ -5,7 +5,6 @@
 //! This module provides functionality to:
 //! - Search for courses and retrieve course information
 //! - Manage Banner API sessions and authentication
-//! - Scrape course data and cache it in Redis
 //! - Generate ICS files and calendar links
 
 pub mod api;
@@ -14,8 +13,8 @@ pub mod json;
 pub mod middleware;
 pub mod models;
 pub mod query;
-pub mod rate_limiter;
 pub mod rate_limit_middleware;
+pub mod rate_limiter;
 pub mod session;
 pub mod util;
 

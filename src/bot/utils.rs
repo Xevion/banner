@@ -13,7 +13,7 @@ pub async fn get_course_by_crn(ctx: &Context<'_>, crn: i32) -> Result<Course> {
     let current_term_status = Term::get_current();
     let term = current_term_status.inner();
 
-    // Fetch live course data from Redis cache via AppState
+    // Fetch live course data from database via AppState
     app_state
         .get_course_or_fetch(&term.to_string(), &crn.to_string())
         .await

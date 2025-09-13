@@ -40,6 +40,9 @@ pub struct Config {
     pub bot_target_guild: u64,
 
     /// Base URL for banner generation service
+    ///
+    /// Defaults to "https://ssbprod.utsa.edu/StudentRegistrationSsb/ssb" if not specified
+    #[serde(default = "default_banner_base_url")]
     pub banner_base_url: String,
     /// Rate limiting configuration for Banner API requests
     #[serde(default = "default_rate_limiting")]
@@ -59,6 +62,11 @@ fn default_port() -> u16 {
 /// Default shutdown timeout of 8 seconds
 fn default_shutdown_timeout() -> Duration {
     Duration::from_secs(8)
+}
+
+/// Default banner base URL
+fn default_banner_base_url() -> String {
+    "https://ssbprod.utsa.edu/StudentRegistrationSsb/ssb".to_string()
 }
 
 /// Rate limiting configuration for Banner API requests
