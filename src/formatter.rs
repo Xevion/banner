@@ -10,6 +10,7 @@ use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::fmt::format::Writer;
 use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields, FormattedFields};
 use tracing_subscriber::registry::LookupSpan;
+use yansi::Paint;
 
 /// Cached format description for timestamps
 /// Uses 3 subsecond digits on Emscripten, 5 otherwise for better performance
@@ -25,11 +26,6 @@ const TIMESTAMP_FORMAT: &[FormatItem<'static>] =
 ///
 /// Re-implementation of the Full formatter with improved timestamp display.
 pub struct CustomPrettyFormatter;
-
-/// A custom JSON formatter that flattens fields to root level
-///
-/// Outputs logs in the format: { "message": "...", "level": "...", "customAttribute": "..." }
-pub struct CustomJsonFormatter;
 
 impl<S, N> FormatEvent<S, N> for CustomPrettyFormatter
 where
@@ -63,20 +59,20 @@ where
             for span in scope.from_root() {
                 write_bold(&mut writer, span.metadata().name())?;
                 saw_any = true;
+
+                write_dimmed(&mut writer, ":")?;
+
                 let ext = span.extensions();
-                if let Some(fields) = &ext.get::<FormattedFields<N>>() {
-                    if !fields.is_empty() {
-                        write_bold(&mut writer, "{")?;
-                        write!(writer, "{}", fields)?;
-                        write_bold(&mut writer, "}")?;
-                    }
+                if let Some(fields) = &ext.get::<FormattedFields<N>>()
+                    && !fields.fields.is_empty()
+                {
+                    write_bold(&mut writer, "{")?;
+                    writer.write_str(fields.fields.as_str())?;
+                    write_bold(&mut writer, "}")?;
                 }
-                if writer.has_ansi_escapes() {
-                    write!(writer, "\x1b[2m:\x1b[0m")?;
-                } else {
-                    writer.write_char(':')?;
-                }
+                write_dimmed(&mut writer, ":")?;
             }
+
             if saw_any {
                 writer.write_char(' ')?;
             }
@@ -84,7 +80,7 @@ where
 
         // 4) Target (dimmed), then a space
         if writer.has_ansi_escapes() {
-            write!(writer, "\x1b[2m{}\x1b[0m\x1b[2m:\x1b[0m ", meta.target())?;
+            write!(writer, "{}: ", Paint::new(meta.target()).dim())?;
         } else {
             write!(writer, "{}: ", meta.target())?;
         }
@@ -97,6 +93,11 @@ where
     }
 }
 
+/// A custom JSON formatter that flattens fields to root level
+///
+/// Outputs logs in the format: { "message": "...", "level": "...", "customAttribute": "..." }
+pub struct CustomJsonFormatter;
+
 impl<S, N> FormatEvent<S, N> for CustomJsonFormatter
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
@@ -104,7 +105,7 @@ where
 {
     fn format_event(
         &self,
-        _ctx: &FmtContext<'_, S, N>,
+        ctx: &FmtContext<'_, S, N>,
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> fmt::Result {
@@ -116,12 +117,15 @@ where
             level: String,
             target: String,
             #[serde(flatten)]
+            spans: Map<String, Value>,
+            #[serde(flatten)]
             fields: Map<String, Value>,
         }
 
-        let (message, fields) = {
+        let (message, fields, spans) = {
             let mut message: Option<String> = None;
             let mut fields: Map<String, Value> = Map::new();
+            let mut spans: Map<String, Value> = Map::new();
 
             struct FieldVisitor<'a> {
                 message: &'a mut Option<String>,
@@ -184,13 +188,42 @@ where
             };
             event.record(&mut visitor);
 
-            (message, fields)
+            // Collect span information from the span hierarchy
+            if let Some(scope) = ctx.event_scope() {
+                for span in scope.from_root() {
+                    let span_name = span.metadata().name().to_string();
+                    let mut span_fields: Map<String, Value> = Map::new();
+
+                    // Try to extract fields from FormattedFields
+                    let ext = span.extensions();
+                    if let Some(formatted_fields) = ext.get::<FormattedFields<N>>() {
+                        // Try to parse as JSON first
+                        if let Ok(json_fields) = serde_json::from_str::<Map<String, Value>>(
+                            formatted_fields.fields.as_str(),
+                        ) {
+                            span_fields.extend(json_fields);
+                        } else {
+                            // If not valid JSON, treat the entire field string as a single field
+                            span_fields.insert(
+                                "raw".to_string(),
+                                Value::String(formatted_fields.fields.as_str().to_string()),
+                            );
+                        }
+                    }
+
+                    // Insert span as a nested object directly into the spans map
+                    spans.insert(span_name, Value::Object(span_fields));
+                }
+            }
+
+            (message, fields, spans)
         };
 
         let json = EventFields {
             message: message.unwrap_or_default(),
             level: meta.level().to_string(),
             target: meta.target().to_string(),
+            spans,
             fields,
         };
 
@@ -205,15 +238,14 @@ where
 /// Write the verbosity level with the same coloring/alignment as the Full formatter.
 fn write_colored_level(writer: &mut Writer<'_>, level: &Level) -> fmt::Result {
     if writer.has_ansi_escapes() {
-        // Basic ANSI color sequences; reset with \x1b[0m
-        let (color, text) = match *level {
-            Level::TRACE => ("\x1b[35m", "TRACE"), // purple
-            Level::DEBUG => ("\x1b[34m", "DEBUG"), // blue
-            Level::INFO => ("\x1b[32m", " INFO"),  // green, note leading space
-            Level::WARN => ("\x1b[33m", " WARN"),  // yellow, note leading space
-            Level::ERROR => ("\x1b[31m", "ERROR"), // red
+        let paint = match *level {
+            Level::TRACE => Paint::new("TRACE").magenta(),
+            Level::DEBUG => Paint::new("DEBUG").blue(),
+            Level::INFO => Paint::new(" INFO").green(),
+            Level::WARN => Paint::new(" WARN").yellow(),
+            Level::ERROR => Paint::new("ERROR").red(),
         };
-        write!(writer, "{}{}\x1b[0m", color, text)
+        write!(writer, "{}", paint)
     } else {
         // Right-pad to width 5 like Full's non-ANSI mode
         match *level {
@@ -228,7 +260,7 @@ fn write_colored_level(writer: &mut Writer<'_>, level: &Level) -> fmt::Result {
 
 fn write_dimmed(writer: &mut Writer<'_>, s: impl fmt::Display) -> fmt::Result {
     if writer.has_ansi_escapes() {
-        write!(writer, "\x1b[2m{}\x1b[0m", s)
+        write!(writer, "{}", Paint::new(s).dim())
     } else {
         write!(writer, "{}", s)
     }
@@ -236,7 +268,7 @@ fn write_dimmed(writer: &mut Writer<'_>, s: impl fmt::Display) -> fmt::Result {
 
 fn write_bold(writer: &mut Writer<'_>, s: impl fmt::Display) -> fmt::Result {
     if writer.has_ansi_escapes() {
-        write!(writer, "\x1b[1m{}\x1b[0m", s)
+        write!(writer, "{}", Paint::new(s).bold())
     } else {
         write!(writer, "{}", s)
     }

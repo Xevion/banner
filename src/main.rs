@@ -4,6 +4,7 @@ use num_format::{Locale, ToFormattedString};
 use serenity::all::{ActivityData, ClientBuilder, GatewayIntents};
 use tokio::signal;
 use tracing::{debug, error, info, warn};
+use tracing_subscriber::fmt::format::JsonFields;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use crate::banner::BannerApi;
@@ -185,6 +186,7 @@ async fn main() {
             FmtSubscriber::builder()
                 .with_target(true)
                 .event_format(formatter::CustomJsonFormatter)
+                .fmt_fields(JsonFields::new())
                 .with_env_filter(filter)
                 .finish(),
         )
