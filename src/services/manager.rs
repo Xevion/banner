@@ -34,6 +34,11 @@ impl ServiceManager {
         self.registered_services.insert(name.to_string(), service);
     }
 
+    /// Check if there are any registered services
+    pub fn has_services(&self) -> bool {
+        !self.registered_services.is_empty()
+    }
+
     /// Spawn all registered services
     pub fn spawn_all(&mut self) {
         let service_count = self.registered_services.len();
