@@ -92,9 +92,7 @@ fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
             };
 
             if low > high {
-                return Err(anyhow!(
-                    "Invalid range: low value greater than high value"
-                ));
+                return Err(anyhow!("Invalid range: low value greater than high value"));
             }
 
             if low < 1000 || high > 9999 {

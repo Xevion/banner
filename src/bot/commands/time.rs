@@ -1,6 +1,6 @@
 //! Time command implementation for course meeting times.
 
-use crate::bot::{utils, Context, Error};
+use crate::bot::{Context, Error, utils};
 use tracing::info;
 
 /// Get meeting times for a specific course
