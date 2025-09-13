@@ -41,5 +41,7 @@ tl = "0.7.8"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 url = "2.5"
+governor = "0.10.1"
+once_cell = "1.21.3"
 
 [dev-dependencies]

@@ -279,7 +279,19 @@ impl BannerApi {
     ) -> Result<SearchResult, BannerApiError> {
         // self.sessions.reset_data_form().await?;
 
-        let session = self.sessions.acquire(term.parse()?).await?;
+        let mut session = self.sessions.acquire(term.parse()?).await?;
+
+        if session.been_used() {
+            self.http
+                .post(&format!("{}/classSearch/resetDataForm", self.base_url))
+                .header("Cookie", session.cookie())
+                .send()
+                .await
+                .map_err(|e| BannerApiError::RequestFailed(e.into()))?;
+        }
+
+        session.touch();
+
         let mut params = query.to_params();
 
         // Add additional parameters
@@ -292,14 +304,6 @@ impl BannerApi {
         );
         params.insert("startDatepicker".to_string(), String::new());
         params.insert("endDatepicker".to_string(), String::new());
-
-        if session.been_used() {
-            self.http
-                .post(&format!("{}/classSearch/resetDataForm", self.base_url))
-                .send()
-                .await
-                .map_err(|e| BannerApiError::RequestFailed(e.into()))?;
-        }
 
         debug!(
             term = term,
