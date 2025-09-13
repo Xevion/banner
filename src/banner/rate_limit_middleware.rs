@@ -4,7 +4,7 @@ use crate::banner::rate_limiter::{RequestType, SharedRateLimiter};
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use tracing::{debug, warn, trace};
+use tracing::{debug, trace, warn};
 use url::Url;
 
 /// Middleware that enforces rate limiting based on request URL patterns
@@ -90,7 +90,7 @@ impl Middleware for RateLimitMiddleware {
             }
             Err(error) => {
                 warn!(
-                    url = %error.url().unwrap_or(&Url::parse("unknown").unwrap()),
+                    url = ?error.url(),
                     error = ?error,
                     "Request failed"
                 );
