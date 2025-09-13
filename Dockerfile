@@ -1,5 +1,5 @@
 # Build Stage
-ARG RUST_VERSION=1.86.0
+ARG RUST_VERSION=1.89.0
 FROM rust:${RUST_VERSION}-bookworm AS builder
 
 # Install build dependencies
