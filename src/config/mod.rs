@@ -42,6 +42,9 @@ pub struct Config {
         deserialize_with = "deserialize_duration"
     )]
     pub shutdown_timeout: Duration,
+    /// Rate limiting configuration for Banner API requests
+    #[serde(default = "default_rate_limiting")]
+    pub rate_limiting: RateLimitingConfig,
 }
 
 /// Default log level of "info"
@@ -57,6 +60,62 @@ fn default_port() -> u16 {
 /// Default shutdown timeout of 8 seconds
 fn default_shutdown_timeout() -> Duration {
     Duration::from_secs(8)
+}
+
+/// Rate limiting configuration for Banner API requests
+#[derive(Deserialize, Clone, Debug)]
+pub struct RateLimitingConfig {
+    /// Requests per minute for session operations (very conservative)
+    #[serde(default = "default_session_rpm")]
+    pub session_rpm: u32,
+    /// Requests per minute for search operations (moderate)
+    #[serde(default = "default_search_rpm")]
+    pub search_rpm: u32,
+    /// Requests per minute for metadata operations (moderate)
+    #[serde(default = "default_metadata_rpm")]
+    pub metadata_rpm: u32,
+    /// Requests per minute for reset operations (low priority)
+    #[serde(default = "default_reset_rpm")]
+    pub reset_rpm: u32,
+    /// Burst allowance (extra requests allowed in short bursts)
+    #[serde(default = "default_burst_allowance")]
+    pub burst_allowance: u32,
+}
+
+/// Default rate limiting configuration
+fn default_rate_limiting() -> RateLimitingConfig {
+    RateLimitingConfig {
+        session_rpm: default_session_rpm(),
+        search_rpm: default_search_rpm(),
+        metadata_rpm: default_metadata_rpm(),
+        reset_rpm: default_reset_rpm(),
+        burst_allowance: default_burst_allowance(),
+    }
+}
+
+/// Default session requests per minute (6 = 1 every 10 seconds)
+fn default_session_rpm() -> u32 {
+    6
+}
+
+/// Default search requests per minute (30 = 1 every 2 seconds)
+fn default_search_rpm() -> u32 {
+    30
+}
+
+/// Default metadata requests per minute (20 = 1 every 3 seconds)
+fn default_metadata_rpm() -> u32 {
+    20
+}
+
+/// Default reset requests per minute (10 = 1 every 6 seconds)
+fn default_reset_rpm() -> u32 {
+    10
+}
+
+/// Default burst allowance (3 extra requests)
+fn default_burst_allowance() -> u32 {
+    3
 }
 
 /// Duration parser configured to handle various time units with seconds as default

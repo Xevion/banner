@@ -79,8 +79,10 @@ async fn main() {
     );
 
     // Create BannerApi and AppState
-    let banner_api =
-        BannerApi::new(config.banner_base_url.clone()).expect("Failed to create BannerApi");
+    let banner_api = BannerApi::new_with_config(
+        config.banner_base_url.clone(),
+        config.rate_limiting.clone().into(),
+    ).expect("Failed to create BannerApi");
 
     let banner_api_arc = Arc::new(banner_api);
     let app_state = AppState::new(banner_api_arc.clone(), &config.redis_url)

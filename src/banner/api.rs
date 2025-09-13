@@ -7,8 +7,16 @@ use std::{
 };
 
 use crate::banner::{
-    BannerSession, SessionPool, errors::BannerApiError, json::parse_json_with_context,
-    middleware::TransparentMiddleware, models::*, nonce, query::SearchQuery, util::user_agent,
+    BannerSession, SessionPool, create_shared_rate_limiter_with_config,
+    errors::BannerApiError,
+    json::parse_json_with_context,
+    middleware::TransparentMiddleware,
+    models::*,
+    nonce,
+    query::SearchQuery,
+    rate_limit_middleware::RateLimitMiddleware,
+    rate_limiter::{RateLimitConfig, SharedRateLimiter, create_shared_rate_limiter},
+    util::user_agent,
 };
 use anyhow::{Context, Result, anyhow};
 use cookie::Cookie;
@@ -30,6 +38,13 @@ pub struct BannerApi {
 impl BannerApi {
     /// Creates a new Banner API client.
     pub fn new(base_url: String) -> Result<Self> {
+        Self::new_with_config(base_url, RateLimitConfig::default())
+    }
+
+    /// Creates a new Banner API client with custom rate limiting configuration.
+    pub fn new_with_config(base_url: String, rate_limit_config: RateLimitConfig) -> Result<Self> {
+        let rate_limiter = create_shared_rate_limiter_with_config(rate_limit_config);
+
         let http = ClientBuilder::new(
             Client::builder()
                 .cookie_store(false)
@@ -42,6 +57,7 @@ impl BannerApi {
                 .context("Failed to create HTTP client")?,
         )
         .with(TransparentMiddleware)
+        .with(RateLimitMiddleware::new(rate_limiter.clone()))
         .build();
 
         Ok(Self {
@@ -50,7 +66,6 @@ impl BannerApi {
             base_url,
         })
     }
-
     /// Validates offset parameter for search methods.
     fn validate_offset(offset: i32) -> Result<()> {
         if offset <= 0 {

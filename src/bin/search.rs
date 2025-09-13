@@ -34,7 +34,9 @@ async fn main() -> Result<()> {
     );
 
     // Create Banner API client
-    let banner_api = BannerApi::new(config.banner_base_url).expect("Failed to create BannerApi");
+    let banner_api =
+        BannerApi::new_with_config(config.banner_base_url, config.rate_limiting.into())
+            .expect("Failed to create BannerApi");
 
     // Get current term
     let term = Term::get_current().inner().to_string();
