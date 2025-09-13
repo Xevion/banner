@@ -148,6 +148,8 @@ pub enum DayOfWeek {
 
 impl DayOfWeek {
     /// Convert to short string representation
+    ///
+    /// Do not change these, these are used for ICS generation. Casing does not matter though.
     pub fn to_short_string(self) -> &'static str {
         match self {
             DayOfWeek::Monday => "Mo",
