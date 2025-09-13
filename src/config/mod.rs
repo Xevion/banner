@@ -25,8 +25,6 @@ pub struct Config {
     pub port: u16,
     /// Database connection URL
     pub database_url: String,
-    /// Redis connection URL
-    pub redis_url: String,
     /// Graceful shutdown timeout duration
     ///
     /// Accepts both numeric values (seconds) and duration strings

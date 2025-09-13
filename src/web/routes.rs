@@ -69,18 +69,8 @@ async fn status(State(_state): State<BannerState>) -> Json<Value> {
 async fn metrics(State(_state): State<BannerState>) -> Json<Value> {
     // For now, return basic metrics structure
     Json(json!({
-        "redis": {
-            "status": "connected",
-            "connected_clients": "TODO: implement client counting",
-            "used_memory": "TODO: implement memory tracking"
-        },
-        "cache": {
-            "courses": {
-                "count": "TODO: implement course counting"
-            },
-            "subjects": {
-                "count": "TODO: implement subject counting"
-            }
+        "banner_api": {
+            "status": "connected"
         },
         "timestamp": chrono::Utc::now().to_rfc3339()
     }))

@@ -118,8 +118,7 @@ async fn main() {
     .expect("Failed to create BannerApi");
 
     let banner_api_arc = Arc::new(banner_api);
-    let app_state = AppState::new(banner_api_arc.clone(), &config.redis_url, db_pool.clone())
-        .expect("Failed to create AppState");
+    let app_state = AppState::new(banner_api_arc.clone(), db_pool.clone());
 
     // Create BannerState for web service
     let banner_state = BannerState {
