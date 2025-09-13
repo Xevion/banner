@@ -1,7 +1,7 @@
-use crate::banner::{BannerApi, BannerApiError, Course, SearchQuery, Term};
+use crate::banner::{BannerApi, BannerApiError};
 use crate::data::models::ScrapeJob;
 use crate::error::Result;
-use serde_json::Value;
+use crate::scraper::jobs::JobType;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -110,81 +110,27 @@ impl Worker {
     }
 
     async fn process_job(&self, job: ScrapeJob) -> Result<()> {
-        match job.target_type {
-            crate::data::models::TargetType::Subject => {
-                self.process_subject_job(&job.target_payload).await
-            }
-            _ => {
-                warn!(worker_id = self.id, job_id = job.id, "unhandled job type");
-                Ok(())
-            }
-        }
-    }
-
-    async fn process_subject_job(&self, payload: &Value) -> Result<()> {
-        let subject_code = payload["subject"]
-            .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid subject payload"))?;
-        info!(
+        // Convert the database job to our job type
+        let job_type = JobType::from_target_type_and_payload(
+            job.target_type,
+            job.target_payload,
+        )?;
+        
+        // Get the job implementation
+        let job_impl = job_type.as_job();
+        
+        debug!(
             worker_id = self.id,
-            subject = subject_code,
-            "Scraping subject"
+            job_id = job.id,
+            description = job_impl.description(),
+            "Processing job"
         );
-
-        let term = Term::get_current().inner().to_string();
-        let query = SearchQuery::new().subject(subject_code).max_results(500);
-
-        let search_result = self
-            .banner_api
-            .search(&term, &query, "subjectDescription", false)
-            .await?;
-
-        if let Some(courses_from_api) = search_result.data {
-            info!(
-                worker_id = self.id,
-                subject = subject_code,
-                count = courses_from_api.len(),
-                "Found courses"
-            );
-            for course in courses_from_api {
-                self.upsert_course(&course).await?;
-            }
-        }
-
-        Ok(())
+        
+        // Process the job
+        job_impl.process(&self.banner_api, &self.db_pool).await
     }
 
-    async fn upsert_course(&self, course: &Course) -> Result<()> {
-        sqlx::query(
-            r#"
-            INSERT INTO courses (crn, subject, course_number, title, term_code, enrollment, max_enrollment, wait_count, wait_capacity, last_scraped_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT (crn, term_code) DO UPDATE SET
-                subject = EXCLUDED.subject,
-                course_number = EXCLUDED.course_number,
-                title = EXCLUDED.title,
-                enrollment = EXCLUDED.enrollment,
-                max_enrollment = EXCLUDED.max_enrollment,
-                wait_count = EXCLUDED.wait_count,
-                wait_capacity = EXCLUDED.wait_capacity,
-                last_scraped_at = EXCLUDED.last_scraped_at
-            "#,
-        )
-        .bind(&course.course_reference_number)
-        .bind(&course.subject)
-        .bind(&course.course_number)
-        .bind(&course.course_title)
-        .bind(&course.term)
-        .bind(course.enrollment)
-        .bind(course.maximum_enrollment)
-        .bind(course.wait_count)
-        .bind(course.wait_capacity)
-        .bind(chrono::Utc::now())
-        .execute(&self.db_pool)
-        .await?;
 
-        Ok(())
-    }
 
     async fn delete_job(&self, job_id: i32) -> Result<()> {
         sqlx::query("DELETE FROM scrape_jobs WHERE id = $1")

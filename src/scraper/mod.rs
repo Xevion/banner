@@ -1,3 +1,4 @@
+pub mod jobs;
 pub mod scheduler;
 pub mod worker;
 

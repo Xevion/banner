@@ -1,6 +1,7 @@
 use crate::banner::{BannerApi, Term};
 use crate::data::models::{ScrapePriority, TargetType};
 use crate::error::Result;
+use crate::scraper::jobs::subject::SubjectJob;
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -78,7 +79,8 @@ impl Scheduler {
         let new_jobs: Vec<_> = subjects
             .into_iter()
             .filter_map(|subject| {
-                let payload = json!({ "subject": subject.code });
+                let job = SubjectJob::new(subject.code.clone());
+                let payload = serde_json::to_value(&job).unwrap();
                 let payload_str = payload.to_string();
 
                 if existing_payloads.contains(&payload_str) {
