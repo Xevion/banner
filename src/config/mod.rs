@@ -20,7 +20,7 @@ pub struct Config {
     /// Defaults to "info" if not specified
     #[serde(default = "default_log_level")]
     pub log_level: String,
-    /// Port for the web server
+    /// Port for the web server (default: 8080)
     #[serde(default = "default_port")]
     pub port: u16,
     /// Database connection URL
@@ -51,9 +51,9 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
-/// Default port of 3000
+/// Default port of 8080
 fn default_port() -> u16 {
-    3000
+    8080
 }
 
 /// Default shutdown timeout of 8 seconds

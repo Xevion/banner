@@ -24,14 +24,14 @@ const TIMESTAMP_FORMAT: &[FormatItem<'static>] =
 /// A custom formatter with enhanced timestamp formatting
 ///
 /// Re-implementation of the Full formatter with improved timestamp display.
-pub struct CustomFormatter;
+pub struct CustomPrettyFormatter;
 
 /// A custom JSON formatter that flattens fields to root level
 ///
 /// Outputs logs in the format: { "message": "...", "level": "...", "customAttribute": "..." }
 pub struct CustomJsonFormatter;
 
-impl<S, N> FormatEvent<S, N> for CustomFormatter
+impl<S, N> FormatEvent<S, N> for CustomPrettyFormatter
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
     N: for<'a> FormatFields<'a> + 'static,

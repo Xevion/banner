@@ -2,3 +2,6 @@
 /target
 /go/
 .cargo/config.toml
+
+**/*.md
+!/README.md

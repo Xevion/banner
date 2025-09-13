@@ -1,3 +1,4 @@
+use clap::Parser;
 use figment::value::UncasedStr;
 use num_format::{Locale, ToFormattedString};
 use serenity::all::{ActivityData, ClientBuilder, Context, GatewayIntents};
@@ -28,6 +29,25 @@ mod services;
 mod state;
 mod web;
 
+/// Banner Discord Bot - Course availability monitoring
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Log formatter to use
+    #[arg(long, value_enum, default_value_t = LogFormatter::Auto)]
+    formatter: LogFormatter,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum LogFormatter {
+    /// Use pretty formatter (default in debug mode)
+    Pretty,
+    /// Use JSON formatter (default in release mode)
+    Json,
+    /// Auto-select based on build mode (debug=pretty, release=json)
+    Auto,
+}
+
 async fn update_bot_status(ctx: &Context, app_state: &AppState) -> Result<(), anyhow::Error> {
     let course_count = app_state.get_course_count().await?;
 
@@ -43,6 +63,9 @@ async fn update_bot_status(ctx: &Context, app_state: &AppState) -> Result<(), an
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
+
+    // Parse CLI arguments
+    let args = Args::parse();
 
     // Load configuration first to get log level
     let config: Config = Figment::new()
@@ -64,22 +87,31 @@ async fn main() {
             base_level
         ))
     });
-    let subscriber = {
-        #[cfg(debug_assertions)]
-        {
+
+    // Select formatter based on CLI args
+    let use_pretty = match args.formatter {
+        LogFormatter::Pretty => true,
+        LogFormatter::Json => false,
+        LogFormatter::Auto => cfg!(debug_assertions),
+    };
+
+    let subscriber: Box<dyn tracing::Subscriber + Send + Sync> = if use_pretty {
+        Box::new(
             FmtSubscriber::builder()
                 .with_target(true)
-                .event_format(formatter::CustomFormatter)
-        }
-        #[cfg(not(debug_assertions))]
-        {
+                .event_format(formatter::CustomPrettyFormatter)
+                .with_env_filter(filter)
+                .finish(),
+        )
+    } else {
+        Box::new(
             FmtSubscriber::builder()
                 .with_target(true)
                 .event_format(formatter::CustomJsonFormatter)
-        }
-    }
-    .with_env_filter(filter)
-    .finish();
+                .with_env_filter(filter)
+                .finish(),
+        )
+    };
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     // Log application startup context
