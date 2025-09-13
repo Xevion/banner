@@ -14,9 +14,9 @@ use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
-use tracing::{debug, info};
+use tracing::info;
 
-use crate::web::assets::WebAssets;
+use crate::web::assets::{WebAssets, get_mime_type_cached};
 
 use crate::banner::BannerApi;
 
@@ -82,9 +82,19 @@ async fn handle_spa_fallback(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
 
     if let Some(content) = WebAssets::get(path) {
-        let mime_type = mime_guess::from_path(path).first_or_text_plain();
         let data = content.data.to_vec();
-        return ([(header::CONTENT_TYPE, mime_type.as_ref())], data).into_response();
+
+        // Use cached MIME type, only set Content-Type if we have a valid MIME type
+        let mime_type = get_mime_type_cached(path);
+        return (
+            [(
+                header::CONTENT_TYPE,
+                // For unknown types, set to application/octet-stream
+                mime_type.unwrap_or("application/octet-stream".to_string()),
+            )],
+            data,
+        )
+            .into_response();
     } else {
         // Any assets that are not found should be treated as a 404, not falling back to the SPA index.html
         if path.starts_with("assets/") {

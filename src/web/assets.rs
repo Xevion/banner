@@ -3,13 +3,9 @@
 //! This module handles serving static assets that are embedded into the binary
 //! at compile time using rust-embed.
 
-use axum::{
-    extract::Path,
-    http::{StatusCode, header},
-    response::{Html, IntoResponse, Response},
-};
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use rust_embed::RustEmbed;
-use tracing::debug;
 
 /// Embedded web assets from the dist directory
 #[derive(RustEmbed)]
@@ -18,18 +14,24 @@ use tracing::debug;
 #[exclude = "*.map"]
 pub struct WebAssets;
 
-const ASSET_EXTENSIONS: &[&str] = &[
-    "js", "css", "png", "jpg", "jpeg", "gif", "svg", "ico", "woff", "woff2", "ttf", "eot",
-];
+/// Global cache for MIME types to avoid repeated mime_guess lookups
+static MIME_CACHE: Lazy<DashMap<String, Option<String>>> = Lazy::new(DashMap::new);
 
-/// Check if a path should be served as a static asset
-pub fn is_asset_path(path: &str) -> bool {
-    if !path.starts_with("/assets/") {
-        return path.eq("index.html");
+/// Get cached MIME type for a file path, caching on-demand
+/// Returns None if the MIME type is text/plain or if no MIME type could be determined
+pub fn get_mime_type_cached(path: &str) -> Option<String> {
+    // Check cache first
+    if let Some(cached) = MIME_CACHE.get(path) {
+        return cached.value().as_ref().cloned();
     }
 
-    match path.split_once('.') {
-        Some((_, extension)) => ASSET_EXTENSIONS.contains(&extension),
-        None => false,
-    }
+    // Perform MIME guess and cache the result
+    let result = mime_guess::from_path(path)
+        .first()
+        .map(|mime| mime.to_string());
+
+    // Cache the result
+    MIME_CACHE.insert(path.to_string(), result.clone());
+
+    result
 }
