@@ -37,7 +37,7 @@ impl Worker {
                     info!(worker_id = self.id, job_id = job.id, "Processing job");
                     if let Err(e) = self.process_job(job).await {
                         // Check if the error is due to an invalid session
-                        if let Some(BannerApiError::InvalidSession) =
+                        if let Some(BannerApiError::InvalidSession(_)) =
                             e.downcast_ref::<BannerApiError>()
                         {
                             warn!(

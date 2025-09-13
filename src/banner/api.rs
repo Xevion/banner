@@ -10,18 +10,19 @@ use crate::banner::{
     BannerSession, SessionPool, models::*, nonce, query::SearchQuery, util::user_agent,
 };
 use anyhow::{Context, Result, anyhow};
-use axum::http::{Extensions, HeaderValue};
 use cookie::Cookie;
 use dashmap::DashMap;
+use http::{Extensions, HeaderValue};
 use reqwest::{Client, Request, Response};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use serde_json;
-use tracing::{Level, Metadata, Span, debug, error, field::ValueSet, info, span};
+use tl;
+use tracing::{Level, Metadata, Span, debug, error, field::ValueSet, info, span, trace, warn};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BannerApiError {
-    #[error("Banner session is invalid or expired")]
-    InvalidSession,
+    #[error("Banner session is invalid or expired: {0}")]
+    InvalidSession(String),
     #[error(transparent)]
     RequestFailed(#[from] anyhow::Error),
 }
@@ -43,29 +44,36 @@ impl Middleware for TransparentMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> std::result::Result<Response, reqwest_middleware::Error> {
-        debug!(
+        trace!(
             domain = req.url().domain(),
+            headers = ?req.headers(),
             "{method} {path}",
             method = req.method().to_string(),
             path = req.url().path(),
         );
-        let response = next.run(req, extensions).await;
+        let response_result = next.run(req, extensions).await;
 
-        match &response {
+        match response_result {
             Ok(response) => {
-                debug!(
-                    "{code} {reason} {path}",
-                    code = response.status().as_u16(),
-                    reason = response.status().canonical_reason().unwrap_or("??"),
-                    path = response.url().path(),
-                );
+                if response.status().is_success() {
+                    trace!(
+                        "{code} {reason} {path}",
+                        code = response.status().as_u16(),
+                        reason = response.status().canonical_reason().unwrap_or("??"),
+                        path = response.url().path(),
+                    );
+                    Ok(response)
+                } else {
+                    let e = response.error_for_status_ref().unwrap_err();
+                    warn!(error = ?e, "Request failed (server)");
+                    Ok(response)
+                }
             }
             Err(error) => {
-                debug!("!!! {error}");
+                warn!(?error, "Request failed (middleware)");
+                Err(error)
             }
         }
-
-        response
     }
 }
 
@@ -74,7 +82,7 @@ impl BannerApi {
     pub fn new(base_url: String) -> Result<Self> {
         let http = ClientBuilder::new(
             Client::builder()
-                .cookie_store(true)
+                .cookie_store(false)
                 .user_agent(user_agent())
                 .tcp_keepalive(Some(std::time::Duration::from_secs(60 * 5)))
                 .read_timeout(std::time::Duration::from_secs(10))
@@ -285,10 +293,24 @@ impl BannerApi {
         params.insert("startDatepicker".to_string(), String::new());
         params.insert("endDatepicker".to_string(), String::new());
 
-        let url = format!("{}/searchResults/searchResults", self.base_url);
+        if session.been_used() {
+            self.http
+                .post(&format!("{}/classSearch/resetDataForm", self.base_url))
+                .send()
+                .await
+                .map_err(|e| BannerApiError::RequestFailed(e.into()))?;
+        }
+
+        debug!(
+            term = term,
+            query = ?query,
+            sort = sort,
+            sort_descending = sort_descending,
+            "Searching for courses with params: {:?}", params);
+
         let response = self
             .http
-            .get(&url)
+            .get(format!("{}/searchResults/searchResults", self.base_url))
             .header("Cookie", session.cookie())
             .query(&params)
             .send()
@@ -309,8 +331,14 @@ impl BannerApi {
         })?;
 
         // Check for signs of an invalid session, based on docs/Sessions.md
-        if search_result.path_mode.is_none() || search_result.data.is_none() {
-            return Err(BannerApiError::InvalidSession);
+        if search_result.path_mode.is_none() {
+            return Err(BannerApiError::InvalidSession(
+                "Search result path mode is none".to_string(),
+            ));
+        } else if search_result.data.is_none() {
+            return Err(BannerApiError::InvalidSession(
+                "Search result data is none".to_string(),
+            ));
         }
 
         if !search_result.success {
@@ -373,7 +401,9 @@ impl BannerApi {
         if search_result.path_mode == Some("registration".to_string())
             && search_result.data.is_none()
         {
-            return Err(BannerApiError::InvalidSession);
+            return Err(BannerApiError::InvalidSession(
+                "Search result path mode is registration and data is none".to_string(),
+            ));
         }
 
         if !search_result.success {

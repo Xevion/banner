@@ -18,6 +18,7 @@ pub struct Config {
     ///
     /// Valid values are: "trace", "debug", "info", "warn", "error"
     /// Defaults to "info" if not specified
+    #[serde(default = "default_log_level")]
     pub log_level: String,
     /// Discord bot token for authentication
     pub bot_token: String,
@@ -41,6 +42,11 @@ pub struct Config {
         deserialize_with = "deserialize_duration"
     )]
     pub shutdown_timeout: Duration,
+}
+
+/// Default log level of "info"
+fn default_log_level() -> String {
+    "info".to_string()
 }
 
 /// Default port of 3000

@@ -22,7 +22,7 @@ const SESSION_EXPIRY: Duration = Duration::from_secs(25 * 60); // 25 minutes
 #[derive(Debug, Clone)]
 pub struct BannerSession {
     // Randomly generated
-    unique_session_id: String,
+    pub unique_session_id: String,
     // Timestamp of creation
     created_at: Instant,
     // Timestamp of last activity
@@ -72,7 +72,7 @@ impl BannerSession {
 
     /// Updates the last activity timestamp
     pub fn touch(&mut self) {
-        debug!("Session {} is being used", self.unique_session_id);
+        debug!(id = self.unique_session_id, "Session was used");
         self.last_activity = Some(Instant::now());
     }
 
@@ -88,6 +88,10 @@ impl BannerSession {
             self.jsessionid, self.ssb_cookie
         )
     }
+
+    pub fn been_used(&self) -> bool {
+        self.last_activity.is_some()
+    }
 }
 
 /// A smart pointer that returns a BannerSession to the pool when dropped.
@@ -95,6 +99,12 @@ pub struct PooledSession {
     session: Option<BannerSession>,
     // This Arc points directly to the queue the session belongs to.
     pool: Arc<Mutex<VecDeque<BannerSession>>>,
+}
+
+impl PooledSession {
+    pub fn been_used(&self) -> bool {
+        self.session.as_ref().unwrap().been_used()
+    }
 }
 
 impl Deref for PooledSession {
@@ -117,17 +127,24 @@ impl Drop for PooledSession {
         if let Some(session) = self.session.take() {
             // Don't return expired sessions to the pool.
             if session.is_expired() {
-                debug!("Session {} expired, dropping.", session.unique_session_id);
+                debug!(
+                    id = session.unique_session_id,
+                    "Session is now expired, dropping."
+                );
                 return;
             }
 
             // This is a synchronous lock, so it's allowed in drop().
             // It blocks the current thread briefly to return the session.
             let mut queue = self.pool.lock().unwrap();
+
+            let id = session.unique_session_id.clone();
             queue.push_back(session);
+
             debug!(
-                "Session returned to pool. Queue size is now {}.",
-                queue.len()
+                id = id,
+                "Session returned to pool. Queue size is now {queue_size}.",
+                queue_size = queue.len(),
             );
         }
     }
@@ -168,7 +185,7 @@ impl SessionPool {
             if let Some(mut session) = session_option {
                 // We got a session, check if it's expired.
                 if !session.is_expired() {
-                    debug!("Reusing session {}", session.unique_session_id);
+                    debug!(id = session.unique_session_id, "Reusing session");
 
                     session.touch();
                     return Ok(PooledSession {
@@ -177,8 +194,8 @@ impl SessionPool {
                     });
                 } else {
                     debug!(
-                        "Popped an expired session {}, discarding.",
-                        session.unique_session_id
+                        id = session.unique_session_id,
+                        "Popped an expired session, discarding.",
                     );
                     // The session is expired, so we loop again to try and get another one.
                 }
@@ -197,7 +214,7 @@ impl SessionPool {
 
     /// Sets up initial session cookies by making required Banner API requests
     pub async fn create_session(&self, term: &Term) -> Result<BannerSession> {
-        info!("setting up banner session...");
+        info!("setting up banner session for term {term}");
 
         // The 'register' or 'search' registration page
         let initial_registration = self
@@ -220,32 +237,53 @@ impl SessionPool {
             })
             .collect::<HashMap<String, String>>();
 
+        if cookies.get("JSESSIONID").is_none() || cookies.get("SSB_COOKIE").is_none() {
+            return Err(anyhow::anyhow!("Failed to get cookies"));
+        }
+
         let jsessionid = cookies.get("JSESSIONID").unwrap();
         let ssb_cookie = cookies.get("SSB_COOKIE").unwrap();
+        let cookie_header = format!("JSESSIONID={}; SSB_COOKIE={}", jsessionid, ssb_cookie);
 
-        let data_page_response = self
-            .http
+        debug!(
+            jsessionid = jsessionid,
+            ssb_cookie = ssb_cookie,
+            "New session cookies acquired"
+        );
+
+        self.http
             .get(format!("{}/selfServiceMenu/data", self.base_url))
+            .header("Cookie", &cookie_header)
             .send()
-            .await?;
-        // TODO: Validate success
+            .await?
+            .error_for_status()
+            .context("Failed to get data page")?;
 
-        let term_selection_page_response = self
-            .http
+        self.http
             .get(format!("{}/term/termSelection", self.base_url))
+            .header("Cookie", &cookie_header)
             .query(&[("mode", "search")])
             .send()
-            .await?;
+            .await?
+            .error_for_status()
+            .context("Failed to get term selection page")?;
         // TOOD: Validate success
 
-        let term_search_response = self.get_terms("", 1, 10).await?;
-        // TODO: Validate that the term search response contains the term we want
+        /*let terms = self.get_terms("", 1, 10).await?;
+        if !terms.iter().any(|t| t.code == term.to_string()) {
+            return Err(anyhow::anyhow!("Failed to get term search response"));
+        }
 
         let specific_term_search_response = self.get_terms(&term.to_string(), 1, 10).await?;
-        // TODO: Validate that the term response contains the term we want
+        if !specific_term_search_response
+            .iter()
+            .any(|t| t.code == term.to_string())
+        {
+            return Err(anyhow::anyhow!("Failed to get term search response"));
+        }*/
 
         let unique_session_id = generate_session_id();
-        self.select_term(&term.to_string(), &unique_session_id)
+        self.select_term(&term.to_string(), &unique_session_id, &cookie_header)
             .await?;
 
         BannerSession::new(&unique_session_id, jsessionid, ssb_cookie).await
@@ -287,7 +325,12 @@ impl SessionPool {
     }
 
     /// Selects a term for the current session
-    pub async fn select_term(&self, term: &str, unique_session_id: &str) -> Result<()> {
+    pub async fn select_term(
+        &self,
+        term: &str,
+        unique_session_id: &str,
+        cookie_header: &str,
+    ) -> Result<()> {
         let form_data = [
             ("term", term),
             ("studyPath", ""),
@@ -301,6 +344,7 @@ impl SessionPool {
         let response = self
             .http
             .post(&url)
+            .header("Cookie", cookie_header)
             .query(&[("mode", "search")])
             .form(&form_data)
             .send()
@@ -327,7 +371,12 @@ impl SessionPool {
 
         // Follow the redirect
         let redirect_url = format!("{}{}", self.base_url, non_overlap_redirect);
-        let redirect_response = self.http.get(&redirect_url).send().await?;
+        let redirect_response = self
+            .http
+            .get(&redirect_url)
+            .header("Cookie", cookie_header)
+            .send()
+            .await?;
 
         if !redirect_response.status().is_success() {
             return Err(anyhow::anyhow!(
@@ -336,7 +385,7 @@ impl SessionPool {
             ));
         }
 
-        debug!("successfully selected term: {}", term);
+        debug!(term = term, "successfully selected term");
         Ok(())
     }
 }
