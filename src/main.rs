@@ -50,15 +50,15 @@ struct Args {
     tracing: TracingFormat,
 
     /// Services to run (comma-separated). Default: all services
-    /// 
+    ///
     /// Examples:
     ///   --services bot,web    # Run only bot and web services
     ///   --services scraper    # Run only the scraper service
     #[arg(long, value_delimiter = ',', conflicts_with = "disable_services")]
     services: Option<Vec<ServiceName>>,
-    
+
     /// Services to disable (comma-separated)
-    /// 
+    ///
     /// Examples:
     ///   --disable-services bot        # Run web and scraper only
     ///   --disable-services bot,web    # Run only the scraper service
@@ -89,7 +89,7 @@ impl ServiceName {
     fn all() -> Vec<ServiceName> {
         vec![ServiceName::Bot, ServiceName::Web, ServiceName::Scraper]
     }
-    
+
     /// Convert to string for service registration
     fn as_str(&self) -> &'static str {
         match self {
@@ -121,7 +121,9 @@ fn determine_enabled_services(args: &Args) -> Result<Vec<ServiceName>, anyhow::E
         }
         (Some(_), Some(_)) => {
             // This should be prevented by clap's conflicts_with, but just in case
-            Err(anyhow::anyhow!("Cannot specify both --services and --disable-services"))
+            Err(anyhow::anyhow!(
+                "Cannot specify both --services and --disable-services"
+            ))
         }
     }
 }

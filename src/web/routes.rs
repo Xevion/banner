@@ -4,18 +4,19 @@ use axum::{
     Router,
     extract::State,
     http::{StatusCode, Uri},
-    response::{IntoResponse, Json, Response},
-    routing::{any, get},
+    response::{Html, IntoResponse, Json, Response},
+    routing::get,
 };
+use http::header;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
-use tracing::info;
+use tracing::{debug, info};
 
-use crate::web::assets::{is_asset_path, serve_asset, serve_spa_index};
+use crate::web::assets::WebAssets;
 
 use crate::banner::BannerApi;
 
@@ -50,7 +51,6 @@ pub fn create_router(state: BannerState) -> Router {
         Router::new()
             .route("/", get(root))
             .nest("/api", api_router)
-            .route("/assets/{*path}", any(serve_asset))
             .fallback(handle_spa_fallback)
             .layer(TraceLayer::new_for_http())
     }
@@ -79,20 +79,32 @@ async fn root() -> Response {
 
 /// Handles SPA routing by serving index.html for non-API, non-asset requests
 async fn handle_spa_fallback(uri: Uri) -> Response {
-    let path = uri.path();
+    let path = uri.path().trim_start_matches('/');
 
-    // Don't serve index.html for API routes or asset requests
-    if path.starts_with("/api/") || is_asset_path(path) {
-        return (StatusCode::NOT_FOUND, "Not Found").into_response();
+    if let Some(content) = WebAssets::get(path) {
+        let mime_type = mime_guess::from_path(path).first_or_text_plain();
+        let data = content.data.to_vec();
+        return ([(header::CONTENT_TYPE, mime_type.as_ref())], data).into_response();
+    } else {
+        // Any assets that are not found should be treated as a 404, not falling back to the SPA index.html
+        if path.starts_with("assets/") {
+            return (StatusCode::NOT_FOUND, "Asset not found").into_response();
+        }
     }
 
-    // In production, serve embedded index.html for SPA routing
-    if cfg!(not(debug_assertions)) {
-        return serve_spa_index().await;
+    // Fall back to the SPA index.html
+    match WebAssets::get("index.html") {
+        Some(content) => {
+            let data = content.data.to_vec();
+            let html_content = String::from_utf8_lossy(&data).to_string();
+            Html(html_content).into_response()
+        }
+        None => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to load index.html",
+        )
+            .into_response(),
     }
-
-    // Development fallback (shouldn't reach here in production)
-    (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
 /// Health check endpoint
