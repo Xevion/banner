@@ -32,8 +32,7 @@ async fn main() {
 
     // Load configuration first to get log level
     let config: Config = Figment::new()
-        .merge(Env::raw().only(&["DATABASE_URL"]))
-        .merge(Env::prefixed("APP_"))
+        .merge(Env::raw())
         .extract()
         .expect("Failed to load config");
 

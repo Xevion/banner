@@ -8,7 +8,7 @@ use fundu::{DurationParser, TimeUnit};
 use serde::{Deserialize, Deserializer};
 use std::time::Duration;
 
-/// Application configuration loaded from environment variables
+/// Main application configuration containing all sub-configurations
 #[derive(Deserialize)]
 pub struct Config {
     /// Log level for the application
@@ -20,8 +20,6 @@ pub struct Config {
     /// Defaults to "info" if not specified
     #[serde(default = "default_log_level")]
     pub log_level: String,
-    /// Discord bot token for authentication
-    pub bot_token: String,
     /// Port for the web server
     #[serde(default = "default_port")]
     pub port: u16,
@@ -29,10 +27,6 @@ pub struct Config {
     pub database_url: String,
     /// Redis connection URL
     pub redis_url: String,
-    /// Base URL for banner generation service
-    pub banner_base_url: String,
-    /// Target Discord guild ID where the bot operates
-    pub bot_target_guild: u64,
     /// Graceful shutdown timeout duration
     ///
     /// Accepts both numeric values (seconds) and duration strings
@@ -42,6 +36,13 @@ pub struct Config {
         deserialize_with = "deserialize_duration"
     )]
     pub shutdown_timeout: Duration,
+    /// Discord bot token for authentication
+    pub bot_token: String,
+    /// Target Discord guild ID where the bot operates
+    pub bot_target_guild: u64,
+
+    /// Base URL for banner generation service
+    pub banner_base_url: String,
     /// Rate limiting configuration for Banner API requests
     #[serde(default = "default_rate_limiting")]
     pub rate_limiting: RateLimitingConfig,
