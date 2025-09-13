@@ -29,23 +29,26 @@ mod services;
 mod state;
 mod web;
 
+#[cfg(debug_assertions)]
+const DEFAULT_TRACING_FORMAT: TracingFormat = TracingFormat::Pretty;
+#[cfg(not(debug_assertions))]
+const DEFAULT_TRACING_FORMAT: TracingFormat = TracingFormat::Json;
+
 /// Banner Discord Bot - Course availability monitoring
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Log formatter to use
-    #[arg(long, value_enum, default_value_t = LogFormatter::Auto)]
-    formatter: LogFormatter,
+    #[arg(long, value_enum, default_value_t = DEFAULT_TRACING_FORMAT)]
+    tracing: TracingFormat,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
-enum LogFormatter {
+enum TracingFormat {
     /// Use pretty formatter (default in debug mode)
     Pretty,
     /// Use JSON formatter (default in release mode)
     Json,
-    /// Auto-select based on build mode (debug=pretty, release=json)
-    Auto,
 }
 
 async fn update_bot_status(ctx: &Context, app_state: &AppState) -> Result<(), anyhow::Error> {
@@ -89,10 +92,9 @@ async fn main() {
     });
 
     // Select formatter based on CLI args
-    let use_pretty = match args.formatter {
-        LogFormatter::Pretty => true,
-        LogFormatter::Json => false,
-        LogFormatter::Auto => cfg!(debug_assertions),
+    let use_pretty = match args.tracing {
+        TracingFormat::Pretty => true,
+        TracingFormat::Json => false,
     };
 
     let subscriber: Box<dyn tracing::Subscriber + Send + Sync> = if use_pretty {
