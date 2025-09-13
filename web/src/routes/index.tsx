@@ -234,6 +234,29 @@ function App() {
             </Flex>
           </Card>
         )}
+        {status?.git?.commit && (
+          <Flex justify="center" style={{ marginTop: "12px" }}>
+            <Text
+              size="1"
+              style={{
+                color: "#8B949E",
+                textDecoration: "none",
+              }}
+            >
+              <a
+                href={`https://github.com/Xevion/banner/commit/${status.git.commit}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: "inherit",
+                  textDecoration: "none",
+                }}
+              >
+                GitHub
+              </a>
+            </Text>
+          </Flex>
+        )}
       </Flex>
     </div>
   );

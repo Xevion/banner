@@ -239,6 +239,10 @@ async fn status(State(_state): State<BannerState>) -> Json<Value> {
         "banner_api": {
             "status": "connected"
         },
+        "git": {
+            "commit": env!("GIT_COMMIT_HASH"),
+            "short": env!("GIT_COMMIT_SHORT")
+        },
         "timestamp": chrono::Utc::now().to_rfc3339()
     }))
 }

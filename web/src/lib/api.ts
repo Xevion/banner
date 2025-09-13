@@ -20,6 +20,10 @@ export interface StatusResponse {
   banner_api: {
     status: string;
   };
+  git: {
+    commit: string;
+    short: string;
+  };
   timestamp: string;
 }
 
