@@ -1,6 +1,6 @@
 use figment::value::UncasedStr;
 use num_format::{Locale, ToFormattedString};
-use serenity::all::{ActivityData, ClientBuilder, GatewayIntents};
+use serenity::all::{ActivityData, ClientBuilder, Context, GatewayIntents};
 use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -28,10 +28,7 @@ mod services;
 mod state;
 mod web;
 
-async fn update_bot_status(
-    ctx: &serenity::all::Context,
-    app_state: &AppState,
-) -> Result<(), anyhow::Error> {
+async fn update_bot_status(ctx: &Context, app_state: &AppState) -> Result<(), anyhow::Error> {
     let course_count = app_state.get_course_count().await?;
 
     ctx.set_activity(Some(ActivityData::playing(format!(
@@ -239,7 +236,7 @@ async fn main() {
     // Spawn all registered services
     service_manager.spawn_all();
 
-    // Set up CTRL+C signal handling
+    // Set up signal handling for both SIGINT (Ctrl+C) and SIGTERM
     let ctrl_c = async {
         signal::ctrl_c()
             .await
@@ -247,7 +244,23 @@ async fn main() {
         info!("received ctrl+c, gracefully shutting down...");
     };
 
-    // Main application loop - wait for services or CTRL+C
+    #[cfg(unix)]
+    let sigterm = async {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm_stream =
+            signal(SignalKind::terminate()).expect("Failed to install SIGTERM signal handler");
+        sigterm_stream.recv().await;
+        info!("received SIGTERM, gracefully shutting down...");
+    };
+
+    #[cfg(not(unix))]
+    let sigterm = async {
+        // On non-Unix systems, create a future that never completes
+        // This ensures the select! macro works correctly
+        std::future::pending::<()>().await;
+    };
+
+    // Main application loop - wait for services or signals
     let mut exit_code = 0;
 
     tokio::select! {
@@ -289,8 +302,30 @@ async fn main() {
             }
         }
         _ = ctrl_c => {
-            // User requested shutdown
+            // User requested shutdown via Ctrl+C
             info!("user requested shutdown via ctrl+c");
+            match service_manager.shutdown(shutdown_timeout).await {
+                Ok(elapsed) => {
+                    info!(
+                        remaining = format!("{:.2?}", shutdown_timeout - elapsed),
+                        "graceful shutdown complete"
+                    );
+                    info!("graceful shutdown complete");
+                }
+                Err(pending_services) => {
+                    warn!(
+                        pending_count = pending_services.len(),
+                        pending_services = ?pending_services,
+                        "graceful shutdown elapsed - {} service(s) did not complete",
+                        pending_services.len()
+                    );
+                    exit_code = 2;
+                }
+            }
+        }
+        _ = sigterm => {
+            // System requested shutdown via SIGTERM
+            info!("system requested shutdown via SIGTERM");
             match service_manager.shutdown(shutdown_timeout).await {
                 Ok(elapsed) => {
                     info!(
