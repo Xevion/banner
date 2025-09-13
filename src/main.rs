@@ -1,3 +1,4 @@
+use figment::value::UncasedStr;
 use serenity::all::{ClientBuilder, GatewayIntents};
 use tokio::signal;
 use tracing::{error, info, warn};
@@ -32,7 +33,13 @@ async fn main() {
 
     // Load configuration first to get log level
     let config: Config = Figment::new()
-        .merge(Env::raw())
+        .merge(Env::raw().map(|k| {
+            if k == UncasedStr::new("RAILWAY_DEPLOYMENT_DRAINING_SECONDS") {
+                "SHUTDOWN_TIMEOUT".into()
+            } else {
+                k.into()
+            }
+        }))
         .extract()
         .expect("Failed to load config");
 
