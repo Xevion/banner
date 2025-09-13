@@ -1,7 +1,7 @@
 use crate::banner::{BannerApi, BannerApiError};
 use crate::data::models::ScrapeJob;
 use crate::error::Result;
-use crate::scraper::jobs::JobType;
+use crate::scraper::jobs::{JobError, JobType};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,38 +35,58 @@ impl Worker {
                 Ok(Some(job)) => {
                     let job_id = job.id;
                     debug!(worker_id = self.id, job_id = job.id, "Processing job");
-                    if let Err(e) = self.process_job(job).await {
-                        // Check if the error is due to an invalid session
-                        if let Some(BannerApiError::InvalidSession(_)) =
-                            e.downcast_ref::<BannerApiError>()
-                        {
-                            warn!(
-                                worker_id = self.id,
-                                job_id, "Invalid session detected. Forcing session refresh."
-                            );
-                        } else {
-                            error!(worker_id = self.id, job_id, error = ?e, "Failed to process job");
+                    match self.process_job(job).await {
+                        Ok(()) => {
+                            debug!(worker_id = self.id, job_id, "Job completed");
+                            // If successful, delete the job.
+                            if let Err(delete_err) = self.delete_job(job_id).await {
+                                error!(
+                                    worker_id = self.id,
+                                    job_id,
+                                    ?delete_err,
+                                    "Failed to delete job"
+                                );
+                            }
                         }
+                        Err(JobError::Recoverable(e)) => {
+                            // Check if the error is due to an invalid session
+                            if let Some(BannerApiError::InvalidSession(_)) =
+                                e.downcast_ref::<BannerApiError>()
+                            {
+                                warn!(
+                                    worker_id = self.id,
+                                    job_id, "Invalid session detected. Forcing session refresh."
+                                );
+                            } else {
+                                error!(worker_id = self.id, job_id, error = ?e, "Failed to process job");
+                            }
 
-                        // Unlock the job so it can be retried
-                        if let Err(unlock_err) = self.unlock_job(job_id).await {
-                            error!(
-                                worker_id = self.id,
-                                job_id,
-                                ?unlock_err,
-                                "Failed to unlock job"
-                            );
+                            // Unlock the job so it can be retried
+                            if let Err(unlock_err) = self.unlock_job(job_id).await {
+                                error!(
+                                    worker_id = self.id,
+                                    job_id,
+                                    ?unlock_err,
+                                    "Failed to unlock job"
+                                );
+                            }
                         }
-                    } else {
-                        debug!(worker_id = self.id, job_id, "Job completed");
-                        // If successful, delete the job.
-                        if let Err(delete_err) = self.delete_job(job_id).await {
+                        Err(JobError::Unrecoverable(e)) => {
                             error!(
                                 worker_id = self.id,
                                 job_id,
-                                ?delete_err,
-                                "Failed to delete job"
+                                error = ?e,
+                                "Job corrupted, deleting"
                             );
+                            // Parse errors are unrecoverable - delete the job
+                            if let Err(delete_err) = self.delete_job(job_id).await {
+                                error!(
+                                    worker_id = self.id,
+                                    job_id,
+                                    ?delete_err,
+                                    "Failed to delete corrupted job"
+                                );
+                            }
                         }
                     }
                 }
@@ -109,28 +129,29 @@ impl Worker {
         Ok(job)
     }
 
-    async fn process_job(&self, job: ScrapeJob) -> Result<()> {
+    async fn process_job(&self, job: ScrapeJob) -> Result<(), JobError> {
         // Convert the database job to our job type
-        let job_type = JobType::from_target_type_and_payload(
-            job.target_type,
-            job.target_payload,
-        )?;
-        
+        let job_type = JobType::from_target_type_and_payload(job.target_type, job.target_payload)
+            .map_err(|e| JobError::Unrecoverable(anyhow::anyhow!(e)))?; // Parse errors are unrecoverable
+
         // Get the job implementation
         let job_impl = job_type.as_job();
-        
+
         debug!(
             worker_id = self.id,
             job_id = job.id,
             description = job_impl.description(),
             "Processing job"
         );
-        
-        // Process the job
-        job_impl.process(&self.banner_api, &self.db_pool).await
+
+        // Process the job - API errors are recoverable
+        job_impl
+            .process(&self.banner_api, &self.db_pool)
+            .await
+            .map_err(JobError::Recoverable)?;
+
+        Ok(())
     }
-
-
 
     async fn delete_job(&self, job_id: i32) -> Result<()> {
         sqlx::query("DELETE FROM scrape_jobs WHERE id = $1")

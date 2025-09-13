@@ -1,10 +1,67 @@
 pub mod subject;
 
+use crate::banner::BannerApi;
 use crate::data::models::TargetType;
 use crate::error::Result;
-use crate::{banner::BannerApi, scraper::jobs::subject::SubjectJob};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::fmt;
+
+/// Errors that can occur during job parsing
+#[derive(Debug)]
+pub enum JobParseError {
+    InvalidJson(serde_json::Error),
+    UnsupportedTargetType(TargetType),
+    MissingRequiredField(String),
+}
+
+impl fmt::Display for JobParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JobParseError::InvalidJson(e) => write!(f, "Invalid JSON in job payload: {}", e),
+            JobParseError::UnsupportedTargetType(t) => {
+                write!(f, "Unsupported target type: {:?}", t)
+            }
+            JobParseError::MissingRequiredField(field) => {
+                write!(f, "Missing required field: {}", field)
+            }
+        }
+    }
+}
+
+impl std::error::Error for JobParseError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            JobParseError::InvalidJson(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+/// Errors that can occur during job processing
+#[derive(Debug)]
+pub enum JobError {
+    Recoverable(anyhow::Error),   // API failures, network issues
+    Unrecoverable(anyhow::Error), // Parse errors, corrupted data
+}
+
+impl fmt::Display for JobError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JobError::Recoverable(e) => write!(f, "Recoverable error: {}", e),
+            JobError::Unrecoverable(e) => write!(f, "Unrecoverable error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for JobError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            JobError::Recoverable(e) => e.source(),
+            JobError::Unrecoverable(e) => e.source(),
+        }
+    }
+}
 
 /// Common trait interface for all job types
 #[async_trait::async_trait]
@@ -22,7 +79,7 @@ pub trait Job: Send + Sync {
 /// Main job enum that dispatches to specific job implementations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum JobType {
-    Subject(SubjectJob),
+    Subject(subject::SubjectJob),
 }
 
 impl JobType {
@@ -30,23 +87,26 @@ impl JobType {
     pub fn from_target_type_and_payload(
         target_type: TargetType,
         payload: serde_json::Value,
-    ) -> Result<Self> {
+    ) -> Result<Self, JobParseError> {
         match target_type {
             TargetType::Subject => {
-                let subject_payload: SubjectJob = serde_json::from_value(payload)?;
-                Ok(JobType::Subject(subject_payload))
+                let subject_job: subject::SubjectJob =
+                    serde_json::from_value(payload).map_err(JobParseError::InvalidJson)?;
+                Ok(JobType::Subject(subject_job))
             }
-            _ => Err(anyhow::anyhow!(
-                "Unsupported target type: {:?}",
-                target_type
-            )),
+            _ => Err(JobParseError::UnsupportedTargetType(target_type)),
         }
     }
 
     /// Convert to a Job trait object
     pub fn as_job(self) -> Box<dyn Job> {
         match self {
-            JobType::Subject(payload) => Box::new(payload),
+            JobType::Subject(job) => Box::new(job),
         }
     }
+}
+
+/// Helper function to create a subject job
+pub fn create_subject_job(subject: String) -> JobType {
+    JobType::Subject(subject::SubjectJob::new(subject))
 }
