@@ -25,4 +25,4 @@ dev-build *ARGS='--services web --tracing pretty': build-frontend
 # Auto-reloading development build for both frontend and backend
 # Will not notice if either the frontend/backend crashes, but will generally be resistant to stopping on their own.
 [parallel]
-dev: frontend backend
+dev *ARGS='--services web,bot': frontend (backend ARGS)
