@@ -52,7 +52,6 @@ RUN addgroup --gid $GID $APP_USER \
 
 # Copy application files
 COPY --from=builder --chown=$APP_USER:$APP_USER /usr/src/banner/target/release/banner ${APP}/banner
-COPY --from=builder --chown=$APP_USER:$APP_USER /usr/src/banner/src/fonts ${APP}/fonts
 
 # Set proper permissions
 RUN chmod +x ${APP}/banner
