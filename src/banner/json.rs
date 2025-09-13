@@ -9,10 +9,8 @@ pub fn parse_json_with_context<T: serde::de::DeserializeOwned>(body: &str) -> Re
         Ok(value) => Ok(value),
         Err(err) => {
             let (line, column) = (err.line(), err.column());
-            let snippet = build_error_snippet(body, line, column, 80);
-            Err(anyhow::anyhow!(
-                "{err} at line {line}, column {column}\nSnippet:\n{snippet}",
-            ))
+            // let snippet = build_error_snippet(body, line, column, 80);
+            Err(anyhow::anyhow!("{err} at line {line}, column {column}",))
         }
     }
 }
