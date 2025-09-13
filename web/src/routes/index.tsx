@@ -1,87 +1,240 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { apiClient, type StatusResponse } from "../lib/api";
+import { Card, Flex, Text, Tooltip } from "@radix-ui/themes";
 import {
-  apiClient,
-  type HealthResponse,
-  type StatusResponse,
-} from "../lib/api";
-import logo from "../logo.svg";
+  CheckCircle,
+  AlertCircle,
+  XCircle,
+  Clock,
+  Bot,
+  Database,
+  Globe,
+  Hourglass,
+  Activity,
+} from "lucide-react";
+import TimeAgo from "react-timeago";
 import "../App.css";
 
 export const Route = createFileRoute("/")({
   component: App,
 });
 
+// Constants
+const REFRESH_INTERVAL = import.meta.env.DEV ? 3000 : 30000;
+const CARD_STYLES = {
+  padding: "24px",
+  maxWidth: "400px",
+  width: "100%",
+} as const;
+
+const BORDER_STYLES = {
+  marginTop: "16px",
+  paddingTop: "16px",
+  borderTop: "1px solid #e2e8f0",
+} as const;
+
+// Types
+type HealthStatus = "healthy" | "warning" | "error" | "unknown";
+type ServiceStatus = "running" | "connected" | "disconnected" | "error";
+
+interface ResponseTiming {
+  health: number | null;
+  status: number | null;
+}
+
+interface StatusIcon {
+  icon: typeof CheckCircle;
+  color: string;
+}
+
+interface Service {
+  name: string;
+  status: ServiceStatus;
+  icon: typeof Bot;
+}
+
+// Helper functions
+const getStatusIcon = (status: string): StatusIcon => {
+  const statusMap: Record<string, StatusIcon> = {
+    healthy: { icon: CheckCircle, color: "green" },
+    running: { icon: CheckCircle, color: "green" },
+    connected: { icon: CheckCircle, color: "green" },
+    warning: { icon: AlertCircle, color: "orange" },
+    error: { icon: XCircle, color: "red" },
+    disconnected: { icon: XCircle, color: "red" },
+  };
+
+  return statusMap[status] || { icon: XCircle, color: "red" };
+};
+
+const getOverallHealth = (
+  status: StatusResponse | null,
+  error: string | null
+): HealthStatus => {
+  if (error) return "error";
+  if (!status) return "unknown";
+
+  const allHealthy =
+    status.bot.status === "running" &&
+    status.cache.status === "connected" &&
+    status.banner_api.status === "connected";
+
+  return allHealthy ? "healthy" : "warning";
+};
+
+const getServices = (status: StatusResponse | null): Service[] => {
+  if (!status) return [];
+
+  return [
+    { name: "Bot", status: status.bot.status as ServiceStatus, icon: Bot },
+    {
+      name: "Cache",
+      status: status.cache.status as ServiceStatus,
+      icon: Database,
+    },
+    {
+      name: "Banner API",
+      status: status.banner_api.status as ServiceStatus,
+      icon: Globe,
+    },
+  ];
+};
+
+// Service Status Component
+const ServiceStatus = ({ service }: { service: Service }) => {
+  const { icon: Icon, color } = getStatusIcon(service.status);
+
+  return (
+    <Flex align="center" justify="between">
+      <Flex align="center" gap="2">
+        <service.icon size={18} />
+        <Text>{service.name}</Text>
+      </Flex>
+      <Flex align="center" gap="2">
+        <Icon color={color} size={16} />
+        <Text size="2">{service.status}</Text>
+      </Flex>
+    </Flex>
+  );
+};
+
+// Timing Row Component
+const TimingRow = ({
+  icon: Icon,
+  name,
+  children,
+}: {
+  icon: React.ComponentType<{ size?: number }>;
+  name: string;
+  children: React.ReactNode;
+}) => (
+  <Flex align="center" justify="between">
+    <Flex align="center" gap="2">
+      <Icon size={13} />
+      <Text size="2" color="gray">
+        {name}
+      </Text>
+    </Flex>
+    {children}
+  </Flex>
+);
+
 function App() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timing, setTiming] = useState<ResponseTiming>({
+    health: null,
+    status: null,
+  });
+  const [lastFetch, setLastFetch] = useState<Date | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true);
-        const [healthData, statusData] = await Promise.all([
-          apiClient.getHealth(),
-          apiClient.getStatus(),
-        ]);
-        setHealth(healthData);
+        const startTime = Date.now();
+        const statusData = await apiClient.getStatus();
+        const endTime = Date.now();
+        const responseTime = endTime - startTime;
+
         setStatus(statusData);
+        setTiming({ health: responseTime, status: responseTime });
+        setLastFetch(new Date());
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch data");
-      } finally {
-        setLoading(false);
+        setLastFetch(new Date());
       }
     };
 
     fetchData();
+    const interval = setInterval(fetchData, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
   }, []);
+
+  const overallHealth = getOverallHealth(status, error);
+  const { color: overallColor } = getStatusIcon(overallHealth);
+  const services = getServices(status);
 
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <h1>Banner Discord Bot Dashboard</h1>
-
-        {loading && <p>Loading...</p>}
-
-        {error && (
-          <div style={{ color: "red", margin: "20px 0" }}>
-            <p>Error: {error}</p>
-          </div>
-        )}
-
-        {health && (
-          <div style={{ margin: "20px 0", textAlign: "left" }}>
-            <h3>Health Status</h3>
-            <p>Status: {health.status}</p>
-            <p>Timestamp: {new Date(health.timestamp).toLocaleString()}</p>
-          </div>
-        )}
-
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        style={{ minHeight: "100vh", padding: "20px" }}
+      >
         {status && (
-          <div style={{ margin: "20px 0", textAlign: "left" }}>
-            <h3>System Status</h3>
-            <p>Overall: {status.status}</p>
-            <p>Bot: {status.bot.status}</p>
-            <p>Cache: {status.cache.status}</p>
-            <p>Banner API: {status.banner_api.status}</p>
-          </div>
-        )}
+          <Card style={CARD_STYLES}>
+            <Flex direction="column" gap="4">
+              {/* Overall Status */}
+              <Flex align="center" justify="between">
+                <Flex align="center" gap="2">
+                  <Activity color={overallColor} size={18} />
+                  <Text size="4">System Status</Text>
+                </Flex>
+              </Flex>
 
-        <div style={{ marginTop: "40px" }}>
-          <a
-            className="App-link"
-            href="https://tanstack.com"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Learn TanStack Router
-          </a>
-        </div>
-      </header>
+              {/* Individual Services */}
+              <Flex direction="column" gap="3" style={{ marginTop: "16px" }}>
+                {services.map((service) => (
+                  <ServiceStatus key={service.name} service={service} />
+                ))}
+              </Flex>
+
+              <Flex direction="column" gap="2" style={BORDER_STYLES}>
+                {timing.health && (
+                  <TimingRow icon={Hourglass} name="Response Time">
+                    <Text size="2">{timing.health}ms</Text>
+                  </TimingRow>
+                )}
+
+                {lastFetch && (
+                  <TimingRow icon={Clock} name="Last Updated">
+                    <Tooltip
+                      content={`as of ${lastFetch.toLocaleTimeString()}`}
+                    >
+                      <abbr
+                        style={{
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                          textDecorationStyle: "dotted",
+                          textDecorationColor: "#CBCED1",
+                          textUnderlineOffset: "6px",
+                        }}
+                      >
+                        <Text size="2">
+                          <TimeAgo date={lastFetch} />
+                        </Text>
+                      </abbr>
+                    </Tooltip>
+                  </TimingRow>
+                )}
+              </Flex>
+            </Flex>
+          </Card>
+        )}
+      </Flex>
     </div>
   );
 }
