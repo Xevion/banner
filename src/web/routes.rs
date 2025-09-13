@@ -2,6 +2,7 @@
 
 use axum::{
     Router,
+    body::Body,
     extract::{Request, State},
     http::{HeaderMap, HeaderValue, StatusCode, Uri},
     response::{Html, IntoResponse, Json, Response},
@@ -9,12 +10,13 @@ use axum::{
 };
 use http::header;
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tower_http::{
+    classify::ServerErrorsFailureClass,
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
-use tracing::info;
+use tracing::{Span, debug, info, warn};
 
 use crate::web::assets::{WebAssets, get_asset_metadata_cached};
 
@@ -70,47 +72,74 @@ pub fn create_router(state: BannerState) -> Router {
         .route("/metrics", get(metrics))
         .with_state(state);
 
-    if cfg!(debug_assertions) {
-        // Development mode: API routes only, frontend served by Vite dev server
-        Router::new()
-            .route("/", get(root))
-            .nest("/api", api_router)
-            .layer(
-                CorsLayer::new()
-                    .allow_origin(Any)
-                    .allow_methods(Any)
-                    .allow_headers(Any),
-            )
-            .layer(TraceLayer::new_for_http())
-    } else {
-        // Production mode: serve embedded assets and handle SPA routing
-        Router::new()
-            .route("/", get(root))
-            .nest("/api", api_router)
-            .fallback(fallback)
-            .layer(TraceLayer::new_for_http())
-    }
-}
+    let mut router = Router::new().nest("/api", api_router);
 
-async fn root() -> Response {
     if cfg!(debug_assertions) {
-        // Development mode: return API info
-        Json(json!({
-            "message": "Banner Discord Bot API",
-            "version": "0.2.1",
-            "mode": "development",
-            "frontend": "http://localhost:3000",
-            "endpoints": {
-                "health": "/api/health",
-                "status": "/api/status",
-                "metrics": "/api/metrics"
-            }
-        }))
-        .into_response()
+        router = router.layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
     } else {
-        // Production mode: serve the SPA index.html
-        handle_spa_fallback_with_headers(Uri::from_static("/"), HeaderMap::new()).await
+        router = router.fallback(fallback);
     }
+
+    router.layer(
+        TraceLayer::new_for_http()
+            .make_span_with(|request: &Request<Body>| {
+                tracing::debug_span!("request", path = request.uri().path())
+            })
+            .on_request(())
+            .on_body_chunk(())
+            .on_eos(())
+            .on_response(
+                |response: &Response<Body>, latency: Duration, _span: &Span| {
+                    let latency_threshold = if cfg!(debug_assertions) {
+                        Duration::from_millis(100)
+                    } else {
+                        Duration::from_millis(1000)
+                    };
+
+                    // Format latency, status, and code
+                    let (latency_str, status, code) = (
+                        format!("{latency:.2?}"),
+                        response.status().as_u16(),
+                        format!(
+                            "{} {}",
+                            response.status().as_u16(),
+                            response.status().canonical_reason().unwrap_or("??")
+                        ),
+                    );
+
+                    // Log in warn if latency is above threshold, otherwise debug
+                    if latency > latency_threshold {
+                        warn!(
+                            latency = latency_str,
+                            status = status,
+                            code = code,
+                            "Response"
+                        );
+                    } else {
+                        debug!(
+                            latency = latency_str,
+                            status = status,
+                            code = code,
+                            "Response"
+                        );
+                    }
+                },
+            )
+            .on_failure(
+                |error: ServerErrorsFailureClass, latency: Duration, _span: &Span| {
+                    warn!(
+                        error = ?error,
+                        latency = format!("{latency:.2?}"),
+                        "Request failed"
+                    );
+                },
+            ),
+    )
 }
 
 /// Handler that extracts request information for caching

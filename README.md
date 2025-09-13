@@ -30,7 +30,7 @@ pnpm install -C web  # Install frontend dependencies
 cargo build  # Build the backend
 
 just dev # Runs auto-reloading dev build
-just dev bot,web # Runs auto-reloading dev build, running only the bot and web services
+just dev --services bot,web # Runs auto-reloading dev build, running only the bot and web services
 just dev-build # Development build with release characteristics (frontend is embedded, non-auto-reloading)
 
 just build # Production build that embeds assets
