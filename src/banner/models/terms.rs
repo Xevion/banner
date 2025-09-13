@@ -193,7 +193,7 @@ impl std::fmt::Display for Term {
 
 impl Season {
     /// Returns the season code as a string
-    fn to_str(&self) -> &'static str {
+    fn to_str(self) -> &'static str {
         match self {
             Season::Fall => "10",
             Season::Spring => "20",

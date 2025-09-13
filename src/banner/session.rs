@@ -203,7 +203,7 @@ impl SessionPool {
     pub async fn acquire(&self, term: Term) -> Result<PooledSession> {
         let term_pool = self
             .sessions
-            .entry(term.clone())
+            .entry(term)
             .or_insert_with(|| Arc::new(TermPool::new()))
             .clone();
 
@@ -309,7 +309,7 @@ impl SessionPool {
             })
             .collect::<HashMap<String, String>>();
 
-        if cookies.get("JSESSIONID").is_none() || cookies.get("SSB_COOKIE").is_none() {
+        if !cookies.contains_key("JSESSIONID") || !cookies.contains_key("SSB_COOKIE") {
             return Err(anyhow::anyhow!("Failed to get cookies"));
         }
 
@@ -386,7 +386,7 @@ impl SessionPool {
             .query(&params)
             .send()
             .await
-            .with_context(|| format!("Failed to get terms"))?;
+            .with_context(|| "Failed to get terms".to_string())?;
 
         let terms: Vec<BannerTerm> = response
             .json()

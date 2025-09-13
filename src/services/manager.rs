@@ -13,6 +13,12 @@ pub struct ServiceManager {
     shutdown_tx: broadcast::Sender<()>,
 }
 
+impl Default for ServiceManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceManager {
     pub fn new() -> Self {
         let (shutdown_tx, _) = broadcast::channel(1);

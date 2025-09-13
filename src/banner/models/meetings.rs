@@ -419,7 +419,7 @@ impl MeetingScheduleInfo {
     pub fn from_meeting_time(meeting_time: &MeetingTime) -> Self {
         let days = MeetingDays::from_meeting_time(meeting_time);
         let time_range = match (&meeting_time.begin_time, &meeting_time.end_time) {
-            (Some(begin), Some(end)) => TimeRange::from_hhmm(&begin, &end),
+            (Some(begin), Some(end)) => TimeRange::from_hhmm(begin, end),
             _ => None,
         };
 

@@ -9,12 +9,16 @@
 //! - Generate ICS files and calendar links
 
 pub mod api;
+pub mod errors;
+pub mod json;
+pub mod middleware;
 pub mod models;
 pub mod query;
 pub mod session;
 pub mod util;
 
 pub use api::*;
+pub use errors::*;
 pub use models::*;
 pub use query::*;
 pub use session::*;
