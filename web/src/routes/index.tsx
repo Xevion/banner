@@ -18,13 +18,9 @@ import TimeAgo from "react-timeago";
 import { ThemeToggle } from "../components/ThemeToggle";
 import "../App.css";
 
-export const Route = createFileRoute("/")({
-  component: App,
-});
-
-// Constants
 const REFRESH_INTERVAL = import.meta.env.DEV ? 3000 : 30000;
 const REQUEST_TIMEOUT = 10000; // 10 seconds
+
 const CARD_STYLES = {
   padding: "24px",
   maxWidth: "400px",
@@ -37,14 +33,12 @@ const BORDER_STYLES = {
   borderTop: "1px solid var(--gray-7)",
 } as const;
 
-// Service icon mapping
 const SERVICE_ICONS: Record<string, typeof Bot> = {
   bot: Bot,
   banner: Globe,
   discord: MessageCircle,
 };
 
-// Types
 interface ResponseTiming {
   health: number | null;
   status: number | null;
@@ -80,7 +74,6 @@ type StatusState =
       lastFetch: Date;
     };
 
-// Helper functions
 const formatNumber = (num: number): string => {
   return num.toLocaleString();
 };
@@ -117,7 +110,6 @@ const getServices = (state: StatusState): Service[] => {
   );
 };
 
-// Status Component
 const StatusDisplay = ({ status }: { status: Status | "Unreachable" }) => {
   const { icon: Icon, color } = getStatusIcon(status);
 
@@ -137,7 +129,6 @@ const StatusDisplay = ({ status }: { status: Status | "Unreachable" }) => {
   );
 };
 
-// Service Status Component
 const ServiceStatus = ({ service }: { service: Service }) => {
   return (
     <Flex align="center" justify="between">
@@ -150,7 +141,6 @@ const ServiceStatus = ({ service }: { service: Service }) => {
   );
 };
 
-// Skeleton Service Component
 const SkeletonService = () => {
   return (
     <Flex align="center" justify="between">
@@ -166,7 +156,6 @@ const SkeletonService = () => {
   );
 };
 
-// Timing Row Component
 const TimingRow = ({
   icon: Icon,
   name,
@@ -190,7 +179,7 @@ const TimingRow = ({
 function App() {
   const [state, setState] = useState<StatusState>({ mode: "loading" });
 
-  // Helper variables for state checking
+  // State helpers
   const isLoading = state.mode === "loading";
   const hasError = state.mode === "error";
   const hasTimeout = state.mode === "timeout";
@@ -428,3 +417,7 @@ function App() {
     </div>
   );
 }
+
+export const Route = createFileRoute("/")({
+  component: App,
+});

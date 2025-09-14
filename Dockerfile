@@ -1,5 +1,6 @@
 # Build arguments
 ARG RUST_VERSION=1.89.0
+ARG RAILWAY_GIT_COMMIT_SHA
 
 # Frontend Build Stage
 FROM node:22-bookworm-slim AS frontend-builder
@@ -8,6 +9,9 @@ FROM node:22-bookworm-slim AS frontend-builder
 RUN npm install -g pnpm
 
 WORKDIR /app
+
+# Copy backend Cargo.toml for build-time version retrieval
+COPY ./Cargo.toml ./
 
 # Copy frontend package files
 COPY ./web/package.json ./web/pnpm-lock.yaml ./
@@ -23,6 +27,9 @@ RUN pnpm run build
 
 # Rust Build Stage
 FROM rust:${RUST_VERSION}-bookworm AS builder
+
+# Set build-time environment variable for Railway Git commit SHA
+ENV RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA}
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
