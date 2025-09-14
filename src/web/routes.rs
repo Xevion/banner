@@ -12,6 +12,7 @@ use http::header;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use tower_http::timeout::TimeoutLayer;
 use tower_http::{
     classify::ServerErrorsFailureClass,
     cors::{Any, CorsLayer},
@@ -86,7 +87,7 @@ pub fn create_router(state: BannerState) -> Router {
         router = router.fallback(fallback);
     }
 
-    router.layer(
+    router.layer((
         TraceLayer::new_for_http()
             .make_span_with(|request: &Request<Body>| {
                 tracing::debug_span!("request", path = request.uri().path())
@@ -129,7 +130,8 @@ pub fn create_router(state: BannerState) -> Router {
                     );
                 },
             ),
-    )
+        TimeoutLayer::new(Duration::from_secs(10)),
+    ))
 }
 
 /// Handler that extracts request information for caching
