@@ -60,4 +60,4 @@ export class BannerApiClient {
 }
 
 // Export a default instance
-export const apiClient = new BannerApiClient();
+export const client = new BannerApiClient();

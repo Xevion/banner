@@ -1,9 +1,10 @@
 .App {
-  background-color: #f8fafc;
   min-height: 100vh;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
     "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text);
 }
 
 @keyframes pulse {
@@ -18,4 +19,17 @@
 
 .animate-pulse {
   animation: pulse 2s ease-in-out infinite;
+}
+
+/* Screen reader only text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

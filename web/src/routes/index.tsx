@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { apiClient, type StatusResponse, type Status } from "../lib/api";
+import { client, type StatusResponse, type Status } from "../lib/api";
 import { Card, Flex, Text, Tooltip, Skeleton } from "@radix-ui/themes";
 import {
   CheckCircle,
@@ -15,6 +15,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import TimeAgo from "react-timeago";
+import { ThemeToggle } from "../components/ThemeToggle";
 import "../App.css";
 
 export const Route = createFileRoute("/")({
@@ -211,7 +212,7 @@ function App() {
 
         // Race between the API call and timeout
         const statusData = await Promise.race([
-          apiClient.getStatus(),
+          client.getStatus(),
           timeoutPromise,
         ]);
 
@@ -262,6 +263,18 @@ function App() {
 
   return (
     <div className="App">
+      {/* Theme Toggle - Fixed position in top right */}
+      <div
+        style={{
+          position: "fixed",
+          top: "20px",
+          right: "20px",
+          zIndex: 1000,
+        }}
+      >
+        <ThemeToggle />
+      </div>
+
       <Flex
         direction="column"
         align="center"
