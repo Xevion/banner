@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
+#[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Course {
     pub id: i32,
@@ -18,6 +19,7 @@ pub struct Course {
     pub last_scraped_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct CourseMetric {
     pub id: i32,
@@ -28,6 +30,7 @@ pub struct CourseMetric {
     pub seats_available: i32,
 }
 
+#[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct CourseAudit {
     pub id: i32,
@@ -59,6 +62,7 @@ pub enum TargetType {
 }
 
 /// Represents a queryable job from the database.
+#[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct ScrapeJob {
     pub id: i32,

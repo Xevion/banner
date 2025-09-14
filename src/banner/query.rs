@@ -32,6 +32,7 @@ pub struct SearchQuery {
     course_number_range: Option<Range>,
 }
 
+#[allow(dead_code)]
 impl SearchQuery {
     /// Creates a new SearchQuery with default values
     pub fn new() -> Self {

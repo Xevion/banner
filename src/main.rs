@@ -229,9 +229,7 @@ async fn main() {
     let app_state = AppState::new(banner_api_arc.clone(), db_pool.clone());
 
     // Create BannerState for web service
-    let banner_state = BannerState {
-        api: banner_api_arc.clone(),
-    };
+    let banner_state = BannerState {};
 
     // Configure the client with your Discord bot token in the environment
     let intents = GatewayIntents::non_privileged();

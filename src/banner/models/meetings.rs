@@ -258,6 +258,7 @@ impl TimeRange {
     }
 
     /// Get duration in minutes
+    #[allow(dead_code)]
     pub fn duration_minutes(&self) -> i64 {
         let start_minutes = self.start.hour() as i64 * 60 + self.start.minute() as i64;
         let end_minutes = self.end.hour() as i64 * 60 + self.end.minute() as i64;
@@ -302,6 +303,7 @@ impl DateRange {
     }
 
     /// Check if a specific date falls within this range
+    #[allow(dead_code)]
     pub fn contains_date(&self, date: NaiveDate) -> bool {
         date >= self.start && date <= self.end
     }

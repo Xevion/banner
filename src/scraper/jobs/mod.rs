@@ -12,7 +12,6 @@ use std::fmt;
 pub enum JobParseError {
     InvalidJson(serde_json::Error),
     UnsupportedTargetType(TargetType),
-    MissingRequiredField(String),
 }
 
 impl fmt::Display for JobParseError {
@@ -21,9 +20,6 @@ impl fmt::Display for JobParseError {
             JobParseError::InvalidJson(e) => write!(f, "Invalid JSON in job payload: {}", e),
             JobParseError::UnsupportedTargetType(t) => {
                 write!(f, "Unsupported target type: {:?}", t)
-            }
-            JobParseError::MissingRequiredField(field) => {
-                write!(f, "Missing required field: {}", field)
             }
         }
     }
@@ -67,6 +63,7 @@ impl std::error::Error for JobError {
 #[async_trait::async_trait]
 pub trait Job: Send + Sync {
     /// The target type this job handles
+    #[allow(dead_code)]
     fn target_type(&self) -> TargetType;
 
     /// Process the job with the given API client and database pool
@@ -99,14 +96,9 @@ impl JobType {
     }
 
     /// Convert to a Job trait object
-    pub fn as_job(self) -> Box<dyn Job> {
+    pub fn boxed(self) -> Box<dyn Job> {
         match self {
             JobType::Subject(job) => Box::new(job),
         }
     }
-}
-
-/// Helper function to create a subject job
-pub fn create_subject_job(subject: String) -> JobType {
-    JobType::Subject(subject::SubjectJob::new(subject))
 }

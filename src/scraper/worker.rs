@@ -135,7 +135,7 @@ impl Worker {
             .map_err(|e| JobError::Unrecoverable(anyhow::anyhow!(e)))?; // Parse errors are unrecoverable
 
         // Get the job implementation
-        let job_impl = job_type.as_job();
+        let job_impl = job_type.boxed();
 
         debug!(
             worker_id = self.id,

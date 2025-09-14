@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::banner::{
-    BannerSession, SessionPool, create_shared_rate_limiter_with_config,
+    BannerSession, SessionPool, create_shared_rate_limiter,
     errors::BannerApiError,
     json::parse_json_with_context,
     middleware::TransparentMiddleware,
@@ -15,7 +15,7 @@ use crate::banner::{
     nonce,
     query::SearchQuery,
     rate_limit_middleware::RateLimitMiddleware,
-    rate_limiter::{RateLimitConfig, SharedRateLimiter, create_shared_rate_limiter},
+    rate_limiter::{RateLimitConfig, SharedRateLimiter},
     util::user_agent,
 };
 use anyhow::{Context, Result, anyhow};
@@ -35,6 +35,7 @@ pub struct BannerApi {
     base_url: String,
 }
 
+#[allow(dead_code)]
 impl BannerApi {
     /// Creates a new Banner API client.
     pub fn new(base_url: String) -> Result<Self> {
@@ -43,7 +44,7 @@ impl BannerApi {
 
     /// Creates a new Banner API client with custom rate limiting configuration.
     pub fn new_with_config(base_url: String, rate_limit_config: RateLimitConfig) -> Result<Self> {
-        let rate_limiter = create_shared_rate_limiter_with_config(rate_limit_config);
+        let rate_limiter = create_shared_rate_limiter(Some(rate_limit_config));
 
         let http = ClientBuilder::new(
             Client::builder()

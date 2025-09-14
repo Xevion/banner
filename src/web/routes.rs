@@ -11,7 +11,7 @@ use axum::{
 use http::header;
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, time::Duration};
 use tower_http::timeout::TimeoutLayer;
 use tower_http::{
     classify::ServerErrorsFailureClass,
@@ -21,8 +21,6 @@ use tower_http::{
 use tracing::{Span, debug, info, warn};
 
 use crate::web::assets::{WebAssets, get_asset_metadata_cached};
-
-use crate::banner::BannerApi;
 
 /// Set appropriate caching headers based on asset type
 fn set_caching_headers(response: &mut Response, path: &str, etag: &str) {
@@ -62,9 +60,7 @@ fn set_caching_headers(response: &mut Response, path: &str, etag: &str) {
 
 /// Shared application state for web server
 #[derive(Clone)]
-pub struct BannerState {
-    pub api: Arc<BannerApi>,
-}
+pub struct BannerState {}
 
 /// Creates the web server router
 pub fn create_router(state: BannerState) -> Router {

@@ -61,7 +61,6 @@ pub struct BannerRateLimiter {
     search_limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
     metadata_limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
     reset_limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
-    config: RateLimitConfig,
 }
 
 impl BannerRateLimiter {
@@ -88,7 +87,6 @@ impl BannerRateLimiter {
             search_limiter: RateLimiter::direct(search_quota),
             metadata_limiter: RateLimiter::direct(metadata_quota),
             reset_limiter: RateLimiter::direct(reset_quota),
-            config,
         }
     }
 
@@ -108,32 +106,6 @@ impl BannerRateLimiter {
 
         trace!(request_type = ?request_type, "Rate limit permission granted");
     }
-
-    /// Checks if a request of the given type would be allowed immediately
-    pub fn check_permission(&self, request_type: RequestType) -> bool {
-        let limiter = match request_type {
-            RequestType::Session => &self.session_limiter,
-            RequestType::Search => &self.search_limiter,
-            RequestType::Metadata => &self.metadata_limiter,
-            RequestType::Reset => &self.reset_limiter,
-        };
-
-        limiter.check().is_ok()
-    }
-
-    /// Gets the current configuration
-    pub fn config(&self) -> &RateLimitConfig {
-        &self.config
-    }
-
-    /// Updates the rate limit configuration
-    pub fn update_config(&mut self, config: RateLimitConfig) {
-        self.config = config;
-        // Note: In a production system, you'd want to recreate the limiters
-        // with the new configuration, but for simplicity we'll just update
-        // the config field here.
-        warn!("Rate limit configuration updated - restart required for full effect");
-    }
 }
 
 impl Default for BannerRateLimiter {
@@ -145,14 +117,9 @@ impl Default for BannerRateLimiter {
 /// A shared rate limiter instance
 pub type SharedRateLimiter = Arc<BannerRateLimiter>;
 
-/// Creates a new shared rate limiter with default configuration
-pub fn create_shared_rate_limiter() -> SharedRateLimiter {
-    Arc::new(BannerRateLimiter::default())
-}
-
 /// Creates a new shared rate limiter with custom configuration
-pub fn create_shared_rate_limiter_with_config(config: RateLimitConfig) -> SharedRateLimiter {
-    Arc::new(BannerRateLimiter::new(config))
+pub fn create_shared_rate_limiter(config: Option<RateLimitConfig>) -> SharedRateLimiter {
+    Arc::new(BannerRateLimiter::new(config.unwrap_or_default()))
 }
 
 /// Conversion from config module's RateLimitingConfig to this module's RateLimitConfig

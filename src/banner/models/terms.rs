@@ -147,11 +147,6 @@ impl Term {
             },
         }
     }
-
-    /// Returns a long string representation of the term (e.g., "Fall 2025")
-    pub fn to_long_string(&self) -> String {
-        format!("{} {}", self.season, self.year)
-    }
 }
 
 impl TermPoint {
