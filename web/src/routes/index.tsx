@@ -81,6 +81,10 @@ type StatusState =
     };
 
 // Helper functions
+const formatNumber = (num: number): string => {
+  return num.toLocaleString();
+};
+
 const getStatusIcon = (status: Status | "Unreachable"): StatusIcon => {
   const statusMap: Record<Status | "Unreachable", StatusIcon> = {
     Active: { icon: CheckCircle, color: "green" },
@@ -323,7 +327,7 @@ function App() {
                 </TimingRow>
               ) : shouldShowTiming ? (
                 <TimingRow icon={Hourglass} name="Response Time">
-                  <Text size="2">{state.timing.health}ms</Text>
+                  <Text size="2">{formatNumber(state.timing.health!)}ms</Text>
                 </TimingRow>
               ) : null}
 
