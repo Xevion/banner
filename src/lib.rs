@@ -1,9 +1,14 @@
+pub mod app;
 pub mod banner;
 pub mod bot;
+pub mod cli;
 pub mod config;
 pub mod data;
 pub mod error;
+pub mod formatter;
+pub mod logging;
 pub mod scraper;
 pub mod services;
+pub mod signals;
 pub mod state;
 pub mod web;
