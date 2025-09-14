@@ -12,6 +12,7 @@ use figment::{Figment, providers::Env};
 use sqlx::postgres::PgPoolOptions;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, info};
 
 /// Main application struct containing all necessary components
@@ -39,18 +40,30 @@ impl App {
             .extract()
             .expect("Failed to load config");
 
+        // Check if the database URL is via private networking
+        let is_private = config.database_url.contains("railway.internal");
+        let slow_threshold = if is_private {
+            Duration::from_millis(200)
+        } else {
+            Duration::from_millis(500)
+        };
+
         // Create database connection pool
         let db_pool = PgPoolOptions::new()
-            .max_connections(10)
+            .min_connections(0)
+            .max_connections(4)
+            .acquire_slow_threshold(slow_threshold)
+            .acquire_timeout(Duration::from_secs(4))
+            .idle_timeout(Duration::from_secs(60 * 2))
+            .max_lifetime(Duration::from_secs(60 * 30))
             .connect(&config.database_url)
             .await
             .expect("Failed to create database pool");
 
         info!(
-            port = config.port,
-            shutdown_timeout = format!("{:.2?}", config.shutdown_timeout),
-            banner_base_url = config.banner_base_url,
-            "configuration loaded"
+            is_private = is_private,
+            slow_threshold = format!("{:.2?}", slow_threshold),
+            "database pool established"
         );
 
         // Create BannerApi and AppState
@@ -77,19 +90,16 @@ impl App {
     }
 
     /// Setup and register services based on enabled service list
-    pub fn setup_services(
-        &mut self,
-        enabled_services: &[ServiceName],
-    ) -> Result<(), anyhow::Error> {
+    pub fn setup_services(&mut self, services: &[ServiceName]) -> Result<(), anyhow::Error> {
         // Register enabled services with the manager
-        if enabled_services.contains(&ServiceName::Web) {
+        if services.contains(&ServiceName::Web) {
             let web_service =
                 Box::new(WebService::new(self.config.port, self.banner_state.clone()));
             self.service_manager
                 .register_service(ServiceName::Web.as_str(), web_service);
         }
 
-        if enabled_services.contains(&ServiceName::Scraper) {
+        if services.contains(&ServiceName::Scraper) {
             let scraper_service = Box::new(ScraperService::new(
                 self.db_pool.clone(),
                 self.banner_api.clone(),
@@ -98,12 +108,12 @@ impl App {
                 .register_service(ServiceName::Scraper.as_str(), scraper_service);
         }
 
-        if enabled_services.contains(&ServiceName::Bot) {
+        if services.contains(&ServiceName::Bot) {
             // Bot service will be set up separately in run() method since it's async
         }
 
         // Check if any services are enabled
-        if !self.service_manager.has_services() && !enabled_services.contains(&ServiceName::Bot) {
+        if !self.service_manager.has_services() && !services.contains(&ServiceName::Bot) {
             error!("No services enabled. Cannot start application.");
             return Err(anyhow::anyhow!("No services enabled"));
         }
