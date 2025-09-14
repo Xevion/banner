@@ -34,7 +34,7 @@ const CARD_STYLES = {
 const BORDER_STYLES = {
   marginTop: "16px",
   paddingTop: "16px",
-  borderTop: "1px solid #e2e8f0",
+  borderTop: "1px solid var(--gray-7)",
 } as const;
 
 // Service icon mapping
@@ -126,7 +126,7 @@ const StatusDisplay = ({ status }: { status: Status | "Unreachable" }) => {
       <Text
         size="2"
         style={{
-          color: status === "Disabled" ? "#8B949E" : undefined,
+          color: status === "Disabled" ? "var(--gray-11)" : undefined,
           opacity: status === "Disabled" ? 0.7 : undefined,
         }}
       >
@@ -143,7 +143,7 @@ const ServiceStatus = ({ service }: { service: Service }) => {
     <Flex align="center" justify="between">
       <Flex align="center" gap="2">
         <service.icon size={18} />
-        <Text>{service.name}</Text>
+        <Text style={{ color: "var(--gray-11)" }}>{service.name}</Text>
       </Flex>
       <StatusDisplay status={service.status} />
     </Flex>
@@ -267,7 +267,6 @@ function App() {
 
   return (
     <div className="App">
-      {/* Theme Toggle - Fixed position in top right */}
       <div
         style={{
           position: "fixed",
@@ -299,7 +298,9 @@ function App() {
                     transition: "opacity 2s ease-in-out, color 2s ease-in-out",
                   }}
                 />
-                <Text size="4">System Status</Text>
+                <Text size="4" style={{ color: "var(--gray-12)" }}>
+                  System Status
+                </Text>
               </Flex>
               {isLoading ? (
                 <Skeleton height="20px" width="80px" />
@@ -327,7 +328,9 @@ function App() {
                 </TimingRow>
               ) : shouldShowTiming ? (
                 <TimingRow icon={Hourglass} name="Response Time">
-                  <Text size="2">{formatNumber(state.timing.health!)}ms</Text>
+                  <Text size="2" style={{ color: "var(--gray-11)" }}>
+                    {formatNumber(state.timing.health!)}ms
+                  </Text>
                 </TimingRow>
               ) : null}
 
@@ -350,11 +353,11 @@ function App() {
                           cursor: "pointer",
                           textDecoration: "underline",
                           textDecorationStyle: "dotted",
-                          textDecorationColor: "#CBCED1",
+                          textDecorationColor: "var(--gray-6)",
                           textUnderlineOffset: "6px",
                         }}
                       >
-                        <Text size="2">
+                        <Text size="2" style={{ color: "var(--gray-11)" }}>
                           <TimeAgo date={state.lastFetch} />
                         </Text>
                       </abbr>
@@ -381,7 +384,7 @@ function App() {
             <Text
               size="1"
               style={{
-                color: "#8B949E",
+                color: "var(--gray-11)",
               }}
             >
               v{__APP_VERSION__}
@@ -392,7 +395,7 @@ function App() {
               style={{
                 width: "1px",
                 height: "12px",
-                backgroundColor: "#8B949E",
+                backgroundColor: "var(--gray-10)",
                 opacity: 0.3,
               }}
             />
@@ -400,7 +403,7 @@ function App() {
           <Text
             size="1"
             style={{
-              color: "#8B949E",
+              color: "var(--gray-11)",
               textDecoration: "none",
             }}
           >
