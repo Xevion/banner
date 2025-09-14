@@ -38,8 +38,10 @@ WORKDIR /usr/src/banner
 # Copy dependency files for better layer caching
 COPY ./Cargo.toml ./Cargo.lock* ./
 
-# Copy .git directory for build.rs to access Git information
-COPY ./.git ./.git
+# Copy .git directory for build.rs to access Git information (if available)
+# This will copy .git (and .gitignore) if it exists, but won't fail if it doesn't
+# While normally a COPY requires at least one file, .gitignore should still be available, so this wildcard should always work
+COPY ./.git* ./
 
 # Copy build.rs early so it can run during the first build
 COPY ./build.rs ./
