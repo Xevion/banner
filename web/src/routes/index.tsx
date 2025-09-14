@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { apiClient, type StatusResponse, type Status } from "../lib/api";
-import { Card, Flex, Text, Tooltip } from "@radix-ui/themes";
+import { Card, Flex, Text, Tooltip, Skeleton } from "@radix-ui/themes";
 import {
   CheckCircle,
   XCircle,
@@ -12,6 +12,7 @@ import {
   Activity,
   MessageCircle,
   Circle,
+  WifiOff,
 } from "lucide-react";
 import TimeAgo from "react-timeago";
 import "../App.css";
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/")({
 
 // Constants
 const REFRESH_INTERVAL = import.meta.env.DEV ? 3000 : 30000;
+const REQUEST_TIMEOUT = 10000; // 10 seconds
 const CARD_STYLES = {
   padding: "24px",
   maxWidth: "400px",
@@ -58,41 +60,60 @@ interface Service {
   icon: typeof Bot;
 }
 
+type StatusState =
+  | {
+      mode: "loading";
+    }
+  | {
+      mode: "response";
+      timing: ResponseTiming;
+      lastFetch: Date;
+      status: StatusResponse;
+    }
+  | {
+      mode: "error";
+      lastFetch: Date;
+    }
+  | {
+      mode: "timeout";
+      lastFetch: Date;
+    };
+
 // Helper functions
-const getStatusIcon = (status: Status): StatusIcon => {
-  const statusMap: Record<Status, StatusIcon> = {
+const getStatusIcon = (status: Status | "Unreachable"): StatusIcon => {
+  const statusMap: Record<Status | "Unreachable", StatusIcon> = {
     Active: { icon: CheckCircle, color: "green" },
     Connected: { icon: CheckCircle, color: "green" },
     Healthy: { icon: CheckCircle, color: "green" },
     Disabled: { icon: Circle, color: "gray" },
     Error: { icon: XCircle, color: "red" },
+    Unreachable: { icon: WifiOff, color: "red" },
   };
 
   return statusMap[status];
 };
 
-const getOverallHealth = (
-  status: StatusResponse | null,
-  error: string | null
-): Status => {
-  if (error) return "Error";
-  if (!status) return "Error";
-
-  return status.status;
+const getOverallHealth = (state: StatusState): Status | "Unreachable" => {
+  if (state.mode === "timeout") return "Unreachable";
+  if (state.mode === "error") return "Error";
+  if (state.mode === "response") return state.status.status;
+  return "Error";
 };
 
-const getServices = (status: StatusResponse | null): Service[] => {
-  if (!status) return [];
+const getServices = (state: StatusState): Service[] => {
+  if (state.mode !== "response") return [];
 
-  return Object.entries(status.services).map(([serviceId, serviceInfo]) => ({
-    name: serviceInfo.name,
-    status: serviceInfo.status,
-    icon: SERVICE_ICONS[serviceId] || SERVICE_ICONS.default,
-  }));
+  return Object.entries(state.status.services).map(
+    ([serviceId, serviceInfo]) => ({
+      name: serviceInfo.name,
+      status: serviceInfo.status,
+      icon: SERVICE_ICONS[serviceId] || SERVICE_ICONS.default,
+    })
+  );
 };
 
 // Status Component
-const StatusDisplay = ({ status }: { status: Status }) => {
+const StatusDisplay = ({ status }: { status: Status | "Unreachable" }) => {
   const { icon: Icon, color } = getStatusIcon(status);
 
   return (
@@ -124,6 +145,22 @@ const ServiceStatus = ({ service }: { service: Service }) => {
   );
 };
 
+// Skeleton Service Component
+const SkeletonService = () => {
+  return (
+    <Flex align="center" justify="between">
+      <Flex align="center" gap="2">
+        <Skeleton height="24px" width="18px" />
+        <Skeleton height="24px" width="60px" />
+      </Flex>
+      <Flex align="center" gap="2">
+        <Skeleton height="20px" width="50px" />
+        <Skeleton height="20px" width="16px" />
+      </Flex>
+    </Flex>
+  );
+};
+
 // Timing Row Component
 const TimingRow = ({
   icon: Icon,
@@ -146,40 +183,82 @@ const TimingRow = ({
 );
 
 function App() {
-  const [status, setStatus] = useState<StatusResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [timing, setTiming] = useState<ResponseTiming>({
-    health: null,
-    status: null,
-  });
-  const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [state, setState] = useState<StatusState>({ mode: "loading" });
+
+  // Helper variables for state checking
+  const isLoading = state.mode === "loading";
+  const hasError = state.mode === "error";
+  const hasTimeout = state.mode === "timeout";
+  const hasResponse = state.mode === "response";
+  const shouldShowSkeleton = isLoading || hasError;
+  const shouldShowTiming = hasResponse && state.timing.health !== null;
+  const shouldShowLastFetch = hasResponse || hasError || hasTimeout;
 
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
     const fetchData = async () => {
       try {
         const startTime = Date.now();
-        const statusData = await apiClient.getStatus();
+
+        // Create a timeout promise
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(
+            () => reject(new Error("Request timeout")),
+            REQUEST_TIMEOUT
+          );
+        });
+
+        // Race between the API call and timeout
+        const statusData = await Promise.race([
+          apiClient.getStatus(),
+          timeoutPromise,
+        ]);
+
         const endTime = Date.now();
         const responseTime = endTime - startTime;
 
-        setStatus(statusData);
-        setTiming({ health: responseTime, status: responseTime });
-        setLastFetch(new Date());
-        setError(null);
+        setState({
+          mode: "response",
+          status: statusData,
+          timing: { health: responseTime, status: responseTime },
+          lastFetch: new Date(),
+        });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch data");
-        setLastFetch(new Date());
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to fetch data";
+
+        // Check if it's a timeout error
+        if (errorMessage === "Request timeout") {
+          setState({
+            mode: "timeout",
+            lastFetch: new Date(),
+          });
+        } else {
+          setState({
+            mode: "error",
+            lastFetch: new Date(),
+          });
+        }
       }
+
+      // Schedule the next request after the current one completes
+      timeoutId = setTimeout(fetchData, REFRESH_INTERVAL);
     };
 
+    // Start the first request immediately
     fetchData();
-    const interval = setInterval(fetchData, REFRESH_INTERVAL);
-    return () => clearInterval(interval);
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, []);
 
-  const overallHealth = getOverallHealth(status, error);
+  const overallHealth = getOverallHealth(state);
   const { color: overallColor } = getStatusIcon(overallHealth);
-  const services = getServices(status);
+  const services = getServices(state);
 
   return (
     <div className="App">
@@ -189,36 +268,65 @@ function App() {
         justify="center"
         style={{ minHeight: "100vh", padding: "20px" }}
       >
-        {status && (
-          <Card style={CARD_STYLES}>
-            <Flex direction="column" gap="4">
-              {/* Overall Status */}
-              <Flex align="center" justify="between">
-                <Flex align="center" gap="2">
-                  <Activity color={overallColor} size={18} />
-                  <Text size="4">System Status</Text>
-                </Flex>
+        <Card style={CARD_STYLES}>
+          <Flex direction="column" gap="4">
+            {/* Overall Status */}
+            <Flex align="center" justify="between">
+              <Flex align="center" gap="2">
+                <Activity
+                  color={isLoading ? undefined : overallColor}
+                  size={18}
+                  className={isLoading ? "animate-pulse" : ""}
+                  style={{
+                    opacity: isLoading ? 0.3 : 1,
+                    transition: "opacity 2s ease-in-out, color 2s ease-in-out",
+                  }}
+                />
+                <Text size="4">System Status</Text>
+              </Flex>
+              {isLoading ? (
+                <Skeleton height="20px" width="80px" />
+              ) : (
                 <StatusDisplay status={overallHealth} />
-              </Flex>
+              )}
+            </Flex>
 
-              {/* Individual Services */}
-              <Flex direction="column" gap="3" style={{ marginTop: "16px" }}>
-                {services.map((service) => (
-                  <ServiceStatus key={service.name} service={service} />
-                ))}
-              </Flex>
+            {/* Individual Services */}
+            <Flex direction="column" gap="3" style={{ marginTop: "16px" }}>
+              {shouldShowSkeleton
+                ? // Show skeleton for 3 services during initial loading only
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <SkeletonService key={index} />
+                  ))
+                : services.map((service) => (
+                    <ServiceStatus key={service.name} service={service} />
+                  ))}
+            </Flex>
 
-              <Flex direction="column" gap="2" style={BORDER_STYLES}>
-                {timing.health && (
-                  <TimingRow icon={Hourglass} name="Response Time">
-                    <Text size="2">{timing.health}ms</Text>
-                  </TimingRow>
-                )}
+            <Flex direction="column" gap="2" style={BORDER_STYLES}>
+              {isLoading ? (
+                <TimingRow icon={Hourglass} name="Response Time">
+                  <Skeleton height="18px" width="50px" />
+                </TimingRow>
+              ) : shouldShowTiming ? (
+                <TimingRow icon={Hourglass} name="Response Time">
+                  <Text size="2">{state.timing.health}ms</Text>
+                </TimingRow>
+              ) : null}
 
-                {lastFetch && (
-                  <TimingRow icon={Clock} name="Last Updated">
+              {shouldShowLastFetch ? (
+                <TimingRow icon={Clock} name="Last Updated">
+                  {isLoading ? (
+                    <Text
+                      size="2"
+                      style={{ paddingBottom: "2px" }}
+                      color="gray"
+                    >
+                      Loading...
+                    </Text>
+                  ) : (
                     <Tooltip
-                      content={`as of ${lastFetch.toLocaleTimeString()}`}
+                      content={`as of ${state.lastFetch.toLocaleTimeString()}`}
                     >
                       <abbr
                         style={{
@@ -230,66 +338,72 @@ function App() {
                         }}
                       >
                         <Text size="2">
-                          <TimeAgo date={lastFetch} />
+                          <TimeAgo date={state.lastFetch} />
                         </Text>
                       </abbr>
                     </Tooltip>
-                  </TimingRow>
-                )}
-              </Flex>
+                  )}
+                </TimingRow>
+              ) : isLoading ? (
+                <TimingRow icon={Clock} name="Last Updated">
+                  <Text size="2" color="gray">
+                    Loading...
+                  </Text>
+                </TimingRow>
+              ) : null}
             </Flex>
-          </Card>
-        )}
-        {(status?.commit || status?.version) && (
-          <Flex
-            justify="center"
-            style={{ marginTop: "12px" }}
-            gap="2"
-            align="center"
-          >
-            {status?.version && (
-              <Text
-                size="1"
-                style={{
-                  color: "#8B949E",
-                }}
-              >
-                v{status.version}
-              </Text>
-            )}
-            {status?.version && status?.commit && (
-              <div
-                style={{
-                  width: "1px",
-                  height: "12px",
-                  backgroundColor: "#8B949E",
-                  opacity: 0.3,
-                }}
-              />
-            )}
-            {status?.commit && (
-              <Text
-                size="1"
-                style={{
-                  color: "#8B949E",
-                  textDecoration: "none",
-                }}
-              >
-                <a
-                  href={`https://github.com/Xevion/banner/commit/${status.commit}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    color: "inherit",
-                    textDecoration: "none",
-                  }}
-                >
-                  GitHub
-                </a>
-              </Text>
-            )}
           </Flex>
-        )}
+        </Card>
+        <Flex
+          justify="center"
+          style={{ marginTop: "12px" }}
+          gap="2"
+          align="center"
+        >
+          {__APP_VERSION__ && (
+            <Text
+              size="1"
+              style={{
+                color: "#8B949E",
+              }}
+            >
+              v{__APP_VERSION__}
+            </Text>
+          )}
+          {__APP_VERSION__ && (
+            <div
+              style={{
+                width: "1px",
+                height: "12px",
+                backgroundColor: "#8B949E",
+                opacity: 0.3,
+              }}
+            />
+          )}
+          <Text
+            size="1"
+            style={{
+              color: "#8B949E",
+              textDecoration: "none",
+            }}
+          >
+            <a
+              href={
+                hasResponse && state.status.commit
+                  ? `https://github.com/Xevion/banner/commit/${state.status.commit}`
+                  : "https://github.com/Xevion/banner"
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: "inherit",
+                textDecoration: "none",
+              }}
+            >
+              GitHub
+            </a>
+          </Text>
+        </Flex>
       </Flex>
     </div>
   );
