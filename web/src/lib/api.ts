@@ -6,26 +6,18 @@ export interface HealthResponse {
   timestamp: string;
 }
 
+export type Status = "Disabled" | "Connected" | "Active" | "Healthy" | "Error";
+
+export interface ServiceInfo {
+  name: string;
+  status: Status;
+}
+
 export interface StatusResponse {
-  status: string;
+  status: Status;
   version: string;
-  bot: {
-    status: string;
-    uptime: string;
-  };
-  cache: {
-    status: string;
-    courses: string;
-    subjects: string;
-  };
-  banner_api: {
-    status: string;
-  };
-  git: {
-    commit: string;
-    short: string;
-  };
-  timestamp: string;
+  commit: string;
+  services: Record<string, ServiceInfo>;
 }
 
 export interface MetricsResponse {

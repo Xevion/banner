@@ -9,8 +9,9 @@ use axum::{
     routing::get,
 };
 use http::header;
+use serde::Serialize;
 use serde_json::{Value, json};
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tower_http::{
     classify::ServerErrorsFailureClass,
     cors::{Any, CorsLayer},
@@ -211,30 +212,78 @@ async fn health() -> Json<Value> {
     }))
 }
 
+#[derive(Serialize)]
+enum Status {
+    Disabled,
+    Connected,
+    Active,
+    Healthy,
+    Error,
+}
+
+#[derive(Serialize)]
+struct ServiceInfo {
+    name: String,
+    status: Status,
+}
+
+#[derive(Serialize)]
+struct StatusResponse {
+    status: Status,
+    version: String,
+    commit: String,
+    services: BTreeMap<String, ServiceInfo>,
+}
+
 /// Status endpoint showing bot and system status
-async fn status(State(_state): State<BannerState>) -> Json<Value> {
-    // For now, return basic status without accessing private fields
-    Json(json!({
-        "status": "operational",
-        "version": env!("CARGO_PKG_VERSION"),
-        "bot": {
-            "status": "running",
-            "uptime": "TODO: implement uptime tracking"
+async fn status(State(_state): State<BannerState>) -> Json<StatusResponse> {
+    let mut services = BTreeMap::new();
+
+    // Bot service status - hardcoded as disabled for now
+    services.insert(
+        "bot".to_string(),
+        ServiceInfo {
+            name: "Bot".to_string(),
+            status: Status::Disabled,
         },
-        "cache": {
-            "status": "connected",
-            "courses": "TODO: implement course counting",
-            "subjects": "TODO: implement subject counting"
+    );
+
+    // Banner API status - always connected for now
+    services.insert(
+        "banner".to_string(),
+        ServiceInfo {
+            name: "Banner".to_string(),
+            status: Status::Connected,
         },
-        "banner_api": {
-            "status": "connected"
+    );
+
+    // Discord status - hardcoded as disabled for now
+    services.insert(
+        "discord".to_string(),
+        ServiceInfo {
+            name: "Discord".to_string(),
+            status: Status::Disabled,
         },
-        "git": {
-            "commit": env!("GIT_COMMIT_HASH"),
-            "short": env!("GIT_COMMIT_SHORT")
-        },
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    }))
+    );
+
+    let overall_status = if services.values().any(|s| matches!(s.status, Status::Error)) {
+        Status::Error
+    } else if services
+        .values()
+        .all(|s| matches!(s.status, Status::Active | Status::Connected))
+    {
+        Status::Active
+    } else {
+        // If we have any Disabled services but no errors, show as Healthy
+        Status::Healthy
+    };
+
+    Json(StatusResponse {
+        status: overall_status,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        commit: env!("GIT_COMMIT_HASH").to_string(),
+        services,
+    })
 }
 
 /// Metrics endpoint for monitoring

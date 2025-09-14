@@ -1,17 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { apiClient, type StatusResponse } from "../lib/api";
+import { apiClient, type StatusResponse, type Status } from "../lib/api";
 import { Card, Flex, Text, Tooltip } from "@radix-ui/themes";
 import {
   CheckCircle,
-  AlertCircle,
   XCircle,
   Clock,
   Bot,
-  Database,
   Globe,
   Hourglass,
   Activity,
+  MessageCircle,
+  Circle,
 } from "lucide-react";
 import TimeAgo from "react-timeago";
 import "../App.css";
@@ -34,10 +34,14 @@ const BORDER_STYLES = {
   borderTop: "1px solid #e2e8f0",
 } as const;
 
-// Types
-type HealthStatus = "healthy" | "warning" | "error" | "unknown";
-type ServiceStatus = "running" | "connected" | "disconnected" | "error";
+// Service icon mapping
+const SERVICE_ICONS: Record<string, typeof Bot> = {
+  bot: Bot,
+  banner: Globe,
+  discord: MessageCircle,
+};
 
+// Types
 interface ResponseTiming {
   health: number | null;
   status: number | null;
@@ -50,71 +54,72 @@ interface StatusIcon {
 
 interface Service {
   name: string;
-  status: ServiceStatus;
+  status: Status;
   icon: typeof Bot;
 }
 
 // Helper functions
-const getStatusIcon = (status: string): StatusIcon => {
-  const statusMap: Record<string, StatusIcon> = {
-    healthy: { icon: CheckCircle, color: "green" },
-    running: { icon: CheckCircle, color: "green" },
-    connected: { icon: CheckCircle, color: "green" },
-    warning: { icon: AlertCircle, color: "orange" },
-    error: { icon: XCircle, color: "red" },
-    disconnected: { icon: XCircle, color: "red" },
+const getStatusIcon = (status: Status): StatusIcon => {
+  const statusMap: Record<Status, StatusIcon> = {
+    Active: { icon: CheckCircle, color: "green" },
+    Connected: { icon: CheckCircle, color: "green" },
+    Healthy: { icon: CheckCircle, color: "green" },
+    Disabled: { icon: Circle, color: "gray" },
+    Error: { icon: XCircle, color: "red" },
   };
 
-  return statusMap[status] || { icon: XCircle, color: "red" };
+  return statusMap[status];
 };
 
 const getOverallHealth = (
   status: StatusResponse | null,
   error: string | null
-): HealthStatus => {
-  if (error) return "error";
-  if (!status) return "unknown";
+): Status => {
+  if (error) return "Error";
+  if (!status) return "Error";
 
-  const allHealthy =
-    status.bot.status === "running" &&
-    status.cache.status === "connected" &&
-    status.banner_api.status === "connected";
-
-  return allHealthy ? "healthy" : "warning";
+  return status.status;
 };
 
 const getServices = (status: StatusResponse | null): Service[] => {
   if (!status) return [];
 
-  return [
-    { name: "Bot", status: status.bot.status as ServiceStatus, icon: Bot },
-    {
-      name: "Cache",
-      status: status.cache.status as ServiceStatus,
-      icon: Database,
-    },
-    {
-      name: "Banner API",
-      status: status.banner_api.status as ServiceStatus,
-      icon: Globe,
-    },
-  ];
+  return Object.entries(status.services).map(([serviceId, serviceInfo]) => ({
+    name: serviceInfo.name,
+    status: serviceInfo.status,
+    icon: SERVICE_ICONS[serviceId] || SERVICE_ICONS.default,
+  }));
+};
+
+// Status Component
+const StatusDisplay = ({ status }: { status: Status }) => {
+  const { icon: Icon, color } = getStatusIcon(status);
+
+  return (
+    <Flex align="center" gap="2">
+      <Text
+        size="2"
+        style={{
+          color: status === "Disabled" ? "#8B949E" : undefined,
+          opacity: status === "Disabled" ? 0.7 : undefined,
+        }}
+      >
+        {status}
+      </Text>
+      <Icon color={color} size={16} />
+    </Flex>
+  );
 };
 
 // Service Status Component
 const ServiceStatus = ({ service }: { service: Service }) => {
-  const { icon: Icon, color } = getStatusIcon(service.status);
-
   return (
     <Flex align="center" justify="between">
       <Flex align="center" gap="2">
         <service.icon size={18} />
         <Text>{service.name}</Text>
       </Flex>
-      <Flex align="center" gap="2">
-        <Icon color={color} size={16} />
-        <Text size="2">{service.status}</Text>
-      </Flex>
+      <StatusDisplay status={service.status} />
     </Flex>
   );
 };
@@ -193,6 +198,7 @@ function App() {
                   <Activity color={overallColor} size={18} />
                   <Text size="4">System Status</Text>
                 </Flex>
+                <StatusDisplay status={overallHealth} />
               </Flex>
 
               {/* Individual Services */}
@@ -234,7 +240,7 @@ function App() {
             </Flex>
           </Card>
         )}
-        {(status?.git?.commit || status?.version) && (
+        {(status?.commit || status?.version) && (
           <Flex
             justify="center"
             style={{ marginTop: "12px" }}
@@ -251,7 +257,7 @@ function App() {
                 v{status.version}
               </Text>
             )}
-            {status?.version && status?.git?.commit && (
+            {status?.version && status?.commit && (
               <div
                 style={{
                   width: "1px",
@@ -261,7 +267,7 @@ function App() {
                 }}
               />
             )}
-            {status?.git?.commit && (
+            {status?.commit && (
               <Text
                 size="1"
                 style={{
@@ -270,7 +276,7 @@ function App() {
                 }}
               >
                 <a
-                  href={`https://github.com/Xevion/banner/commit/${status.git.commit}`}
+                  href={`https://github.com/Xevion/banner/commit/${status.commit}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
