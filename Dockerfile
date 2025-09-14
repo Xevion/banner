@@ -28,6 +28,7 @@ FROM rust:${RUST_VERSION}-bookworm AS builder
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src
@@ -37,12 +38,18 @@ WORKDIR /usr/src/banner
 # Copy dependency files for better layer caching
 COPY ./Cargo.toml ./Cargo.lock* ./
 
+# Copy .git directory for build.rs to access Git information
+COPY ./.git ./.git
+
+# Copy build.rs early so it can run during the first build
+COPY ./build.rs ./
+
 # Build empty app with downloaded dependencies to produce a stable image layer for next build
 RUN cargo build --release
 
 # Copy source code
 RUN rm src/*.rs
-COPY ./src ./src
+COPY ./src ./src/
 
 # Copy built frontend assets
 COPY --from=frontend-builder /app/dist ./web/dist
