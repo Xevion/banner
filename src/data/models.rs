@@ -72,4 +72,8 @@ pub struct ScrapeJob {
     pub execute_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub locked_at: Option<DateTime<Utc>>,
+    /// Number of retry attempts for this job (non-negative, enforced by CHECK constraint)
+    pub retry_count: i32,
+    /// Maximum number of retry attempts allowed (non-negative, enforced by CHECK constraint)
+    pub max_retries: i32,
 }

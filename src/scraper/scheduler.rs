@@ -9,7 +9,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, warn};
 
 /// Periodically analyzes data and enqueues prioritized scrape jobs.
 pub struct Scheduler {
@@ -99,6 +99,7 @@ impl Scheduler {
     /// 3. Create jobs only for subjects that don't have pending jobs
     ///
     /// This is a static method (not &self) to allow it to be called from spawned tasks.
+    #[tracing::instrument(skip_all, fields(term))]
     async fn schedule_jobs_impl(db_pool: &PgPool, banner_api: &BannerApi) -> Result<()> {
         // For now, we will implement a simple baseline scheduling strategy:
         // 1. Get a list of all subjects from the Banner API.
@@ -106,6 +107,7 @@ impl Scheduler {
         // 3. Create new jobs only for subjects that don't have existing jobs.
         let term = Term::get_current().inner().to_string();
 
+        tracing::Span::current().record("term", term.as_str());
         debug!(term = term, "Enqueuing subject jobs");
 
         let subjects = banner_api.get_subjects("", &term, 1, 500).await?;
@@ -137,6 +139,7 @@ impl Scheduler {
             .collect();
 
         // Filter out subjects that already have jobs and prepare new jobs
+        let mut skipped_count = 0;
         let new_jobs: Vec<_> = subjects
             .into_iter()
             .filter_map(|subject| {
@@ -145,13 +148,17 @@ impl Scheduler {
                 let payload_str = payload.to_string();
 
                 if existing_payloads.contains(&payload_str) {
-                    trace!(subject = subject.code, "Job already exists, skipping");
+                    skipped_count += 1;
                     None
                 } else {
                     Some((payload, subject.code))
                 }
             })
             .collect();
+
+        if skipped_count > 0 {
+            debug!(count = skipped_count, "Skipped subjects with existing jobs");
+        }
 
         // Insert all new jobs in a single batch
         if !new_jobs.is_empty() {

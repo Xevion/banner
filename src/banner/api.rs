@@ -152,6 +152,13 @@ impl BannerApi {
     }
 
     /// Performs a course search and handles common response processing.
+    #[tracing::instrument(
+        skip(self, query),
+        fields(
+            term = %term,
+            subject = %query.get_subject().unwrap_or(&"all".to_string())
+        )
+    )]
     async fn perform_search(
         &self,
         term: &str,
@@ -318,12 +325,6 @@ impl BannerApi {
         sort: &str,
         sort_descending: bool,
     ) -> Result<SearchResult, BannerApiError> {
-        debug!(
-            term = term,
-            subject = query.get_subject().map(|s| s.as_str()).unwrap_or("all"),
-            max_results = query.get_max_results(),
-            "Starting course search"
-        );
         self.perform_search(term, query, sort, sort_descending)
             .await
     }

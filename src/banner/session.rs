@@ -82,7 +82,6 @@ impl BannerSession {
 
     /// Updates the last activity timestamp
     pub fn touch(&mut self) {
-        trace!(id = self.unique_session_id, "Session was used");
         self.last_activity = Some(Instant::now());
     }
 
@@ -162,7 +161,7 @@ impl TermPool {
     async fn release(&self, session: BannerSession) {
         let id = session.unique_session_id.clone();
         if session.is_expired() {
-            trace!(id = id, "Session is now expired, dropping.");
+            debug!(id = id, "Session expired, dropping");
             // Wake up a waiter, as it might need to create a new session
             // if this was the last one.
             self.notifier.notify_one();
@@ -171,10 +170,8 @@ impl TermPool {
 
         let mut queue = self.sessions.lock().await;
         queue.push_back(session);
-        let queue_size = queue.len();
         drop(queue); // Release lock before notifying
 
-        trace!(id = id, queue_size, "Session returned to pool");
         self.notifier.notify_one();
     }
 }
@@ -204,22 +201,21 @@ impl SessionPool {
             .or_insert_with(|| Arc::new(TermPool::new()))
             .clone();
 
+        let start = Instant::now();
+        let mut waited_for_creation = false;
+
         loop {
             // Fast path: Try to get an existing, non-expired session.
             {
                 let mut queue = term_pool.sessions.lock().await;
                 if let Some(session) = queue.pop_front() {
                     if !session.is_expired() {
-                        trace!(id = session.unique_session_id, "Reusing session from pool");
                         return Ok(PooledSession {
                             session: Some(session),
                             pool: Arc::clone(&term_pool),
                         });
                     } else {
-                        trace!(
-                            id = session.unique_session_id,
-                            "Popped an expired session, discarding."
-                        );
+                        debug!(id = session.unique_session_id, "Discarded expired session");
                     }
                 }
             } // MutexGuard is dropped, lock is released.
@@ -229,7 +225,10 @@ impl SessionPool {
             if *is_creating_guard {
                 // Another task is already creating a session. Release the lock and wait.
                 drop(is_creating_guard);
-                trace!("Another task is creating a session, waiting for notification...");
+                if !waited_for_creation {
+                    trace!("Waiting for another task to create session");
+                    waited_for_creation = true;
+                }
                 term_pool.notifier.notified().await;
                 // Loop back to the top to try the fast path again.
                 continue;
@@ -240,12 +239,11 @@ impl SessionPool {
             drop(is_creating_guard);
 
             // Race: wait for a session to be returned OR for the rate limiter to allow a new one.
-            trace!("Pool empty, racing notifier vs rate limiter...");
+            trace!("Pool empty, creating new session");
             tokio::select! {
                 _ = term_pool.notifier.notified() => {
                     // A session was returned while we were waiting!
                     // We are no longer the creator. Reset the flag and loop to race for the new session.
-                    trace!("Notified that a session was returned. Looping to retry.");
                     let mut guard = term_pool.is_creating.lock().await;
                     *guard = false;
                     drop(guard);
@@ -253,7 +251,6 @@ impl SessionPool {
                 }
                 _ = SESSION_CREATION_RATE_LIMITER.until_ready() => {
                     // The rate limit has elapsed. It's our job to create the session.
-                    trace!("Rate limiter ready. Proceeding to create a new session.");
                     let new_session_result = self.create_session(&term).await;
 
                     // After creation, we are no longer the creator. Reset the flag
@@ -265,7 +262,12 @@ impl SessionPool {
 
                     match new_session_result {
                         Ok(new_session) => {
-                            debug!(id = new_session.unique_session_id, "Successfully created new session");
+                            let elapsed = start.elapsed();
+                            debug!(
+                                id = new_session.unique_session_id,
+                                elapsed_ms = elapsed.as_millis(),
+                                "Created new session"
+                            );
                             return Ok(PooledSession {
                                 session: Some(new_session),
                                 pool: term_pool,
@@ -298,8 +300,12 @@ impl SessionPool {
             .get_all("Set-Cookie")
             .iter()
             .filter_map(|header_value| {
-                if let Ok(cookie) = Cookie::parse(header_value.to_str().unwrap()) {
-                    Some((cookie.name().to_string(), cookie.value().to_string()))
+                if let Ok(cookie_str) = header_value.to_str() {
+                    if let Ok(cookie) = Cookie::parse(cookie_str) {
+                        Some((cookie.name().to_string(), cookie.value().to_string()))
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
@@ -310,15 +316,11 @@ impl SessionPool {
             return Err(anyhow::anyhow!("Failed to get cookies"));
         }
 
-        let jsessionid = cookies.get("JSESSIONID").unwrap();
-        let ssb_cookie = cookies.get("SSB_COOKIE").unwrap();
+        let jsessionid = cookies.get("JSESSIONID")
+            .ok_or_else(|| anyhow::anyhow!("JSESSIONID cookie missing after validation"))?;
+        let ssb_cookie = cookies.get("SSB_COOKIE")
+            .ok_or_else(|| anyhow::anyhow!("SSB_COOKIE cookie missing after validation"))?;
         let cookie_header = format!("JSESSIONID={}; SSB_COOKIE={}", jsessionid, ssb_cookie);
-
-        trace!(
-            jsessionid = jsessionid,
-            ssb_cookie = ssb_cookie,
-            "New session cookies acquired"
-        );
 
         self.http
             .get(format!("{}/selfServiceMenu/data", self.base_url))
@@ -435,8 +437,15 @@ impl SessionPool {
 
         let redirect: RedirectResponse = response.json().await?;
 
-        let base_url_path = self.base_url.parse::<Url>().unwrap().path().to_string();
-        let non_overlap_redirect = redirect.fwd_url.strip_prefix(&base_url_path).unwrap();
+        let base_url_path = self.base_url.parse::<Url>()
+            .context("Failed to parse base URL")?
+            .path()
+            .to_string();
+        let non_overlap_redirect = redirect.fwd_url.strip_prefix(&base_url_path)
+            .ok_or_else(|| anyhow::anyhow!(
+                "Redirect URL '{}' does not start with expected prefix '{}'",
+                redirect.fwd_url, base_url_path
+            ))?;
 
         // Follow the redirect
         let redirect_url = format!("{}{}", self.base_url, non_overlap_redirect);
@@ -454,7 +463,6 @@ impl SessionPool {
             ));
         }
 
-        trace!(term = term, "successfully selected term");
         Ok(())
     }
 }

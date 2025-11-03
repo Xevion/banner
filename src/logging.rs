@@ -7,10 +7,13 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 /// Configure and initialize logging for the application
 pub fn setup_logging(config: &Config, tracing_format: TracingFormat) {
     // Configure logging based on config
+    // Note: Even when base_level is trace or debug, we suppress trace logs from noisy
+    // infrastructure modules to keep output readable. These modules use debug for important
+    // events and trace only for very detailed debugging.
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         let base_level = &config.log_level;
         EnvFilter::new(format!(
-            "warn,banner={},banner::rate_limiter=warn,banner::session=warn,banner::rate_limit_middleware=warn",
+            "warn,banner={},banner::rate_limiter=warn,banner::session=debug,banner::rate_limit_middleware=warn,banner::middleware=debug",
             base_level
         ))
     });

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn, Instrument};
 
 /// A single worker instance.
 ///
@@ -57,7 +57,9 @@ impl Worker {
             };
 
             let job_id = job.id;
-            debug!(worker_id = self.id, job_id, "Processing job");
+            let retry_count = job.retry_count;
+            let max_retries = job.max_retries;
+            let start = std::time::Instant::now();
 
             // Process the job, racing against shutdown signal
             let process_result = tokio::select! {
@@ -68,8 +70,10 @@ impl Worker {
                 result = self.process_job(job) => result
             };
 
+            let duration = start.elapsed();
+
             // Handle the job processing result
-            self.handle_job_result(job_id, process_result).await;
+            self.handle_job_result(job_id, retry_count, max_retries, process_result, duration).await;
         }
     }
 
@@ -106,20 +110,31 @@ impl Worker {
         // Get the job implementation
         let job_impl = job_type.boxed();
 
-        debug!(
-            worker_id = self.id,
+        // Create span with job context
+        let span = tracing::debug_span!(
+            "process_job",
             job_id = job.id,
-            description = job_impl.description(),
-            "Processing job"
+            job_type = job_impl.description()
         );
 
-        // Process the job - API errors are recoverable
-        job_impl
-            .process(&self.banner_api, &self.db_pool)
-            .await
-            .map_err(JobError::Recoverable)?;
+        async move {
+            debug!(
+                worker_id = self.id,
+                job_id = job.id,
+                description = job_impl.description(),
+                "Processing job"
+            );
 
-        Ok(())
+            // Process the job - API errors are recoverable
+            job_impl
+                .process(&self.banner_api, &self.db_pool)
+                .await
+                .map_err(JobError::Recoverable)?;
+
+            Ok(())
+        }
+        .instrument(span)
+        .await
     }
 
     async fn delete_job(&self, job_id: i32) -> Result<()> {
@@ -135,8 +150,22 @@ impl Worker {
             .bind(job_id)
             .execute(&self.db_pool)
             .await?;
-        info!(worker_id = self.id, job_id, "Job unlocked for retry");
         Ok(())
+    }
+
+    async fn unlock_and_increment_retry(&self, job_id: i32, max_retries: i32) -> Result<bool> {
+        let result = sqlx::query_scalar::<_, Option<i32>>(
+            "UPDATE scrape_jobs
+             SET locked_at = NULL, retry_count = retry_count + 1
+             WHERE id = $1
+             RETURNING CASE WHEN retry_count + 1 < $2 THEN retry_count + 1 ELSE NULL END"
+        )
+        .bind(job_id)
+        .bind(max_retries)
+        .fetch_one(&self.db_pool)
+        .await?;
+
+        Ok(result.is_some())
     }
 
     /// Handle shutdown signal received during job processing
@@ -158,19 +187,30 @@ impl Worker {
     }
 
     /// Handle the result of job processing
-    async fn handle_job_result(&self, job_id: i32, result: Result<(), JobError>) {
+    async fn handle_job_result(&self, job_id: i32, retry_count: i32, max_retries: i32, result: Result<(), JobError>, duration: std::time::Duration) {
         match result {
             Ok(()) => {
-                debug!(worker_id = self.id, job_id, "Job completed successfully");
+                debug!(
+                    worker_id = self.id,
+                    job_id,
+                    duration_ms = duration.as_millis(),
+                    "Job completed successfully"
+                );
                 if let Err(e) = self.delete_job(job_id).await {
                     error!(worker_id = self.id, job_id, error = ?e, "Failed to delete completed job");
                 }
             }
             Err(JobError::Recoverable(e)) => {
-                self.handle_recoverable_error(job_id, e).await;
+                self.handle_recoverable_error(job_id, retry_count, max_retries, e, duration).await;
             }
             Err(JobError::Unrecoverable(e)) => {
-                error!(worker_id = self.id, job_id, error = ?e, "Job corrupted, deleting");
+                error!(
+                    worker_id = self.id,
+                    job_id,
+                    duration_ms = duration.as_millis(),
+                    error = ?e,
+                    "Job corrupted, deleting"
+                );
                 if let Err(e) = self.delete_job(job_id).await {
                     error!(worker_id = self.id, job_id, error = ?e, "Failed to delete corrupted job");
                 }
@@ -179,18 +219,63 @@ impl Worker {
     }
 
     /// Handle recoverable errors by logging appropriately and unlocking the job
-    async fn handle_recoverable_error(&self, job_id: i32, e: anyhow::Error) {
+    async fn handle_recoverable_error(&self, job_id: i32, retry_count: i32, max_retries: i32, e: anyhow::Error, duration: std::time::Duration) {
+        let next_attempt = retry_count.saturating_add(1);
+        let remaining_retries = max_retries.saturating_sub(next_attempt);
+
+        // Log the error appropriately based on type
         if let Some(BannerApiError::InvalidSession(_)) = e.downcast_ref::<BannerApiError>() {
             warn!(
                 worker_id = self.id,
-                job_id, "Invalid session detected, forcing session refresh"
+                job_id,
+                duration_ms = duration.as_millis(),
+                retry_attempt = next_attempt,
+                max_retries = max_retries,
+                remaining_retries = remaining_retries,
+                "Invalid session detected, will retry"
             );
         } else {
-            error!(worker_id = self.id, job_id, error = ?e, "Failed to process job");
+            error!(
+                worker_id = self.id,
+                job_id,
+                duration_ms = duration.as_millis(),
+                retry_attempt = next_attempt,
+                max_retries = max_retries,
+                remaining_retries = remaining_retries,
+                error = ?e,
+                "Failed to process job, will retry"
+            );
         }
 
-        if let Err(e) = self.unlock_job(job_id).await {
-            error!(worker_id = self.id, job_id, error = ?e, "Failed to unlock job");
+        // Atomically unlock and increment retry count, checking if retry is allowed
+        match self.unlock_and_increment_retry(job_id, max_retries).await {
+            Ok(can_retry) if can_retry => {
+                info!(
+                    worker_id = self.id,
+                    job_id,
+                    retry_attempt = next_attempt,
+                    remaining_retries = remaining_retries,
+                    "Job unlocked for retry"
+                );
+            }
+            Ok(_) => {
+                // Max retries exceeded (detected atomically)
+                error!(
+                    worker_id = self.id,
+                    job_id,
+                    duration_ms = duration.as_millis(),
+                    retry_count = next_attempt,
+                    max_retries = max_retries,
+                    error = ?e,
+                    "Job failed permanently (max retries exceeded), deleting"
+                );
+                if let Err(e) = self.delete_job(job_id).await {
+                    error!(worker_id = self.id, job_id, error = ?e, "Failed to delete failed job");
+                }
+            }
+            Err(e) => {
+                error!(worker_id = self.id, job_id, error = ?e, "Failed to unlock and increment retry count");
+            }
         }
     }
 }

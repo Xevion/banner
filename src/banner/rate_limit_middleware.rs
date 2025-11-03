@@ -4,7 +4,7 @@ use crate::banner::rate_limiter::{RequestType, SharedRateLimiter};
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use tracing::{debug, trace, warn};
+use tracing::debug;
 use url::Url;
 
 /// Middleware that enforces rate limiting based on request URL patterns
@@ -16,6 +16,16 @@ impl RateLimitMiddleware {
     /// Creates a new rate limiting middleware
     pub fn new(rate_limiter: SharedRateLimiter) -> Self {
         Self { rate_limiter }
+    }
+
+    /// Returns a human-readable description of the rate limit for a request type
+    fn get_rate_limit_description(request_type: RequestType) -> &'static str {
+        match request_type {
+            RequestType::Session => "6 rpm (~10s interval)",
+            RequestType::Search => "30 rpm (~2s interval)",
+            RequestType::Metadata => "20 rpm (~3s interval)",
+            RequestType::Reset => "10 rpm (~6s interval)",
+        }
     }
 
     /// Determines the request type based on the URL path
@@ -53,49 +63,22 @@ impl Middleware for RateLimitMiddleware {
     ) -> std::result::Result<Response, reqwest_middleware::Error> {
         let request_type = Self::get_request_type(req.url());
 
-        trace!(
-            url = %req.url(),
-            request_type = ?request_type,
-            "Rate limiting request"
-        );
-
-        // Wait for permission to make the request
+        let start = std::time::Instant::now();
         self.rate_limiter.wait_for_permission(request_type).await;
+        let wait_duration = start.elapsed();
 
-        trace!(
-            url = %req.url(),
-            request_type = ?request_type,
-            "Rate limit permission granted, making request"
-        );
+        // Only log if rate limiting caused significant delay (>= 500ms)
+        if wait_duration.as_millis() >= 500 {
+            let limit_desc = Self::get_rate_limit_description(request_type);
+            debug!(
+                request_type = ?request_type,
+                wait_ms = wait_duration.as_millis(),
+                rate_limit = limit_desc,
+                "Rate limit caused delay"
+            );
+        }
 
         // Make the actual request
-        let response_result = next.run(req, extensions).await;
-
-        match response_result {
-            Ok(response) => {
-                if response.status().is_success() {
-                    trace!(
-                        url = %response.url(),
-                        status = response.status().as_u16(),
-                        "Request completed successfully"
-                    );
-                } else {
-                    warn!(
-                        url = %response.url(),
-                        status = response.status().as_u16(),
-                        "Request completed with error status"
-                    );
-                }
-                Ok(response)
-            }
-            Err(error) => {
-                warn!(
-                    url = ?error.url(),
-                    error = ?error,
-                    "Request failed"
-                );
-                Err(error)
-            }
-        }
+        next.run(req, extensions).await
     }
 }

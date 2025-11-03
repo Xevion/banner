@@ -4,7 +4,7 @@ use crate::data::models::TargetType;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tracing::{debug, info, trace};
+use tracing::{debug, info};
 
 /// Job implementation for scraping subject data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,9 +24,9 @@ impl Job for SubjectJob {
         TargetType::Subject
     }
 
+    #[tracing::instrument(skip(self, banner_api, db_pool), fields(subject = %self.subject))]
     async fn process(&self, banner_api: &BannerApi, db_pool: &PgPool) -> Result<()> {
         let subject_code = &self.subject;
-        debug!(subject = subject_code, "Processing subject job");
 
         // Get the current term
         let term = Term::get_current().inner().to_string();
@@ -85,9 +85,7 @@ impl SubjectJob {
         .bind(chrono::Utc::now())
         .execute(db_pool)
         .await
-        .map(|result| {
-            trace!(subject = course.subject, crn = course.course_reference_number, result = ?result, "Course upserted");
-        })
+        .map(|_| ())
         .map_err(|e| anyhow::anyhow!("Failed to upsert course: {e}"))
     }
 }

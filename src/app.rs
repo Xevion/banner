@@ -62,6 +62,14 @@ impl App {
             "database pool established"
         );
 
+        // Run database migrations
+        info!("Running database migrations...");
+        sqlx::migrate!("./migrations")
+            .run(&db_pool)
+            .await
+            .expect("Failed to run database migrations");
+        info!("Database migrations completed successfully");
+
         // Create BannerApi and AppState
         let banner_api = BannerApi::new_with_config(
             config.banner_base_url.clone(),
