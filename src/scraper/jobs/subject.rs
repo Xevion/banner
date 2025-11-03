@@ -1,5 +1,6 @@
 use super::Job;
-use crate::banner::{BannerApi, Course, SearchQuery, Term};
+use crate::banner::{BannerApi, SearchQuery, Term};
+use crate::data::batch::batch_upsert_courses;
 use crate::data::models::TargetType;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
@@ -42,9 +43,7 @@ impl Job for SubjectJob {
                 count = courses_from_api.len(),
                 "Found courses"
             );
-            for course in courses_from_api {
-                self.upsert_course(&course, db_pool).await?;
-            }
+            batch_upsert_courses(&courses_from_api, db_pool).await?;
         }
 
         debug!(subject = subject_code, "Subject job completed");
@@ -53,39 +52,5 @@ impl Job for SubjectJob {
 
     fn description(&self) -> String {
         format!("Scrape subject: {}", self.subject)
-    }
-}
-
-impl SubjectJob {
-    async fn upsert_course(&self, course: &Course, db_pool: &PgPool) -> Result<()> {
-        sqlx::query(
-            r#"
-            INSERT INTO courses (crn, subject, course_number, title, term_code, enrollment, max_enrollment, wait_count, wait_capacity, last_scraped_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT (crn, term_code) DO UPDATE SET
-                subject = EXCLUDED.subject,
-                course_number = EXCLUDED.course_number,
-                title = EXCLUDED.title,
-                enrollment = EXCLUDED.enrollment,
-                max_enrollment = EXCLUDED.max_enrollment,
-                wait_count = EXCLUDED.wait_count,
-                wait_capacity = EXCLUDED.wait_capacity,
-                last_scraped_at = EXCLUDED.last_scraped_at
-            "#,
-        )
-        .bind(&course.course_reference_number)
-        .bind(&course.subject)
-        .bind(&course.course_number)
-        .bind(&course.course_title)
-        .bind(&course.term)
-        .bind(course.enrollment)
-        .bind(course.maximum_enrollment)
-        .bind(course.wait_count)
-        .bind(course.wait_capacity)
-        .bind(chrono::Utc::now())
-        .execute(db_pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| anyhow::anyhow!("Failed to upsert course: {e}"))
     }
 }
