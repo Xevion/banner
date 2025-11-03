@@ -5,6 +5,7 @@ use crate::scraper::jobs::{JobError, JobType};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio::time;
 use tracing::{debug, error, info, trace, warn};
 
@@ -28,77 +29,97 @@ impl Worker {
     }
 
     /// Runs the worker's main loop.
-    pub async fn run(&self) {
+    pub async fn run(&self, mut shutdown_rx: broadcast::Receiver<()>) {
         info!(worker_id = self.id, "Worker started.");
-        loop {
-            match self.fetch_and_lock_job().await {
-                Ok(Some(job)) => {
-                    let job_id = job.id;
-                    debug!(worker_id = self.id, job_id = job.id, "Processing job");
-                    match self.process_job(job).await {
-                        Ok(()) => {
-                            debug!(worker_id = self.id, job_id, "Job completed");
-                            // If successful, delete the job.
-                            if let Err(delete_err) = self.delete_job(job_id).await {
-                                error!(
-                                    worker_id = self.id,
-                                    job_id,
-                                    ?delete_err,
-                                    "Failed to delete job"
-                                );
-                            }
-                        }
-                        Err(JobError::Recoverable(e)) => {
-                            // Check if the error is due to an invalid session
-                            if let Some(BannerApiError::InvalidSession(_)) =
-                                e.downcast_ref::<BannerApiError>()
-                            {
-                                warn!(
-                                    worker_id = self.id,
-                                    job_id, "Invalid session detected. Forcing session refresh."
-                                );
-                            } else {
-                                error!(worker_id = self.id, job_id, error = ?e, "Failed to process job");
-                            }
 
-                            // Unlock the job so it can be retried
-                            if let Err(unlock_err) = self.unlock_job(job_id).await {
-                                error!(
-                                    worker_id = self.id,
-                                    job_id,
-                                    ?unlock_err,
-                                    "Failed to unlock job"
-                                );
-                            }
+        loop {
+            // Fetch and lock a job, racing against shutdown signal
+            let job = tokio::select! {
+                _ = shutdown_rx.recv() => {
+                    info!(worker_id = self.id, "Worker received shutdown signal");
+                    info!(worker_id = self.id, "Worker exiting gracefully");
+                    break;
+                }
+                result = self.fetch_and_lock_job() => {
+                    match result {
+                        Ok(Some(job)) => job,
+                        Ok(None) => {
+                            // No job found, wait for a bit before polling again
+                            trace!(worker_id = self.id, "No jobs available, waiting");
+                            time::sleep(Duration::from_secs(5)).await;
+                            continue;
                         }
-                        Err(JobError::Unrecoverable(e)) => {
-                            error!(
-                                worker_id = self.id,
-                                job_id,
-                                error = ?e,
-                                "Job corrupted, deleting"
-                            );
-                            // Parse errors are unrecoverable - delete the job
-                            if let Err(delete_err) = self.delete_job(job_id).await {
-                                error!(
-                                    worker_id = self.id,
-                                    job_id,
-                                    ?delete_err,
-                                    "Failed to delete corrupted job"
-                                );
-                            }
+                        Err(e) => {
+                            warn!(worker_id = self.id, error = ?e, "Failed to fetch job");
+                            // Wait before retrying to avoid spamming errors
+                            time::sleep(Duration::from_secs(10)).await;
+                            continue;
                         }
                     }
                 }
-                Ok(None) => {
-                    // No job found, wait for a bit before polling again.
-                    trace!(worker_id = self.id, "No jobs available, waiting");
-                    time::sleep(Duration::from_secs(5)).await;
+            };
+
+            let job_id = job.id;
+            debug!(worker_id = self.id, job_id, "Processing job");
+
+            // Process the job, racing against shutdown signal
+            let process_result = tokio::select! {
+                _ = shutdown_rx.recv() => {
+                    info!(worker_id = self.id, job_id, "Shutdown received during job processing");
+
+                    // Unlock the job so it can be retried
+                    if let Err(e) = self.unlock_job(job_id).await {
+                        warn!(
+                            worker_id = self.id,
+                            job_id,
+                            error = ?e,
+                            "Failed to unlock job during shutdown"
+                        );
+                    } else {
+                        debug!(worker_id = self.id, job_id, "Job unlocked during shutdown");
+                    }
+
+                    info!(worker_id = self.id, "Worker exiting gracefully");
+                    break;
                 }
-                Err(e) => {
-                    warn!(worker_id = self.id, error = ?e, "Failed to fetch job");
-                    // Wait before retrying to avoid spamming errors.
-                    time::sleep(Duration::from_secs(10)).await;
+                result = self.process_job(job) => {
+                    result
+                }
+            };
+
+            // Handle the job processing result
+            match process_result {
+                Ok(()) => {
+                    debug!(worker_id = self.id, job_id, "Job completed");
+                    // If successful, delete the job
+                    if let Err(delete_err) = self.delete_job(job_id).await {
+                        error!(
+                            worker_id = self.id,
+                            job_id,
+                            ?delete_err,
+                            "Failed to delete job"
+                        );
+                    }
+                }
+                Err(JobError::Recoverable(e)) => {
+                    self.handle_recoverable_error(job_id, e).await;
+                }
+                Err(JobError::Unrecoverable(e)) => {
+                    error!(
+                        worker_id = self.id,
+                        job_id,
+                        error = ?e,
+                        "Job corrupted, deleting"
+                    );
+                    // Parse errors are unrecoverable - delete the job
+                    if let Err(delete_err) = self.delete_job(job_id).await {
+                        error!(
+                            worker_id = self.id,
+                            job_id,
+                            ?delete_err,
+                            "Failed to delete corrupted job"
+                        );
+                    }
                 }
             }
         }
@@ -168,5 +189,26 @@ impl Worker {
             .await?;
         info!(worker_id = self.id, job_id, "Job unlocked for retry");
         Ok(())
+    }
+
+    /// Handle recoverable errors by logging appropriately and unlocking the job
+    async fn handle_recoverable_error(&self, job_id: i32, e: anyhow::Error) {
+        if let Some(BannerApiError::InvalidSession(_)) = e.downcast_ref::<BannerApiError>() {
+            warn!(
+                worker_id = self.id,
+                job_id, "Invalid session detected. Forcing session refresh."
+            );
+        } else {
+            error!(worker_id = self.id, job_id, error = ?e, "Failed to process job");
+        }
+
+        if let Err(unlock_err) = self.unlock_job(job_id).await {
+            error!(
+                worker_id = self.id,
+                job_id,
+                ?unlock_err,
+                "Failed to unlock job"
+            );
+        }
     }
 }

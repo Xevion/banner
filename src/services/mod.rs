@@ -23,7 +23,11 @@ pub trait Service: Send + Sync {
 
     /// Gracefully shutdown the service
     ///
-    /// An 'Ok' result does not mean the service has completed shutdown, it merely means that the service shutdown was initiated.
+    /// Implementations should initiate shutdown and MAY wait for completion.
+    /// Services are expected to respond to this call and begin cleanup promptly.
+    /// When managed by ServiceManager, the configured timeout (default 8s) applies to
+    /// ALL services combined, not per-service. Services should complete shutdown as
+    /// quickly as possible to avoid timeout.
     async fn shutdown(&mut self) -> Result<(), anyhow::Error>;
 }
 

@@ -42,11 +42,7 @@ impl App {
 
         // Check if the database URL is via private networking
         let is_private = config.database_url.contains("railway.internal");
-        let slow_threshold = if is_private {
-            Duration::from_millis(200)
-        } else {
-            Duration::from_millis(500)
-        };
+        let slow_threshold = Duration::from_millis(if is_private { 200 } else { 500 });
 
         // Create database connection pool
         let db_pool = PgPoolOptions::new()
@@ -108,10 +104,6 @@ impl App {
                 .register_service(ServiceName::Scraper.as_str(), scraper_service);
         }
 
-        if services.contains(&ServiceName::Bot) {
-            // Bot service will be set up separately in run() method since it's async
-        }
-
         // Check if any services are enabled
         if !self.service_manager.has_services() && !services.contains(&ServiceName::Bot) {
             error!("No services enabled. Cannot start application.");
@@ -146,10 +138,5 @@ impl App {
     /// Get a reference to the configuration
     pub fn config(&self) -> &Config {
         &self.config
-    }
-
-    /// Get a reference to the app state
-    pub fn app_state(&self) -> &AppState {
-        &self.app_state
     }
 }

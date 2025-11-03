@@ -5,8 +5,10 @@ pub mod worker;
 use crate::banner::BannerApi;
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
-use tracing::info;
+use tracing::{info, warn};
 
 use self::scheduler::Scheduler;
 use self::worker::Worker;
@@ -21,6 +23,7 @@ pub struct ScraperService {
     banner_api: Arc<BannerApi>,
     scheduler_handle: Option<JoinHandle<()>>,
     worker_handles: Vec<JoinHandle<()>>,
+    shutdown_tx: Option<broadcast::Sender<()>>,
 }
 
 impl ScraperService {
@@ -31,6 +34,7 @@ impl ScraperService {
             banner_api,
             scheduler_handle: None,
             worker_handles: Vec::new(),
+            shutdown_tx: None,
         }
     }
 
@@ -38,9 +42,14 @@ impl ScraperService {
     pub fn start(&mut self) {
         info!("ScraperService starting");
 
+        // Create shutdown channel
+        let (shutdown_tx, _) = broadcast::channel(1);
+        self.shutdown_tx = Some(shutdown_tx.clone());
+
         let scheduler = Scheduler::new(self.db_pool.clone(), self.banner_api.clone());
+        let shutdown_rx = shutdown_tx.subscribe();
         let scheduler_handle = tokio::spawn(async move {
-            scheduler.run().await;
+            scheduler.run(shutdown_rx).await;
         });
         self.scheduler_handle = Some(scheduler_handle);
         info!("Scheduler task spawned");
@@ -48,8 +57,9 @@ impl ScraperService {
         let worker_count = 4; // This could be configurable
         for i in 0..worker_count {
             let worker = Worker::new(i, self.db_pool.clone(), self.banner_api.clone());
+            let shutdown_rx = shutdown_tx.subscribe();
             let worker_handle = tokio::spawn(async move {
-                worker.run().await;
+                worker.run(shutdown_rx).await;
             });
             self.worker_handles.push(worker_handle);
         }
@@ -59,17 +69,6 @@ impl ScraperService {
         );
     }
 
-    /// Signals all child tasks to gracefully shut down.
-    pub async fn shutdown(&mut self) {
-        info!("Shutting down scraper service");
-        if let Some(handle) = self.scheduler_handle.take() {
-            handle.abort();
-        }
-        for handle in self.worker_handles.drain(..) {
-            handle.abort();
-        }
-        info!("Scraper service shutdown");
-    }
 }
 
 #[async_trait::async_trait]
@@ -85,7 +84,47 @@ impl Service for ScraperService {
     }
 
     async fn shutdown(&mut self) -> Result<(), anyhow::Error> {
-        self.shutdown().await;
+        info!("Shutting down scraper service");
+
+        // Send shutdown signal to all tasks
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        } else {
+            warn!("No shutdown channel found for scraper service");
+        }
+
+        // Collect all handles
+        let mut all_handles = Vec::new();
+        if let Some(handle) = self.scheduler_handle.take() {
+            all_handles.push(handle);
+        }
+        all_handles.append(&mut self.worker_handles);
+
+        // Wait for all tasks to complete with a timeout
+        let timeout_duration = Duration::from_secs(5);
+
+        match tokio::time::timeout(
+            timeout_duration,
+            futures::future::join_all(all_handles),
+        )
+        .await
+        {
+            Ok(results) => {
+                let failed = results.iter().filter(|r| r.is_err()).count();
+                if failed > 0 {
+                    warn!(failed_count = failed, "Some scraper tasks failed during shutdown");
+                } else {
+                    info!("All scraper tasks shutdown gracefully");
+                }
+            }
+            Err(_) => {
+                warn!(
+                    timeout = format!("{:.2?}", timeout_duration),
+                    "Scraper service shutdown timed out"
+                );
+            }
+        }
+
         Ok(())
     }
 }

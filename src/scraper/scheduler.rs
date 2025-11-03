@@ -6,8 +6,10 @@ use serde_json::json;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio::time;
-use tracing::{debug, error, info, trace};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info, trace, warn};
 
 /// Periodically analyzes data and enqueues prioritized scrape jobs.
 pub struct Scheduler {
@@ -24,21 +26,72 @@ impl Scheduler {
     }
 
     /// Runs the scheduler's main loop.
-    pub async fn run(&self) {
+    pub async fn run(&self, mut shutdown_rx: broadcast::Receiver<()>) {
         info!("Scheduler service started");
-        let mut interval = time::interval(Duration::from_secs(60)); // Runs every minute
+
+        let work_interval = Duration::from_secs(60);
+        let mut next_run = time::Instant::now();
+        let mut current_work: Option<(tokio::task::JoinHandle<()>, CancellationToken)> = None;
 
         loop {
-            interval.tick().await;
-            // Scheduler analyzing data...
-            if let Err(e) = self.schedule_jobs().await {
-                error!(error = ?e, "Failed to schedule jobs");
+            tokio::select! {
+                // Sleep until next scheduled run - instantly cancellable
+                _ = time::sleep_until(next_run) => {
+                    // Create cancellation token for graceful task cancellation
+                    let cancel_token = CancellationToken::new();
+
+                    // Spawn scheduling work in a separate task for cancellability
+                    let work_handle = tokio::spawn({
+                        let db_pool = self.db_pool.clone();
+                        let banner_api = self.banner_api.clone();
+                        let cancel_token = cancel_token.clone();
+
+                        async move {
+                            // Check for cancellation while running
+                            tokio::select! {
+                                result = Self::schedule_jobs_impl(&db_pool, &banner_api) => {
+                                    if let Err(e) = result {
+                                        error!(error = ?e, "Failed to schedule jobs");
+                                    }
+                                }
+                                _ = cancel_token.cancelled() => {
+                                    debug!("Scheduling work cancelled gracefully");
+                                }
+                            }
+                        }
+                    });
+
+                    current_work = Some((work_handle, cancel_token));
+                    next_run = time::Instant::now() + work_interval;
+                }
+                _ = shutdown_rx.recv() => {
+                    info!("Scheduler received shutdown signal");
+
+                    // Gracefully cancel any in-progress work
+                    if let Some((handle, cancel_token)) = current_work.take() {
+                        // Signal cancellation
+                        cancel_token.cancel();
+
+                        // Wait for graceful completion with timeout
+                        match time::timeout(Duration::from_secs(5), handle).await {
+                            Ok(_) => {
+                                debug!("Scheduling work completed gracefully");
+                            }
+                            Err(_) => {
+                                warn!("Scheduling work did not complete within 5s timeout, may have been aborted");
+                            }
+                        }
+                    }
+
+                    info!("Scheduler exiting gracefully");
+                    break;
+                }
             }
         }
     }
 
     /// The core logic for deciding what jobs to create.
-    async fn schedule_jobs(&self) -> Result<()> {
+    async fn schedule_jobs_impl(db_pool: &PgPool, banner_api: &BannerApi) -> Result<()> {
         // For now, we will implement a simple baseline scheduling strategy:
         // 1. Get a list of all subjects from the Banner API.
         // 2. Query existing jobs for all subjects in a single query.
@@ -47,7 +100,7 @@ impl Scheduler {
 
         debug!(term = term, "Enqueuing subject jobs");
 
-        let subjects = self.banner_api.get_subjects("", &term, 1, 500).await?;
+        let subjects = banner_api.get_subjects("", &term, 1, 500).await?;
         debug!(
             subject_count = subjects.len(),
             "Retrieved subjects from API"
@@ -61,12 +114,12 @@ impl Scheduler {
 
         // Query existing jobs for all subjects in a single query
         let existing_jobs: Vec<(serde_json::Value,)> = sqlx::query_as(
-            "SELECT target_payload FROM scrape_jobs 
+            "SELECT target_payload FROM scrape_jobs
              WHERE target_type = $1 AND target_payload = ANY($2) AND locked_at IS NULL",
         )
         .bind(TargetType::Subject)
         .bind(&subject_payloads)
-        .fetch_all(&self.db_pool)
+        .fetch_all(db_pool)
         .await?;
 
         // Convert to a HashSet for efficient lookup
@@ -95,7 +148,7 @@ impl Scheduler {
         // Insert all new jobs in a single batch
         if !new_jobs.is_empty() {
             let now = chrono::Utc::now();
-            let mut tx = self.db_pool.begin().await?;
+            let mut tx = db_pool.begin().await?;
 
             for (payload, subject_code) in new_jobs {
                 sqlx::query(

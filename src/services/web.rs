@@ -3,7 +3,7 @@ use crate::web::{BannerState, create_router};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
-use tracing::{info, warn, trace};
+use tracing::{info, trace, warn};
 
 /// Web server service implementation
 pub struct WebService {
@@ -33,16 +33,12 @@ impl Service for WebService {
         let app = create_router(self.banner_state.clone());
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.port));
-        info!(
-            service = "web",
-            link = format!("http://localhost:{}", addr.port()),
-            "starting web server",
-        );
 
         let listener = TcpListener::bind(addr).await?;
         info!(
             service = "web",
             address = %addr,
+            link = format!("http://localhost:{}", addr.port()),
             "web server listening"
         );
 
@@ -61,13 +57,16 @@ impl Service for WebService {
             })
             .await?;
 
+        trace!(service = "web", "graceful shutdown completed");
         info!(service = "web", "web server stopped");
+
         Ok(())
     }
 
     async fn shutdown(&mut self) -> Result<(), anyhow::Error> {
         if let Some(shutdown_tx) = self.shutdown_tx.take() {
             let _ = shutdown_tx.send(());
+            trace!(service = "web", "sent shutdown signal to axum");
         } else {
             warn!(
                 service = "web",
