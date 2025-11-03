@@ -3,16 +3,15 @@ pub mod scheduler;
 pub mod worker;
 
 use crate::banner::BannerApi;
+use crate::services::Service;
 use sqlx::PgPool;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
 use self::scheduler::Scheduler;
 use self::worker::Worker;
-use crate::services::Service;
 
 /// The main service that will be managed by the application's `ServiceManager`.
 ///
@@ -91,6 +90,7 @@ impl Service for ScraperService {
             let _ = shutdown_tx.send(());
         } else {
             warn!("No shutdown channel found for scraper service");
+            return Err(anyhow::anyhow!("No shutdown channel available"));
         }
 
         // Collect all handles
@@ -100,31 +100,15 @@ impl Service for ScraperService {
         }
         all_handles.append(&mut self.worker_handles);
 
-        // Wait for all tasks to complete with a timeout
-        let timeout_duration = Duration::from_secs(5);
-
-        match tokio::time::timeout(
-            timeout_duration,
-            futures::future::join_all(all_handles),
-        )
-        .await
-        {
-            Ok(results) => {
-                let failed = results.iter().filter(|r| r.is_err()).count();
-                if failed > 0 {
-                    warn!(failed_count = failed, "Some scraper tasks failed during shutdown");
-                } else {
-                    info!("All scraper tasks shutdown gracefully");
-                }
-            }
-            Err(_) => {
-                warn!(
-                    timeout = format!("{:.2?}", timeout_duration),
-                    "Scraper service shutdown timed out"
-                );
-            }
+        // Wait for all tasks to complete (no internal timeout - let ServiceManager handle it)
+        let results = futures::future::join_all(all_handles).await;
+        let failed = results.iter().filter(|r| r.is_err()).count();
+        if failed > 0 {
+            warn!(failed_count = failed, "Some scraper tasks panicked during shutdown");
+            return Err(anyhow::anyhow!("{} task(s) panicked", failed));
         }
 
+        info!("All scraper tasks shutdown gracefully");
         Ok(())
     }
 }

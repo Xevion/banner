@@ -25,7 +25,15 @@ impl Scheduler {
         }
     }
 
-    /// Runs the scheduler's main loop.
+    /// Runs the scheduler's main loop with graceful shutdown support.
+    ///
+    /// The scheduler wakes up every 60 seconds to analyze data and enqueue jobs.
+    /// When a shutdown signal is received:
+    /// 1. Any in-progress scheduling work is gracefully cancelled via CancellationToken
+    /// 2. The scheduler waits up to 5 seconds for work to complete
+    /// 3. If timeout occurs, the task is abandoned (it will be aborted when dropped)
+    ///
+    /// This ensures that shutdown is responsive even if scheduling work is blocked.
     pub async fn run(&self, mut shutdown_rx: broadcast::Receiver<()>) {
         info!("Scheduler service started");
 
@@ -35,19 +43,17 @@ impl Scheduler {
 
         loop {
             tokio::select! {
-                // Sleep until next scheduled run - instantly cancellable
                 _ = time::sleep_until(next_run) => {
-                    // Create cancellation token for graceful task cancellation
                     let cancel_token = CancellationToken::new();
 
-                    // Spawn scheduling work in a separate task for cancellability
+                    // Spawn work in separate task to allow graceful cancellation during shutdown.
+                    // Without this, shutdown would have to wait for the full scheduling cycle.
                     let work_handle = tokio::spawn({
                         let db_pool = self.db_pool.clone();
                         let banner_api = self.banner_api.clone();
                         let cancel_token = cancel_token.clone();
 
                         async move {
-                            // Check for cancellation while running
                             tokio::select! {
                                 result = Self::schedule_jobs_impl(&db_pool, &banner_api) => {
                                     if let Err(e) = result {
@@ -67,19 +73,14 @@ impl Scheduler {
                 _ = shutdown_rx.recv() => {
                     info!("Scheduler received shutdown signal");
 
-                    // Gracefully cancel any in-progress work
                     if let Some((handle, cancel_token)) = current_work.take() {
-                        // Signal cancellation
                         cancel_token.cancel();
 
-                        // Wait for graceful completion with timeout
-                        match time::timeout(Duration::from_secs(5), handle).await {
-                            Ok(_) => {
-                                debug!("Scheduling work completed gracefully");
-                            }
-                            Err(_) => {
-                                warn!("Scheduling work did not complete within 5s timeout, may have been aborted");
-                            }
+                        // Wait briefly for graceful completion
+                        if tokio::time::timeout(Duration::from_secs(5), handle).await.is_err() {
+                            warn!("Scheduling work did not complete within 5s, abandoning");
+                        } else {
+                            debug!("Scheduling work completed gracefully");
                         }
                     }
 
@@ -90,7 +91,14 @@ impl Scheduler {
         }
     }
 
-    /// The core logic for deciding what jobs to create.
+    /// Core scheduling logic that analyzes data and creates scrape jobs.
+    ///
+    /// Strategy:
+    /// 1. Fetch all subjects for the current term from Banner API
+    /// 2. Query existing jobs in a single batch query
+    /// 3. Create jobs only for subjects that don't have pending jobs
+    ///
+    /// This is a static method (not &self) to allow it to be called from spawned tasks.
     async fn schedule_jobs_impl(db_pool: &PgPool, banner_api: &BannerApi) -> Result<()> {
         // For now, we will implement a simple baseline scheduling strategy:
         // 1. Get a list of all subjects from the Banner API.

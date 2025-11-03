@@ -112,11 +112,11 @@ impl ServiceManager {
 
     /// Shutdown all services gracefully with a timeout.
     ///
-    /// All services receive the shutdown signal simultaneously and must complete within the
-    /// specified timeout (combined, not per-service). If any service fails to shutdown within
-    /// the timeout, it will be aborted and included in the error result.
+    /// All services receive the shutdown signal simultaneously and shut down in parallel.
+    /// Each service gets the full timeout duration (they don't share/consume from a budget).
+    /// If any service fails to shutdown within the timeout, it will be aborted.
     ///
-    /// If all services shutdown successfully, the function will return the duration elapsed.
+    /// Returns the elapsed time if all succeed, or a list of failed service names.
     pub async fn shutdown(&mut self, timeout: Duration) -> Result<Duration, Vec<String>> {
         let service_count = self.service_handles.len();
         let service_names: Vec<_> = self.service_handles.keys().cloned().collect();
@@ -125,7 +125,7 @@ impl ServiceManager {
             service_count,
             services = ?service_names,
             timeout = format!("{:.2?}", timeout),
-            "shutting down {} services with {:?} total timeout",
+            "shutting down {} services in parallel with {:?} timeout each",
             service_count,
             timeout
         );
@@ -138,54 +138,59 @@ impl ServiceManager {
         let _ = self.shutdown_tx.send(());
 
         let start_time = std::time::Instant::now();
-        let mut completed = 0;
-        let mut failed_services = Vec::new();
 
-        // Borrow the receiver mutably (don't take ownership to allow reuse)
+        // Collect results from all services with timeout
         let completion_rx = self
             .completion_rx
             .as_mut()
             .expect("completion_rx should be available");
 
-        // Wait for all services to complete with timeout
-        while completed < service_count {
-            match tokio::time::timeout(
-                timeout.saturating_sub(start_time.elapsed()),
-                completion_rx.recv(),
-            )
-            .await
-            {
-                Ok(Some((name, result))) => {
-                    completed += 1;
-                    self.service_handles.remove(&name);
+        // Collect all completion results with a single timeout
+        let collect_future = async {
+            let mut collected: Vec<Option<(String, ServiceResult)>> = Vec::new();
+            for _ in 0..service_count {
+                if let Some(result) = completion_rx.recv().await {
+                    collected.push(Some(result));
+                } else {
+                    collected.push(None);
+                }
+            }
+            collected
+        };
 
-                    if matches!(result, ServiceResult::GracefulShutdown) {
-                        trace!(service = name, "service shutdown completed");
-                    } else {
-                        warn!(service = name, "service shutdown with non-graceful result");
-                        failed_services.push(name);
-                    }
-                }
-                Ok(None) => {
-                    // Channel closed - shouldn't happen but handle it
-                    warn!("completion channel closed during shutdown");
-                    break;
-                }
-                Err(_) => {
-                    // Timeout - abort all remaining services
-                    warn!(
-                        timeout = format!("{:.2?}", timeout),
-                        elapsed = format!("{:.2?}", start_time.elapsed()),
-                        remaining = service_count - completed,
-                        "shutdown timeout - aborting remaining services"
-                    );
+        let results = match tokio::time::timeout(timeout, collect_future).await {
+            Ok(results) => results,
+            Err(_) => {
+                // Timeout exceeded - abort all remaining services
+                warn!(
+                    timeout = format!("{:.2?}", timeout),
+                    "shutdown timeout exceeded - aborting all remaining services"
+                );
 
-                    for (name, handle) in self.service_handles.drain() {
-                        handle.abort();
-                        failed_services.push(name);
-                    }
-                    break;
+                let failed: Vec<String> = self.service_handles.keys().cloned().collect();
+                for handle in self.service_handles.values() {
+                    handle.abort();
                 }
+                self.service_handles.clear();
+
+                return Err(failed);
+            }
+        };
+
+        // Process results and identify failures
+        let mut failed_services = Vec::new();
+        for (name, service_result) in results.into_iter().flatten() {
+            self.service_handles.remove(&name);
+
+            if matches!(service_result, ServiceResult::GracefulShutdown) {
+                trace!(service = name, "service shutdown completed");
+            } else {
+                warn!(
+                    service = name,
+                    result = ?service_result,
+                    "service shutdown with non-graceful result"
+                );
+                failed_services.push(name);
             }
         }
 
@@ -195,7 +200,7 @@ impl ServiceManager {
             info!(
                 service_count,
                 elapsed = format!("{:.2?}", elapsed),
-                "services shutdown completed: {}",
+                "all services shutdown successfully: {}",
                 service_names.join(", ")
             );
             Ok(elapsed)
@@ -204,7 +209,7 @@ impl ServiceManager {
                 failed_count = failed_services.len(),
                 failed_services = ?failed_services,
                 elapsed = format!("{:.2?}", elapsed),
-                "services shutdown completed with {} failed: {}",
+                "{} service(s) failed to shutdown gracefully: {}",
                 failed_services.len(),
                 failed_services.join(", ")
             );

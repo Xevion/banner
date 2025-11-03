@@ -115,10 +115,28 @@ impl App {
 
     /// Setup bot service if enabled
     pub async fn setup_bot_service(&mut self) -> Result<(), anyhow::Error> {
-        let client = BotService::create_client(&self.config, self.app_state.clone())
-            .await
-            .expect("Failed to create Discord client");
-        let bot_service = Box::new(BotService::new(client));
+        use std::sync::Arc;
+        use tokio::sync::{broadcast, Mutex};
+
+        // Create shutdown channel for status update task
+        let (status_shutdown_tx, status_shutdown_rx) = broadcast::channel(1);
+        let status_task_handle = Arc::new(Mutex::new(None));
+
+        let client = BotService::create_client(
+            &self.config,
+            self.app_state.clone(),
+            status_task_handle.clone(),
+            status_shutdown_rx,
+        )
+        .await
+        .expect("Failed to create Discord client");
+
+        let bot_service = Box::new(BotService::new(
+            client,
+            status_task_handle,
+            status_shutdown_tx,
+        ));
+
         self.service_manager
             .register_service(ServiceName::Bot.as_str(), bot_service);
         Ok(())

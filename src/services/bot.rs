@@ -7,12 +7,16 @@ use serenity::Client;
 use serenity::all::{ActivityData, ClientBuilder, GatewayIntents};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, warn};
+use tokio::sync::{broadcast, Mutex};
+use tokio::task::JoinHandle;
+use tracing::{debug, error, info, warn};
 
 /// Discord bot service implementation
 pub struct BotService {
     client: Client,
     shard_manager: Arc<serenity::gateway::ShardManager>,
+    status_task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    status_shutdown_tx: Option<broadcast::Sender<()>>,
 }
 
 impl BotService {
@@ -20,6 +24,8 @@ impl BotService {
     pub async fn create_client(
         config: &Config,
         app_state: AppState,
+        status_task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+        status_shutdown_rx: broadcast::Receiver<()>,
     ) -> Result<Client, anyhow::Error> {
         let intents = GatewayIntents::non_privileged();
         let bot_target_guild = config.bot_target_guild;
@@ -74,6 +80,7 @@ impl BotService {
             })
             .setup(move |ctx, _ready, framework| {
                 let app_state = app_state.clone();
+                let status_task_handle = status_task_handle.clone();
                 Box::pin(async move {
                     poise::builtins::register_in_guild(
                         ctx,
@@ -83,8 +90,9 @@ impl BotService {
                     .await?;
                     poise::builtins::register_globally(ctx, &framework.options().commands).await?;
 
-                    // Start status update task
-                    Self::start_status_update_task(ctx.clone(), app_state.clone()).await;
+                    // Start status update task with shutdown support
+                    let handle = Self::start_status_update_task(ctx.clone(), app_state.clone(), status_shutdown_rx);
+                    *status_task_handle.lock().await = Some(handle);
 
                     Ok(Data { app_state })
                 })
@@ -96,8 +104,12 @@ impl BotService {
             .await?)
     }
 
-    /// Start the status update task for the Discord bot
-    async fn start_status_update_task(ctx: serenity::client::Context, app_state: AppState) {
+    /// Start the status update task for the Discord bot with graceful shutdown support
+    fn start_status_update_task(
+        ctx: serenity::client::Context,
+        app_state: AppState,
+        mut shutdown_rx: broadcast::Receiver<()>,
+    ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let max_interval = Duration::from_secs(300); // 5 minutes
             let base_interval = Duration::from_secs(30);
@@ -106,59 +118,72 @@ impl BotService {
 
             // This runs once immediately on startup, then with adaptive intervals
             loop {
-                interval.tick().await;
-
-                // Get the course count, update the activity if it has changed/hasn't been set this session
-                let course_count = app_state.get_course_count().await.unwrap();
-                if previous_course_count.is_none() || previous_course_count != Some(course_count) {
-                    ctx.set_activity(Some(ActivityData::playing(format!(
-                        "Querying {:} classes",
-                        course_count.to_formatted_string(&Locale::en)
-                    ))));
-                }
-
-                // Increase or reset the interval
-                interval = tokio::time::interval(
-                    // Avoid logging the first 'change'
-                    if course_count != previous_course_count.unwrap_or(0) {
-                        if previous_course_count.is_some() {
-                            debug!(
-                                new_course_count = course_count,
-                                last_interval = interval.period().as_secs(),
-                                "Course count changed, resetting interval"
-                            );
+                tokio::select! {
+                    _ = interval.tick() => {
+                        // Get the course count, update the activity if it has changed/hasn't been set this session
+                        let course_count = app_state.get_course_count().await.unwrap();
+                        if previous_course_count.is_none() || previous_course_count != Some(course_count) {
+                            ctx.set_activity(Some(ActivityData::playing(format!(
+                                "Querying {:} classes",
+                                course_count.to_formatted_string(&Locale::en)
+                            ))));
                         }
 
-                        // Record the new course count
-                        previous_course_count = Some(course_count);
+                        // Increase or reset the interval
+                        interval = tokio::time::interval(
+                            // Avoid logging the first 'change'
+                            if course_count != previous_course_count.unwrap_or(0) {
+                                if previous_course_count.is_some() {
+                                    debug!(
+                                        new_course_count = course_count,
+                                        last_interval = interval.period().as_secs(),
+                                        "Course count changed, resetting interval"
+                                    );
+                                }
 
-                        // Reset to base interval
-                        base_interval
-                    } else {
-                        // Increase interval by 10% (up to maximum)
-                        let new_interval = interval.period().mul_f32(1.1).min(max_interval);
-                        debug!(
-                            current_course_count = course_count,
-                            last_interval = interval.period().as_secs(),
-                            new_interval = new_interval.as_secs(),
-                            "Course count unchanged, increasing interval"
+                                // Record the new course count
+                                previous_course_count = Some(course_count);
+
+                                // Reset to base interval
+                                base_interval
+                            } else {
+                                // Increase interval by 10% (up to maximum)
+                                let new_interval = interval.period().mul_f32(1.1).min(max_interval);
+                                debug!(
+                                    current_course_count = course_count,
+                                    last_interval = interval.period().as_secs(),
+                                    new_interval = new_interval.as_secs(),
+                                    "Course count unchanged, increasing interval"
+                                );
+
+                                new_interval
+                            },
                         );
 
-                        new_interval
-                    },
-                );
-
-                // Reset the interval, otherwise it will tick again immediately
-                interval.reset();
+                        // Reset the interval, otherwise it will tick again immediately
+                        interval.reset();
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("Status update task received shutdown signal");
+                        break;
+                    }
+                }
             }
-        });
+        })
     }
 
-    pub fn new(client: Client) -> Self {
+    pub fn new(
+        client: Client,
+        status_task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+        status_shutdown_tx: broadcast::Sender<()>,
+    ) -> Self {
         let shard_manager = client.shard_manager.clone();
+
         Self {
             client,
             shard_manager,
+            status_task_handle,
+            status_shutdown_tx: Some(status_shutdown_tx),
         }
     }
 }
@@ -183,6 +208,28 @@ impl Service for BotService {
     }
 
     async fn shutdown(&mut self) -> Result<(), anyhow::Error> {
+        // Signal status update task to stop
+        if let Some(status_shutdown_tx) = self.status_shutdown_tx.take() {
+            let _ = status_shutdown_tx.send(());
+        }
+
+        // Wait for status update task to complete (with timeout)
+        let handle = self.status_task_handle.lock().await.take();
+        if let Some(handle) = handle {
+            match tokio::time::timeout(Duration::from_secs(2), handle).await {
+                Ok(Ok(())) => {
+                    debug!("Status update task completed gracefully");
+                }
+                Ok(Err(e)) => {
+                    warn!(error = ?e, "Status update task panicked");
+                }
+                Err(_) => {
+                    warn!("Status update task did not complete within 2s timeout");
+                }
+            }
+        }
+
+        // Shutdown Discord shards
         self.shard_manager.shutdown_all().await;
         Ok(())
     }
