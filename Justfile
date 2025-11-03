@@ -1,5 +1,14 @@
 default_services := "bot,web,scraper"
 
+default:
+    just --list
+
+check:
+    cargo check
+    cargo clippy
+    cargo nextest run
+    pnpm run -C web lint
+
 # Auto-reloading frontend server
 frontend:
     pnpm run -C web dev

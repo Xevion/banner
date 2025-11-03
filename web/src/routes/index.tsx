@@ -237,11 +237,11 @@ function App() {
       }
 
       // Schedule the next request after the current one completes
-      timeoutId = setTimeout(fetchData, REFRESH_INTERVAL);
+      timeoutId = setTimeout(() => void fetchData(), REFRESH_INTERVAL);
     };
 
     // Start the first request immediately
-    fetchData();
+    void fetchData();
 
     return () => {
       if (timeoutId) {

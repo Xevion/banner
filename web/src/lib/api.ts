@@ -43,7 +43,7 @@ export class BannerApiClient {
       );
     }
 
-    return response.json();
+    return (await response.json()) as T;
   }
 
   async getHealth(): Promise<HealthResponse> {

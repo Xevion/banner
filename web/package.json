@@ -7,7 +7,8 @@
     "start": "vite --port 3000",
     "build": "vite build && tsc",
     "serve": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "tsc && eslint . --ext .ts,.tsx"
   },
   "dependencies": {
     "@radix-ui/themes": "^3.2.1",
@@ -23,14 +24,20 @@
     "recharts": "^3.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^24.3.3",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
     "jsdom": "^26.0.0",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.46.2",
     "vite": "^6.3.5",
     "vitest": "^3.0.5",
     "web-vitals": "^4.2.4"
