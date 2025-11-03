@@ -59,6 +59,7 @@ RUN cargo build --release
 # Copy source code
 RUN rm src/*.rs
 COPY ./src ./src/
+COPY ./migrations ./migrations/
 
 # Copy built frontend assets
 COPY --from=frontend-builder /app/dist ./web/dist
