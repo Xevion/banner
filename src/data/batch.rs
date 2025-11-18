@@ -54,10 +54,7 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
 
     let subjects: Vec<&str> = courses.iter().map(|c| c.subject.as_str()).collect();
 
-    let course_numbers: Vec<&str> = courses
-        .iter()
-        .map(|c| c.course_number.as_str())
-        .collect();
+    let course_numbers: Vec<&str> = courses.iter().map(|c| c.course_number.as_str()).collect();
 
     let titles: Vec<&str> = courses.iter().map(|c| c.course_title.as_str()).collect();
 

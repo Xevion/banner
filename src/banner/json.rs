@@ -32,7 +32,10 @@ pub fn parse_json_with_context<T: serde::de::DeserializeOwned>(body: &str) -> Re
                 if !path.is_empty() && path != "." {
                     err_msg.push_str(&format!("for path '{}'\n", path));
                 }
-                err_msg.push_str(&format!("({}) at line {} column {}\n\n", type_info, line, column));
+                err_msg.push_str(&format!(
+                    "({}) at line {} column {}\n\n",
+                    type_info, line, column
+                ));
                 err_msg.push_str(&context);
 
                 err_msg
@@ -86,10 +89,10 @@ fn parse_type_mismatch(error_msg: &str) -> String {
     }
 
     // Try to parse "expected X at line Y" format
-    if error_msg.starts_with("expected ") {
-        if let Some(expected_part) = error_msg.split(" at line ").next() {
-            return expected_part.to_string();
-        }
+    if error_msg.starts_with("expected ")
+        && let Some(expected_part) = error_msg.split(" at line ").next()
+    {
+        return expected_part.to_string();
     }
 
     // Fallback: return original message without location info

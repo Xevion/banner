@@ -26,7 +26,7 @@ The application consists of three modular services that can be run independently
 ## Quick Start
 
 ```bash
-pnpm install -C web  # Install frontend dependencies
+bun install --cwd web  # Install frontend dependencies
 cargo build  # Build the backend
 
 just dev # Runs auto-reloading dev build

@@ -12,7 +12,10 @@ async fn test_join_tasks_success() {
 
     // All tasks should complete successfully
     let result = join_tasks(handles).await;
-    assert!(result.is_ok(), "Expected all tasks to complete successfully");
+    assert!(
+        result.is_ok(),
+        "Expected all tasks to complete successfully"
+    );
 }
 
 #[tokio::test]
@@ -29,5 +32,8 @@ async fn test_join_tasks_with_panic() {
     assert!(result.is_err(), "Expected an error when a task panics");
 
     let error_msg = result.unwrap_err().to_string();
-    assert!(error_msg.contains("1 task(s) panicked"), "Error message should mention panicked tasks");
+    assert!(
+        error_msg.contains("1 task(s) panicked"),
+        "Error message should mention panicked tasks"
+    );
 }

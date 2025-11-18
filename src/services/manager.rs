@@ -62,7 +62,8 @@ impl ServiceManager {
             });
 
             // Store abort handle for shutdown control
-            self.service_handles.insert(name.clone(), handle.abort_handle());
+            self.service_handles
+                .insert(name.clone(), handle.abort_handle());
             debug!(service = name, id = ?handle.id(), "service spawned");
         }
 

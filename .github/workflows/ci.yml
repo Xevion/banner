@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check TypeScript formatting
+        working-directory: web
+        run: bun run format:check
+
+      - name: TypeScript type check
+        working-directory: web
+        run: bun run typecheck
+
+      - name: ESLint
+        working-directory: web
+        run: bun run lint
+
+      - name: Clippy
+        run: cargo clippy --all-features -- --deny warnings
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Build frontend
+        working-directory: web
+        run: bun run build
+
+      - name: Build backend
+        run: cargo build --release --bin banner

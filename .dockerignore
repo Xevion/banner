@@ -13,6 +13,16 @@ go/
 # Development configuration
 bacon.toml
 .env
+.env.*
+!.env.example
+
+# CI/CD
+.github/
+.git/
+
+# Development tools
+Justfile
+rust-toolchain.toml
 
 # Frontend build artifacts and cache
 web/node_modules/
@@ -20,4 +30,22 @@ web/dist/
 web/.vite/
 web/.tanstack/
 web/.vscode/
+
+# IDE and editor files
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+*.profdata
+*.profraw
+
+# SQLx offline mode (include this in builds)
+!.sqlx/

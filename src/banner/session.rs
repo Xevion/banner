@@ -316,9 +316,11 @@ impl SessionPool {
             return Err(anyhow::anyhow!("Failed to get cookies"));
         }
 
-        let jsessionid = cookies.get("JSESSIONID")
+        let jsessionid = cookies
+            .get("JSESSIONID")
             .ok_or_else(|| anyhow::anyhow!("JSESSIONID cookie missing after validation"))?;
-        let ssb_cookie = cookies.get("SSB_COOKIE")
+        let ssb_cookie = cookies
+            .get("SSB_COOKIE")
             .ok_or_else(|| anyhow::anyhow!("SSB_COOKIE cookie missing after validation"))?;
         let cookie_header = format!("JSESSIONID={}; SSB_COOKIE={}", jsessionid, ssb_cookie);
 
@@ -437,15 +439,23 @@ impl SessionPool {
 
         let redirect: RedirectResponse = response.json().await?;
 
-        let base_url_path = self.base_url.parse::<Url>()
+        let base_url_path = self
+            .base_url
+            .parse::<Url>()
             .context("Failed to parse base URL")?
             .path()
             .to_string();
-        let non_overlap_redirect = redirect.fwd_url.strip_prefix(&base_url_path)
-            .ok_or_else(|| anyhow::anyhow!(
-                "Redirect URL '{}' does not start with expected prefix '{}'",
-                redirect.fwd_url, base_url_path
-            ))?;
+        let non_overlap_redirect =
+            redirect
+                .fwd_url
+                .strip_prefix(&base_url_path)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Redirect URL '{}' does not start with expected prefix '{}'",
+                        redirect.fwd_url,
+                        base_url_path
+                    )
+                })?;
 
         // Follow the redirect
         let redirect_url = format!("{}{}", self.base_url, non_overlap_redirect);

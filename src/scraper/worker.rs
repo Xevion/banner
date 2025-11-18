@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time;
-use tracing::{debug, error, info, trace, warn, Instrument};
+use tracing::{Instrument, debug, error, info, trace, warn};
 
 /// A single worker instance.
 ///
@@ -73,7 +73,8 @@ impl Worker {
             let duration = start.elapsed();
 
             // Handle the job processing result
-            self.handle_job_result(job_id, retry_count, max_retries, process_result, duration).await;
+            self.handle_job_result(job_id, retry_count, max_retries, process_result, duration)
+                .await;
         }
     }
 
@@ -158,7 +159,7 @@ impl Worker {
             "UPDATE scrape_jobs
              SET locked_at = NULL, retry_count = retry_count + 1
              WHERE id = $1
-             RETURNING CASE WHEN retry_count + 1 < $2 THEN retry_count + 1 ELSE NULL END"
+             RETURNING CASE WHEN retry_count + 1 < $2 THEN retry_count + 1 ELSE NULL END",
         )
         .bind(job_id)
         .bind(max_retries)
@@ -170,7 +171,10 @@ impl Worker {
 
     /// Handle shutdown signal received during job processing
     async fn handle_shutdown_during_processing(&self, job_id: i32) {
-        info!(worker_id = self.id, job_id, "Shutdown received during job processing");
+        info!(
+            worker_id = self.id,
+            job_id, "Shutdown received during job processing"
+        );
 
         if let Err(e) = self.unlock_job(job_id).await {
             warn!(
@@ -187,7 +191,14 @@ impl Worker {
     }
 
     /// Handle the result of job processing
-    async fn handle_job_result(&self, job_id: i32, retry_count: i32, max_retries: i32, result: Result<(), JobError>, duration: std::time::Duration) {
+    async fn handle_job_result(
+        &self,
+        job_id: i32,
+        retry_count: i32,
+        max_retries: i32,
+        result: Result<(), JobError>,
+        duration: std::time::Duration,
+    ) {
         match result {
             Ok(()) => {
                 debug!(
@@ -201,7 +212,8 @@ impl Worker {
                 }
             }
             Err(JobError::Recoverable(e)) => {
-                self.handle_recoverable_error(job_id, retry_count, max_retries, e, duration).await;
+                self.handle_recoverable_error(job_id, retry_count, max_retries, e, duration)
+                    .await;
             }
             Err(JobError::Unrecoverable(e)) => {
                 error!(
@@ -219,7 +231,14 @@ impl Worker {
     }
 
     /// Handle recoverable errors by logging appropriately and unlocking the job
-    async fn handle_recoverable_error(&self, job_id: i32, retry_count: i32, max_retries: i32, e: anyhow::Error, duration: std::time::Duration) {
+    async fn handle_recoverable_error(
+        &self,
+        job_id: i32,
+        retry_count: i32,
+        max_retries: i32,
+        e: anyhow::Error,
+        duration: std::time::Duration,
+    ) {
         let next_attempt = retry_count.saturating_add(1);
         let remaining_retries = max_retries.saturating_sub(next_attempt);
 

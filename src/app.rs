@@ -124,7 +124,7 @@ impl App {
     /// Setup bot service if enabled
     pub async fn setup_bot_service(&mut self) -> Result<(), anyhow::Error> {
         use std::sync::Arc;
-        use tokio::sync::{broadcast, Mutex};
+        use tokio::sync::{Mutex, broadcast};
 
         // Create shutdown channel for status update task
         let (status_shutdown_tx, status_shutdown_rx) = broadcast::channel(1);

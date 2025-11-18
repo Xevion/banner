@@ -7,7 +7,7 @@ use serenity::Client;
 use serenity::all::{ActivityData, ClientBuilder, GatewayIntents};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
@@ -91,7 +91,11 @@ impl BotService {
                     poise::builtins::register_globally(ctx, &framework.options().commands).await?;
 
                     // Start status update task with shutdown support
-                    let handle = Self::start_status_update_task(ctx.clone(), app_state.clone(), status_shutdown_rx);
+                    let handle = Self::start_status_update_task(
+                        ctx.clone(),
+                        app_state.clone(),
+                        status_shutdown_rx,
+                    );
                     *status_task_handle.lock().await = Some(handle);
 
                     Ok(Data { app_state })

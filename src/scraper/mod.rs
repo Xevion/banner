@@ -67,7 +67,6 @@ impl ScraperService {
             "Spawned worker tasks"
         );
     }
-
 }
 
 #[async_trait::async_trait]
@@ -104,7 +103,10 @@ impl Service for ScraperService {
         let results = futures::future::join_all(all_handles).await;
         let failed = results.iter().filter(|r| r.is_err()).count();
         if failed > 0 {
-            warn!(failed_count = failed, "Some scraper tasks panicked during shutdown");
+            warn!(
+                failed_count = failed,
+                "Some scraper tasks panicked during shutdown"
+            );
             return Err(anyhow::anyhow!("{} task(s) panicked", failed));
         }
 

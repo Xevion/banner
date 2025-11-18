@@ -2,11 +2,8 @@
 ARG RUST_VERSION=1.89.0
 ARG RAILWAY_GIT_COMMIT_SHA
 
-# Frontend Build Stage
-FROM node:22-bookworm-slim AS frontend-builder
-
-# Install pnpm
-RUN npm install -g pnpm
+# --- Frontend Build Stage ---
+FROM oven/bun:1 AS frontend-builder
 
 WORKDIR /app
 
@@ -14,64 +11,62 @@ WORKDIR /app
 COPY ./Cargo.toml ./
 
 # Copy frontend package files
-COPY ./web/package.json ./web/pnpm-lock.yaml ./
+COPY ./web/package.json ./web/bun.lock* ./
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN bun install --frozen-lockfile
 
 # Copy frontend source code
 COPY ./web ./
 
 # Build frontend
-RUN pnpm run build
+RUN bun run build
 
-# Rust Build Stage
-FROM rust:${RUST_VERSION}-bookworm AS builder
+# --- Chef Base Stage ---
+FROM lukemathwalker/cargo-chef:latest-rust-${RUST_VERSION} AS chef
+WORKDIR /app
+
+# --- Planner Stage ---
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+COPY build.rs ./
+COPY src ./src
+# Migrations & .sqlx specifically left out to avoid invalidating cache
+RUN cargo chef prepare --recipe-path recipe.json --bin banner
+
+# --- Rust Build Stage ---
+FROM chef AS builder
 
 # Set build-time environment variable for Railway Git commit SHA
+ARG RAILWAY_GIT_COMMIT_SHA
 ENV RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA}
 
-# Install build dependencies
+# Copy recipe from planner and build dependencies only
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json --bin banner
+
+# Install build dependencies for final compilation
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /usr/src
-RUN USER=root cargo new --bin banner
-WORKDIR /usr/src/banner
-
-# Copy dependency files for better layer caching
-COPY ./Cargo.toml ./Cargo.lock* ./
-
-# Copy .git directory for build.rs to access Git information (if available)
-# This will copy .git (and .gitignore) if it exists, but won't fail if it doesn't
-# While normally a COPY requires at least one file, .gitignore should still be available, so this wildcard should always work
-COPY ./.git* ./
-
-# Copy build.rs early so it can run during the first build
-COPY ./build.rs ./
-
-# Build empty app with downloaded dependencies to produce a stable image layer for next build
-RUN cargo build --release
-
-# Copy source code
-RUN rm src/*.rs
-COPY ./src ./src/
-COPY ./migrations ./migrations/
-
-# Copy built frontend assets
+# Copy source code and built frontend assets
+COPY Cargo.toml Cargo.lock ./
+COPY build.rs ./
+COPY .git* ./
+COPY src ./src
+COPY migrations ./migrations
 COPY --from=frontend-builder /app/dist ./web/dist
 
 # Build web app with embedded assets
-RUN rm ./target/release/deps/banner*
-RUN cargo build --release
+RUN cargo build --release --bin banner
 
 # Strip the binary to reduce size
 RUN strip target/release/banner
 
-# Runtime Stage - Debian slim for glibc compatibility
+# --- Runtime Stage ---
 FROM debian:12-slim
 
 ARG APP=/usr/src/app
@@ -95,7 +90,7 @@ RUN addgroup --gid $GID $APP_USER \
     && mkdir -p ${APP}
 
 # Copy application binary
-COPY --from=builder --chown=$APP_USER:$APP_USER /usr/src/banner/target/release/banner ${APP}/banner
+COPY --from=builder --chown=$APP_USER:$APP_USER /app/target/release/banner ${APP}/banner
 
 # Set proper permissions
 RUN chmod +x ${APP}/banner

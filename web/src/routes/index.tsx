@@ -101,13 +101,11 @@ const getOverallHealth = (state: StatusState): Status | "Unreachable" => {
 const getServices = (state: StatusState): Service[] => {
   if (state.mode !== "response") return [];
 
-  return Object.entries(state.status.services).map(
-    ([serviceId, serviceInfo]) => ({
-      name: serviceInfo.name,
-      status: serviceInfo.status,
-      icon: SERVICE_ICONS[serviceId] || SERVICE_ICONS.default,
-    })
-  );
+  return Object.entries(state.status.services).map(([serviceId, serviceInfo]) => ({
+    name: serviceInfo.name,
+    status: serviceInfo.status,
+    icon: SERVICE_ICONS[serviceId] || SERVICE_ICONS.default,
+  }));
 };
 
 const StatusDisplay = ({ status }: { status: Status | "Unreachable" }) => {
@@ -197,17 +195,11 @@ function App() {
 
         // Create a timeout promise
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(
-            () => reject(new Error("Request timeout")),
-            REQUEST_TIMEOUT
-          );
+          setTimeout(() => reject(new Error("Request timeout")), REQUEST_TIMEOUT);
         });
 
         // Race between the API call and timeout
-        const statusData = await Promise.race([
-          client.getStatus(),
-          timeoutPromise,
-        ]);
+        const statusData = await Promise.race([client.getStatus(), timeoutPromise]);
 
         const endTime = Date.now();
         const responseTime = endTime - startTime;
@@ -219,8 +211,7 @@ function App() {
           lastFetch: new Date(),
         });
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to fetch data";
+        const errorMessage = err instanceof Error ? err.message : "Failed to fetch data";
 
         // Check if it's a timeout error
         if (errorMessage === "Request timeout") {
@@ -302,12 +293,8 @@ function App() {
             <Flex direction="column" gap="3" style={{ marginTop: "16px" }}>
               {shouldShowSkeleton
                 ? // Show skeleton for 3 services during initial loading only
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <SkeletonService key={index} />
-                  ))
-                : services.map((service) => (
-                    <ServiceStatus key={service.name} service={service} />
-                  ))}
+                  Array.from({ length: 3 }).map((_, index) => <SkeletonService key={index} />)
+                : services.map((service) => <ServiceStatus key={service.name} service={service} />)}
             </Flex>
 
             <Flex direction="column" gap="2" style={BORDER_STYLES}>
@@ -326,17 +313,11 @@ function App() {
               {shouldShowLastFetch ? (
                 <TimingRow icon={Clock} name="Last Updated">
                   {isLoading ? (
-                    <Text
-                      size="2"
-                      style={{ paddingBottom: "2px" }}
-                      color="gray"
-                    >
+                    <Text size="2" style={{ paddingBottom: "2px" }} color="gray">
                       Loading...
                     </Text>
                   ) : (
-                    <Tooltip
-                      content={`as of ${state.lastFetch.toLocaleTimeString()}`}
-                    >
+                    <Tooltip content={`as of ${state.lastFetch.toLocaleTimeString()}`}>
                       <abbr
                         style={{
                           cursor: "pointer",
@@ -363,12 +344,7 @@ function App() {
             </Flex>
           </Flex>
         </Card>
-        <Flex
-          justify="center"
-          style={{ marginTop: "12px" }}
-          gap="2"
-          align="center"
-        >
+        <Flex justify="center" style={{ marginTop: "12px" }} gap="2" align="center">
           {__APP_VERSION__ && (
             <Text
               size="1"

@@ -7,10 +7,7 @@ import { readFileSync, existsSync } from "node:fs";
 // Extract version from Cargo.toml
 function getVersion() {
   const filename = "Cargo.toml";
-  const paths = [
-    resolve(__dirname, filename),
-    resolve(__dirname, "..", filename),
-  ];
+  const paths = [resolve(__dirname, filename), resolve(__dirname, "..", filename)];
 
   for (const path of paths) {
     try {
