@@ -1,5 +1,6 @@
 use crate::banner::{BannerApi, Term};
 use crate::data::models::{ScrapePriority, TargetType};
+use crate::data::scrape_jobs;
 use crate::error::Result;
 use crate::scraper::jobs::subject::SubjectJob;
 use serde_json::json;
@@ -123,20 +124,12 @@ impl Scheduler {
             .collect();
 
         // Query existing jobs for all subjects in a single query
-        let existing_jobs: Vec<(serde_json::Value,)> = sqlx::query_as(
-            "SELECT target_payload FROM scrape_jobs
-             WHERE target_type = $1 AND target_payload = ANY($2) AND locked_at IS NULL",
+        let existing_payloads = scrape_jobs::find_existing_job_payloads(
+            TargetType::Subject,
+            &subject_payloads,
+            db_pool,
         )
-        .bind(TargetType::Subject)
-        .bind(&subject_payloads)
-        .fetch_all(db_pool)
         .await?;
-
-        // Convert to a HashSet for efficient lookup
-        let existing_payloads: std::collections::HashSet<String> = existing_jobs
-            .into_iter()
-            .map(|(payload,)| payload.to_string())
-            .collect();
 
         // Filter out subjects that already have jobs and prepare new jobs
         let mut skipped_count = 0;
@@ -162,24 +155,16 @@ impl Scheduler {
 
         // Insert all new jobs in a single batch
         if !new_jobs.is_empty() {
-            let now = chrono::Utc::now();
-            let mut tx = db_pool.begin().await?;
-
-            for (payload, subject_code) in new_jobs {
-                sqlx::query(
-                    "INSERT INTO scrape_jobs (target_type, target_payload, priority, execute_at) VALUES ($1, $2, $3, $4)"
-                )
-                .bind(TargetType::Subject)
-                .bind(&payload)
-                .bind(ScrapePriority::Low)
-                .bind(now)
-                .execute(&mut *tx)
-                .await?;
-
+            for (_, subject_code) in &new_jobs {
                 debug!(subject = subject_code, "New job enqueued for subject");
             }
 
-            tx.commit().await?;
+            let jobs: Vec<_> = new_jobs
+                .into_iter()
+                .map(|(payload, _)| (payload, TargetType::Subject, ScrapePriority::Low))
+                .collect();
+
+            scrape_jobs::batch_insert_jobs(&jobs, db_pool).await?;
         }
 
         debug!("Job scheduling complete");

@@ -120,16 +120,3 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_empty_batch_returns_ok() {
-        // This is a basic compile-time test
-        // Runtime tests would require sqlx::test macro and a test database
-        let courses: Vec<Course> = vec![];
-        assert_eq!(courses.len(), 0);
-    }
-}

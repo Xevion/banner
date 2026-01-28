@@ -36,6 +36,7 @@ sqlx = { version = "0.8.6", features = [
     "chrono",
     "json",
     "macros",
+    "migrate",
 ] }
 thiserror = "2.0.16"
 time = "0.3.43"

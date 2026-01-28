@@ -1,5 +1,6 @@
 use crate::banner::{BannerApi, BannerApiError};
 use crate::data::models::ScrapeJob;
+use crate::data::scrape_jobs;
 use crate::error::Result;
 use crate::scraper::jobs::{JobError, JobType};
 use sqlx::PgPool;
@@ -83,24 +84,7 @@ impl Worker {
     /// This uses a `FOR UPDATE SKIP LOCKED` query to ensure that multiple
     /// workers can poll the queue concurrently without conflicts.
     async fn fetch_and_lock_job(&self) -> Result<Option<ScrapeJob>> {
-        let mut tx = self.db_pool.begin().await?;
-
-        let job = sqlx::query_as::<_, ScrapeJob>(
-            "SELECT * FROM scrape_jobs WHERE locked_at IS NULL AND execute_at <= NOW() ORDER BY priority DESC, execute_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-
-        if let Some(ref job) = job {
-            sqlx::query("UPDATE scrape_jobs SET locked_at = NOW() WHERE id = $1")
-                .bind(job.id)
-                .execute(&mut *tx)
-                .await?;
-        }
-
-        tx.commit().await?;
-
-        Ok(job)
+        scrape_jobs::fetch_and_lock_job(&self.db_pool).await
     }
 
     async fn process_job(&self, job: ScrapeJob) -> Result<(), JobError> {
@@ -139,34 +123,15 @@ impl Worker {
     }
 
     async fn delete_job(&self, job_id: i32) -> Result<()> {
-        sqlx::query("DELETE FROM scrape_jobs WHERE id = $1")
-            .bind(job_id)
-            .execute(&self.db_pool)
-            .await?;
-        Ok(())
+        scrape_jobs::delete_job(job_id, &self.db_pool).await
     }
 
     async fn unlock_job(&self, job_id: i32) -> Result<()> {
-        sqlx::query("UPDATE scrape_jobs SET locked_at = NULL WHERE id = $1")
-            .bind(job_id)
-            .execute(&self.db_pool)
-            .await?;
-        Ok(())
+        scrape_jobs::unlock_job(job_id, &self.db_pool).await
     }
 
     async fn unlock_and_increment_retry(&self, job_id: i32, max_retries: i32) -> Result<bool> {
-        let result = sqlx::query_scalar::<_, Option<i32>>(
-            "UPDATE scrape_jobs
-             SET locked_at = NULL, retry_count = retry_count + 1
-             WHERE id = $1
-             RETURNING CASE WHEN retry_count + 1 < $2 THEN retry_count + 1 ELSE NULL END",
-        )
-        .bind(job_id)
-        .bind(max_retries)
-        .fetch_one(&self.db_pool)
-        .await?;
-
-        Ok(result.is_some())
+        scrape_jobs::unlock_and_increment_retry(job_id, max_retries, &self.db_pool).await
     }
 
     /// Handle shutdown signal received during job processing

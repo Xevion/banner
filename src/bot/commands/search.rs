@@ -140,3 +140,110 @@ fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
 
     Err(anyhow!("Invalid course code format"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Single codes ---
+
+    #[test]
+    fn test_parse_single_code() {
+        assert_eq!(parse_course_code("3743").unwrap(), (3743, 3743));
+    }
+
+    #[test]
+    fn test_parse_single_code_boundaries() {
+        assert_eq!(parse_course_code("1000").unwrap(), (1000, 1000));
+        assert_eq!(parse_course_code("9999").unwrap(), (9999, 9999));
+    }
+
+    #[test]
+    fn test_parse_single_code_below_range() {
+        assert!(parse_course_code("0999").is_err());
+    }
+
+    #[test]
+    fn test_parse_single_code_wrong_length() {
+        assert!(parse_course_code("123").is_err());
+    }
+
+    #[test]
+    fn test_parse_single_code_non_numeric() {
+        assert!(parse_course_code("abcd").is_err());
+    }
+
+    #[test]
+    fn test_parse_single_code_trimmed() {
+        assert_eq!(parse_course_code("  3743  ").unwrap(), (3743, 3743));
+    }
+
+    // --- Ranges ---
+
+    #[test]
+    fn test_parse_range_full() {
+        assert_eq!(parse_course_code("3000-3999").unwrap(), (3000, 3999));
+    }
+
+    #[test]
+    fn test_parse_range_same() {
+        assert_eq!(parse_course_code("3000-3000").unwrap(), (3000, 3000));
+    }
+
+    #[test]
+    fn test_parse_range_open() {
+        assert_eq!(parse_course_code("3000-").unwrap(), (3000, 9999));
+    }
+
+    #[test]
+    fn test_parse_range_inverted() {
+        assert!(parse_course_code("5000-3000").is_err());
+    }
+
+    #[test]
+    fn test_parse_range_below_1000() {
+        assert!(parse_course_code("500-999").is_err());
+    }
+
+    #[test]
+    fn test_parse_range_above_9999() {
+        assert!(parse_course_code("9000-10000").is_err());
+    }
+
+    #[test]
+    fn test_parse_range_full_valid() {
+        assert_eq!(parse_course_code("1000-9999").unwrap(), (1000, 9999));
+    }
+
+    // --- Wildcards ---
+
+    #[test]
+    fn test_parse_wildcard_one_x() {
+        assert_eq!(parse_course_code("300x").unwrap(), (3000, 3009));
+    }
+
+    #[test]
+    fn test_parse_wildcard_two_x() {
+        assert_eq!(parse_course_code("30xx").unwrap(), (3000, 3099));
+    }
+
+    #[test]
+    fn test_parse_wildcard_three_x() {
+        assert_eq!(parse_course_code("3xxx").unwrap(), (3000, 3999));
+    }
+
+    #[test]
+    fn test_parse_wildcard_9xxx() {
+        assert_eq!(parse_course_code("9xxx").unwrap(), (9000, 9999));
+    }
+
+    #[test]
+    fn test_parse_wildcard_wrong_length() {
+        assert!(parse_course_code("3xxxx").is_err());
+    }
+
+    #[test]
+    fn test_parse_wildcard_0xxx() {
+        assert!(parse_course_code("0xxx").is_err());
+    }
+}

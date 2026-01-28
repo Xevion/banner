@@ -240,3 +240,209 @@ impl FromStr for Term {
         Ok(Term { year, season })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Season::from_str ---
+
+    #[test]
+    fn test_season_from_str_fall() {
+        assert_eq!(Season::from_str("10").unwrap(), Season::Fall);
+    }
+
+    #[test]
+    fn test_season_from_str_spring() {
+        assert_eq!(Season::from_str("20").unwrap(), Season::Spring);
+    }
+
+    #[test]
+    fn test_season_from_str_summer() {
+        assert_eq!(Season::from_str("30").unwrap(), Season::Summer);
+    }
+
+    #[test]
+    fn test_season_from_str_invalid() {
+        for input in ["00", "40", "1", ""] {
+            assert!(
+                Season::from_str(input).is_err(),
+                "expected Err for {input:?}"
+            );
+        }
+    }
+
+    // --- Season Display ---
+
+    #[test]
+    fn test_season_display() {
+        assert_eq!(Season::Fall.to_string(), "Fall");
+        assert_eq!(Season::Spring.to_string(), "Spring");
+        assert_eq!(Season::Summer.to_string(), "Summer");
+    }
+
+    #[test]
+    fn test_season_to_str_roundtrip() {
+        for season in [Season::Fall, Season::Spring, Season::Summer] {
+            assert_eq!(Season::from_str(season.to_str()).unwrap(), season);
+        }
+    }
+
+    // --- Term::from_str ---
+
+    #[test]
+    fn test_term_from_str_valid_fall() {
+        let term = Term::from_str("202510").unwrap();
+        assert_eq!(term.year, 2025);
+        assert_eq!(term.season, Season::Fall);
+    }
+
+    #[test]
+    fn test_term_from_str_valid_spring() {
+        let term = Term::from_str("202520").unwrap();
+        assert_eq!(term.year, 2025);
+        assert_eq!(term.season, Season::Spring);
+    }
+
+    #[test]
+    fn test_term_from_str_valid_summer() {
+        let term = Term::from_str("202530").unwrap();
+        assert_eq!(term.year, 2025);
+        assert_eq!(term.season, Season::Summer);
+    }
+
+    #[test]
+    fn test_term_from_str_too_short() {
+        assert!(Term::from_str("20251").is_err());
+    }
+
+    #[test]
+    fn test_term_from_str_too_long() {
+        assert!(Term::from_str("2025100").is_err());
+    }
+
+    #[test]
+    fn test_term_from_str_empty() {
+        assert!(Term::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_term_from_str_invalid_year_chars() {
+        assert!(Term::from_str("abcd10").is_err());
+    }
+
+    #[test]
+    fn test_term_from_str_invalid_season() {
+        assert!(Term::from_str("202540").is_err());
+    }
+
+    #[test]
+    fn test_term_from_str_year_below_range() {
+        assert!(Term::from_str("200010").is_err());
+    }
+
+    #[test]
+    fn test_term_display_roundtrip() {
+        for code in ["202510", "202520", "202530"] {
+            let term = Term::from_str(code).unwrap();
+            assert_eq!(term.to_string(), code);
+        }
+    }
+
+    // --- Term::get_status_for_date ---
+
+    #[test]
+    fn test_status_mid_spring() {
+        let date = NaiveDate::from_ymd_opt(2025, 2, 15).unwrap();
+        let status = Term::get_status_for_date(date);
+        assert!(
+            matches!(status, TermPoint::InTerm { current } if current.season == Season::Spring)
+        );
+    }
+
+    #[test]
+    fn test_status_mid_summer() {
+        let date = NaiveDate::from_ymd_opt(2025, 7, 1).unwrap();
+        let status = Term::get_status_for_date(date);
+        assert!(
+            matches!(status, TermPoint::InTerm { current } if current.season == Season::Summer)
+        );
+    }
+
+    #[test]
+    fn test_status_mid_fall() {
+        let date = NaiveDate::from_ymd_opt(2025, 10, 15).unwrap();
+        let status = Term::get_status_for_date(date);
+        assert!(matches!(status, TermPoint::InTerm { current } if current.season == Season::Fall));
+    }
+
+    #[test]
+    fn test_status_between_fall_and_spring() {
+        let date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        let status = Term::get_status_for_date(date);
+        assert!(
+            matches!(status, TermPoint::BetweenTerms { next } if next.season == Season::Spring)
+        );
+    }
+
+    #[test]
+    fn test_status_between_spring_and_summer() {
+        let date = NaiveDate::from_ymd_opt(2025, 5, 15).unwrap();
+        let status = Term::get_status_for_date(date);
+        assert!(
+            matches!(status, TermPoint::BetweenTerms { next } if next.season == Season::Summer)
+        );
+    }
+
+    #[test]
+    fn test_status_between_summer_and_fall() {
+        let date = NaiveDate::from_ymd_opt(2025, 8, 16).unwrap();
+        let status = Term::get_status_for_date(date);
+        assert!(matches!(status, TermPoint::BetweenTerms { next } if next.season == Season::Fall));
+    }
+
+    #[test]
+    fn test_status_after_fall_end() {
+        let date = NaiveDate::from_ymd_opt(2025, 12, 15).unwrap();
+        let status = Term::get_status_for_date(date);
+        assert!(
+            matches!(status, TermPoint::BetweenTerms { next } if next.season == Season::Spring)
+        );
+        // Year should roll over: fall 2025 ends → next spring is 2026
+        let next_term = status.inner();
+        assert_eq!(next_term.year, 2026);
+    }
+
+    // --- TermPoint::inner ---
+
+    #[test]
+    fn test_term_point_inner() {
+        let in_term = TermPoint::InTerm {
+            current: Term {
+                year: 2025,
+                season: Season::Fall,
+            },
+        };
+        assert_eq!(
+            in_term.inner(),
+            &Term {
+                year: 2025,
+                season: Season::Fall
+            }
+        );
+
+        let between = TermPoint::BetweenTerms {
+            next: Term {
+                year: 2026,
+                season: Season::Spring,
+            },
+        };
+        assert_eq!(
+            between.inner(),
+            &Term {
+                year: 2026,
+                season: Season::Spring
+            }
+        );
+    }
+}

@@ -101,6 +101,105 @@ impl BannerSession {
     pub fn been_used(&self) -> bool {
         self.last_activity.is_some()
     }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_created_at(
+        unique_session_id: &str,
+        jsessionid: &str,
+        ssb_cookie: &str,
+        created_at: Instant,
+    ) -> Self {
+        Self {
+            unique_session_id: unique_session_id.to_string(),
+            created_at,
+            last_activity: None,
+            jsessionid: jsessionid.to_string(),
+            ssb_cookie: ssb_cookie.to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_session_returns_ok() {
+        let session = BannerSession::new("sess-1", "JSID123", "SSB456");
+        assert!(session.is_ok());
+        assert_eq!(session.unwrap().id(), "sess-1");
+    }
+
+    #[test]
+    fn test_fresh_session_not_expired() {
+        let session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        assert!(!session.is_expired());
+    }
+
+    #[test]
+    fn test_fresh_session_not_been_used() {
+        let session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        assert!(!session.been_used());
+    }
+
+    #[test]
+    fn test_touch_marks_used() {
+        let mut session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        session.touch();
+        assert!(session.been_used());
+    }
+
+    #[test]
+    fn test_touched_session_not_expired() {
+        let mut session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        session.touch();
+        assert!(!session.is_expired());
+    }
+
+    #[test]
+    fn test_cookie_format() {
+        let session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        assert_eq!(session.cookie(), "JSESSIONID=JSID123; SSB_COOKIE=SSB456");
+    }
+
+    #[test]
+    fn test_id_returns_unique_session_id() {
+        let session = BannerSession::new("my-unique-id", "JSID123", "SSB456").unwrap();
+        assert_eq!(session.id(), "my-unique-id");
+    }
+
+    #[test]
+    fn test_expired_session() {
+        let session = BannerSession::new_with_created_at(
+            "sess-old",
+            "JSID123",
+            "SSB456",
+            Instant::now() - Duration::from_secs(26 * 60),
+        );
+        assert!(session.is_expired());
+    }
+
+    #[test]
+    fn test_not_quite_expired_session() {
+        let session = BannerSession::new_with_created_at(
+            "sess-recent",
+            "JSID123",
+            "SSB456",
+            Instant::now() - Duration::from_secs(24 * 60),
+        );
+        assert!(!session.is_expired());
+    }
+
+    #[test]
+    fn test_session_at_expiry_boundary() {
+        let session = BannerSession::new_with_created_at(
+            "sess-boundary",
+            "JSID123",
+            "SSB456",
+            Instant::now() - Duration::from_secs(25 * 60 + 1),
+        );
+        assert!(session.is_expired());
+    }
 }
 
 /// A smart pointer that returns a BannerSession to the pool when dropped.

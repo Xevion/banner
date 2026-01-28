@@ -85,3 +85,126 @@ pub type SharedRateLimiter = Arc<BannerRateLimiter>;
 pub fn create_shared_rate_limiter(config: Option<RateLimitingConfig>) -> SharedRateLimiter {
     Arc::new(BannerRateLimiter::new(config.unwrap_or_default()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_with_default_config() {
+        let _limiter = BannerRateLimiter::new(RateLimitingConfig::default());
+    }
+
+    #[test]
+    fn test_new_with_custom_config() {
+        let config = RateLimitingConfig {
+            session_rpm: 10,
+            search_rpm: 30,
+            metadata_rpm: 20,
+            reset_rpm: 15,
+            burst_allowance: 5,
+        };
+        let _limiter = BannerRateLimiter::new(config);
+    }
+
+    #[test]
+    fn test_new_with_minimum_valid_values() {
+        let config = RateLimitingConfig {
+            session_rpm: 1,
+            search_rpm: 1,
+            metadata_rpm: 1,
+            reset_rpm: 1,
+            burst_allowance: 1,
+        };
+        let _limiter = BannerRateLimiter::new(config);
+    }
+
+    #[test]
+    fn test_new_with_high_rpm_values() {
+        let config = RateLimitingConfig {
+            session_rpm: 10000,
+            search_rpm: 10000,
+            metadata_rpm: 10000,
+            reset_rpm: 10000,
+            burst_allowance: 1,
+        };
+        let _limiter = BannerRateLimiter::new(config);
+    }
+
+    #[test]
+    fn test_default_impl() {
+        let _limiter = BannerRateLimiter::default();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_new_panics_on_zero_session_rpm() {
+        let config = RateLimitingConfig {
+            session_rpm: 0,
+            ..RateLimitingConfig::default()
+        };
+        let _limiter = BannerRateLimiter::new(config);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_new_panics_on_zero_search_rpm() {
+        let config = RateLimitingConfig {
+            search_rpm: 0,
+            ..RateLimitingConfig::default()
+        };
+        let _limiter = BannerRateLimiter::new(config);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_new_panics_on_zero_metadata_rpm() {
+        let config = RateLimitingConfig {
+            metadata_rpm: 0,
+            ..RateLimitingConfig::default()
+        };
+        let _limiter = BannerRateLimiter::new(config);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_new_panics_on_zero_reset_rpm() {
+        let config = RateLimitingConfig {
+            reset_rpm: 0,
+            ..RateLimitingConfig::default()
+        };
+        let _limiter = BannerRateLimiter::new(config);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_new_panics_on_zero_burst_allowance() {
+        let config = RateLimitingConfig {
+            burst_allowance: 0,
+            ..RateLimitingConfig::default()
+        };
+        let _limiter = BannerRateLimiter::new(config);
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_permission_completes() {
+        let limiter = BannerRateLimiter::default();
+        let timeout_duration = std::time::Duration::from_secs(1);
+
+        for request_type in [
+            RequestType::Session,
+            RequestType::Search,
+            RequestType::Metadata,
+            RequestType::Reset,
+        ] {
+            let result =
+                tokio::time::timeout(timeout_duration, limiter.wait_for_permission(request_type))
+                    .await;
+            assert!(
+                result.is_ok(),
+                "wait_for_permission timed out for {:?}",
+                request_type
+            );
+        }
+    }
+}

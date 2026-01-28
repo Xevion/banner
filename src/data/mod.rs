@@ -2,3 +2,4 @@
 
 pub mod batch;
 pub mod models;
+pub mod scrape_jobs;
