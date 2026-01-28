@@ -276,6 +276,190 @@ fn format_time_parameter(duration: Duration) -> (String, String, String) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_defaults() {
+        let q = SearchQuery::new();
+        assert_eq!(q.get_max_results(), 8);
+        assert!(q.get_subject().is_none());
+        let params = q.to_params();
+        assert_eq!(params.get("pageMaxSize").unwrap(), "8");
+        assert_eq!(params.get("pageOffset").unwrap(), "0");
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_subject_param() {
+        let params = SearchQuery::new().subject("CS").to_params();
+        assert_eq!(params.get("txt_subject").unwrap(), "CS");
+    }
+
+    #[test]
+    fn test_title_trims_whitespace() {
+        let params = SearchQuery::new().title("  Intro to CS  ").to_params();
+        assert_eq!(params.get("txt_courseTitle").unwrap(), "Intro to CS");
+    }
+
+    #[test]
+    fn test_crn_param() {
+        let params = SearchQuery::new()
+            .course_reference_number("12345")
+            .to_params();
+        assert_eq!(params.get("txt_courseReferenceNumber").unwrap(), "12345");
+    }
+
+    #[test]
+    fn test_keywords_joined_with_spaces() {
+        let params = SearchQuery::new()
+            .keyword("data")
+            .keyword("science")
+            .to_params();
+        assert_eq!(params.get("txt_keywordlike").unwrap(), "data science");
+    }
+
+    #[test]
+    fn test_keywords_vec() {
+        let params = SearchQuery::new()
+            .keywords(vec!["machine".into(), "learning".into()])
+            .to_params();
+        assert_eq!(params.get("txt_keywordlike").unwrap(), "machine learning");
+    }
+
+    #[test]
+    fn test_open_only() {
+        let params = SearchQuery::new().open_only(true).to_params();
+        assert_eq!(params.get("chk_open_only").unwrap(), "true");
+
+        // open_only(false) still sets the param (it's `.is_some()` check)
+        let params2 = SearchQuery::new().open_only(false).to_params();
+        assert_eq!(params2.get("chk_open_only").unwrap(), "true");
+    }
+
+    #[test]
+    fn test_credits_range() {
+        let params = SearchQuery::new().credits(3, 6).to_params();
+        assert_eq!(params.get("txt_credithourlow").unwrap(), "3");
+        assert_eq!(params.get("txt_credithourhigh").unwrap(), "6");
+    }
+
+    #[test]
+    fn test_course_number_range() {
+        let params = SearchQuery::new().course_numbers(3000, 3999).to_params();
+        assert_eq!(params.get("txt_course_number_range").unwrap(), "3000");
+        assert_eq!(params.get("txt_course_number_range_to").unwrap(), "3999");
+    }
+
+    #[test]
+    fn test_pagination() {
+        let params = SearchQuery::new().offset(20).max_results(10).to_params();
+        assert_eq!(params.get("pageOffset").unwrap(), "20");
+        assert_eq!(params.get("pageMaxSize").unwrap(), "10");
+    }
+
+    #[test]
+    fn test_format_time_9am() {
+        let (h, m, mer) = format_time_parameter(Duration::from_secs(9 * 3600));
+        assert_eq!(h, "9");
+        assert_eq!(m, "0");
+        assert_eq!(mer, "AM");
+    }
+
+    #[test]
+    fn test_format_time_noon() {
+        let (h, m, mer) = format_time_parameter(Duration::from_secs(12 * 3600));
+        assert_eq!(h, "12");
+        assert_eq!(m, "0");
+        assert_eq!(mer, "PM");
+    }
+
+    #[test]
+    fn test_format_time_1pm() {
+        let (h, m, mer) = format_time_parameter(Duration::from_secs(13 * 3600));
+        assert_eq!(h, "1");
+        assert_eq!(m, "0");
+        assert_eq!(mer, "PM");
+    }
+
+    #[test]
+    fn test_format_time_930am() {
+        let (h, m, mer) = format_time_parameter(Duration::from_secs(9 * 3600 + 30 * 60));
+        assert_eq!(h, "9");
+        assert_eq!(m, "30");
+        assert_eq!(mer, "AM");
+    }
+
+    #[test]
+    fn test_format_time_midnight() {
+        let (h, m, mer) = format_time_parameter(Duration::from_secs(0));
+        assert_eq!(h, "0");
+        assert_eq!(m, "0");
+        assert_eq!(mer, "AM");
+    }
+
+    #[test]
+    fn test_time_params_in_query() {
+        let params = SearchQuery::new()
+            .start_time(Duration::from_secs(9 * 3600))
+            .end_time(Duration::from_secs(17 * 3600))
+            .to_params();
+        assert_eq!(params.get("select_start_hour").unwrap(), "9");
+        assert_eq!(params.get("select_start_ampm").unwrap(), "AM");
+        assert_eq!(params.get("select_end_hour").unwrap(), "5");
+        assert_eq!(params.get("select_end_ampm").unwrap(), "PM");
+    }
+
+    #[test]
+    fn test_multi_value_params() {
+        let params = SearchQuery::new()
+            .campus(vec!["MAIN".into(), "DT".into()])
+            .attributes(vec!["HONORS".into()])
+            .instructor(vec![1001, 1002])
+            .to_params();
+        assert_eq!(params.get("txt_campus").unwrap(), "MAIN,DT");
+        assert_eq!(params.get("txt_attribute").unwrap(), "HONORS");
+        assert_eq!(params.get("txt_instructor").unwrap(), "1001,1002");
+    }
+
+    #[test]
+    fn test_display_minimal() {
+        let display = SearchQuery::new().to_string();
+        assert_eq!(display, "offset=0, maxResults=8");
+    }
+
+    #[test]
+    fn test_display_with_fields() {
+        let display = SearchQuery::new()
+            .subject("CS")
+            .open_only(true)
+            .max_results(10)
+            .to_string();
+        assert!(display.contains("subject=CS"));
+        assert!(display.contains("openOnly=true"));
+        assert!(display.contains("maxResults=10"));
+    }
+
+    #[test]
+    fn test_full_query_param_count() {
+        let params = SearchQuery::new()
+            .subject("CS")
+            .title("Intro")
+            .course_reference_number("12345")
+            .keyword("programming")
+            .open_only(true)
+            .credits(3, 4)
+            .course_numbers(1000, 1999)
+            .offset(0)
+            .max_results(25)
+            .to_params();
+        // subject, title, crn, keyword, open_only, min_credits, max_credits,
+        // course_number_range, course_number_range_to, pageOffset, pageMaxSize = 11
+        assert_eq!(params.len(), 11);
+    }
+}
+
 impl std::fmt::Display for SearchQuery {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut parts = Vec::new();

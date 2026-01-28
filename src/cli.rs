@@ -102,3 +102,79 @@ const DEFAULT_TRACING_FORMAT: TracingFormat = TracingFormat::Json;
 fn default_tracing_format() -> TracingFormat {
     DEFAULT_TRACING_FORMAT
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args_with_services(
+        services: Option<Vec<ServiceName>>,
+        disable: Option<Vec<ServiceName>>,
+    ) -> Args {
+        Args {
+            tracing: TracingFormat::Pretty,
+            services,
+            disable_services: disable,
+        }
+    }
+
+    #[test]
+    fn test_default_enables_all_services() {
+        let result = determine_enabled_services(&args_with_services(None, None)).unwrap();
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn test_explicit_services_only_those() {
+        let result =
+            determine_enabled_services(&args_with_services(Some(vec![ServiceName::Web]), None))
+                .unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].as_str(), "web");
+    }
+
+    #[test]
+    fn test_disable_bot_leaves_web_and_scraper() {
+        let result =
+            determine_enabled_services(&args_with_services(None, Some(vec![ServiceName::Bot])))
+                .unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().all(|s| s.as_str() != "bot"));
+    }
+
+    #[test]
+    fn test_disable_all_leaves_empty() {
+        let result = determine_enabled_services(&args_with_services(
+            None,
+            Some(vec![
+                ServiceName::Bot,
+                ServiceName::Web,
+                ServiceName::Scraper,
+            ]),
+        ))
+        .unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_both_specified_returns_error() {
+        let result = determine_enabled_services(&args_with_services(
+            Some(vec![ServiceName::Web]),
+            Some(vec![ServiceName::Bot]),
+        ));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_service_name_as_str() {
+        assert_eq!(ServiceName::Bot.as_str(), "bot");
+        assert_eq!(ServiceName::Web.as_str(), "web");
+        assert_eq!(ServiceName::Scraper.as_str(), "scraper");
+    }
+
+    #[test]
+    fn test_service_name_all() {
+        let all = ServiceName::all();
+        assert_eq!(all.len(), 3);
+    }
+}

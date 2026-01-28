@@ -209,3 +209,101 @@ where
 
     deserializer.deserialize_any(DurationVisitor)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    struct DurationWrapper {
+        #[serde(deserialize_with = "deserialize_duration")]
+        value: Duration,
+    }
+
+    fn parse(json: &str) -> Result<Duration, String> {
+        serde_json::from_str::<DurationWrapper>(json)
+            .map(|w| w.value)
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn test_duration_from_integer_seconds() {
+        let d = parse(r#"{"value": 30}"#).unwrap();
+        assert_eq!(d, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_duration_from_string_seconds() {
+        let d = parse(r#"{"value": "30s"}"#).unwrap();
+        assert_eq!(d, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_duration_from_string_minutes() {
+        let d = parse(r#"{"value": "2m"}"#).unwrap();
+        assert_eq!(d, Duration::from_secs(120));
+    }
+
+    #[test]
+    fn test_duration_from_string_milliseconds() {
+        let d = parse(r#"{"value": "1500ms"}"#).unwrap();
+        assert_eq!(d, Duration::from_millis(1500));
+    }
+
+    #[test]
+    fn test_duration_from_string_with_space() {
+        let d = parse(r#"{"value": "2 m"}"#).unwrap();
+        assert_eq!(d, Duration::from_secs(120));
+    }
+
+    #[test]
+    fn test_duration_from_string_multiple_units() {
+        let d = parse(r#"{"value": "1m 30s"}"#).unwrap();
+        assert_eq!(d, Duration::from_secs(90));
+    }
+
+    #[test]
+    fn test_duration_from_bare_number_string() {
+        let d = parse(r#"{"value": "45"}"#).unwrap();
+        assert_eq!(d, Duration::from_secs(45));
+    }
+
+    #[test]
+    fn test_duration_zero() {
+        let d = parse(r#"{"value": 0}"#).unwrap();
+        assert_eq!(d, Duration::from_secs(0));
+    }
+
+    #[test]
+    fn test_duration_negative_rejected() {
+        let err = parse(r#"{"value": -5}"#).unwrap_err();
+        assert!(err.contains("negative"), "expected negative error: {err}");
+    }
+
+    #[test]
+    fn test_duration_invalid_string_rejected() {
+        let err = parse(r#"{"value": "notaduration"}"#).unwrap_err();
+        assert!(
+            err.contains("Invalid duration"),
+            "expected invalid format error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_default_config_values() {
+        assert_eq!(default_port(), 8080);
+        assert_eq!(default_shutdown_timeout(), Duration::from_secs(8));
+        assert_eq!(default_log_level(), "info");
+    }
+
+    #[test]
+    fn test_default_rate_limiting() {
+        let rl = default_rate_limiting();
+        assert_eq!(rl.session_rpm, 6);
+        assert_eq!(rl.search_rpm, 30);
+        assert_eq!(rl.metadata_rpm, 20);
+        assert_eq!(rl.reset_rpm, 10);
+        assert_eq!(rl.burst_allowance, 3);
+    }
+}

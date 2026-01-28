@@ -1,3 +1,4 @@
+set dotenv-load
 default_services := "bot,web,scraper"
 
 default:
@@ -10,6 +11,28 @@ check:
     cargo nextest run
     bun run --cwd web typecheck
     bun run --cwd web lint
+    bun run --cwd web test --run
+
+# Run all tests (Rust + frontend)
+test: test-rust test-web
+
+# Run only Rust tests
+test-rust *ARGS:
+    cargo nextest run {{ARGS}}
+
+# Run only frontend tests
+test-web:
+    bun run --cwd web test --run
+
+# Quick check: clippy + tests only (skips formatting)
+check-quick:
+    cargo clippy --all-features -- --deny warnings
+    cargo nextest run
+    bun run --cwd web typecheck
+
+# Run the Banner API search demo (hits live UTSA API, ~20s)
+search *ARGS:
+    cargo run -q --bin search -- {{ARGS}}
 
 # Format all Rust and TypeScript code
 format:
@@ -117,3 +140,58 @@ dev-build *ARGS='--services web --tracing pretty': build-frontend
 # Auto-reloading development build: Vite frontend + backend (no embedded assets, proxies to Vite)
 [parallel]
 dev *ARGS='--services web,bot': frontend (backend-dev ARGS)
+
+# Smoke test: start web server, hit API endpoints, verify responses
+[script("bash")]
+test-smoke port="18080":
+    set -euo pipefail
+    PORT={{port}}
+
+    cleanup() { kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null; }
+
+    # Start server in background
+    PORT=$PORT cargo run -q --no-default-features -- --services web --tracing json &
+    SERVER_PID=$!
+    trap cleanup EXIT
+
+    # Wait for server to be ready (up to 15s)
+    for i in $(seq 1 30); do
+        if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then break; fi
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then echo "FAIL: server exited early"; exit 1; fi
+        sleep 0.5
+    done
+
+    PASS=0; FAIL=0
+    check() {
+        local label="$1" url="$2" expected="$3"
+        body=$(curl -sf "$url") || { echo "FAIL: $label - request failed"; FAIL=$((FAIL+1)); return; }
+        if echo "$body" | grep -q "$expected"; then
+            echo "PASS: $label"
+            PASS=$((PASS+1))
+        else
+            echo "FAIL: $label - expected '$expected' in: $body"
+            FAIL=$((FAIL+1))
+        fi
+    }
+
+    check "GET /api/health" "http://localhost:$PORT/api/health" '"status":"healthy"'
+    check "GET /api/status" "http://localhost:$PORT/api/status" '"version"'
+    check "GET /api/metrics" "http://localhost:$PORT/api/metrics" '"banner_api"'
+
+    # Test 404
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/nonexistent")
+    if [ "$STATUS" = "404" ]; then
+        echo "PASS: 404 on unknown route"
+        PASS=$((PASS+1))
+    else
+        echo "FAIL: expected 404, got $STATUS"
+        FAIL=$((FAIL+1))
+    fi
+
+    echo ""
+    echo "Results: $PASS passed, $FAIL failed"
+    [ "$FAIL" -eq 0 ]
+
+alias b := bun
+bun *ARGS:
+	cd web && bun {{ ARGS }}
