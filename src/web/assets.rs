@@ -58,8 +58,7 @@ impl AssetMetadata {
 
         // ETags generated from u64 hex should be 16 characters
         etag.len() == 16
-        // Parse the hexadecimal, compare if it matches
-            && etag.parse::<u64>()
+            && u64::from_str_radix(etag, 16)
                 .map(|parsed| parsed == self.hash.0)
                 .unwrap_or(false)
     }

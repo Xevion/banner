@@ -6,7 +6,6 @@ use crate::services::bot::BotService;
 use crate::services::manager::ServiceManager;
 use crate::services::web::WebService;
 use crate::state::AppState;
-use crate::web::routes::BannerState;
 use figment::value::UncasedStr;
 use figment::{Figment, providers::Env};
 use sqlx::postgres::PgPoolOptions;
@@ -21,7 +20,6 @@ pub struct App {
     db_pool: sqlx::PgPool,
     banner_api: Arc<BannerApi>,
     app_state: AppState,
-    banner_state: BannerState,
     service_manager: ServiceManager,
 }
 
@@ -73,22 +71,18 @@ impl App {
         // Create BannerApi and AppState
         let banner_api = BannerApi::new_with_config(
             config.banner_base_url.clone(),
-            config.rate_limiting.clone().into(),
+            config.rate_limiting.clone(),
         )
         .expect("Failed to create BannerApi");
 
         let banner_api_arc = Arc::new(banner_api);
         let app_state = AppState::new(banner_api_arc.clone(), db_pool.clone());
 
-        // Create BannerState for web service
-        let banner_state = BannerState {};
-
         Ok(App {
             config,
             db_pool,
             banner_api: banner_api_arc,
             app_state,
-            banner_state,
             service_manager: ServiceManager::new(),
         })
     }
@@ -97,8 +91,7 @@ impl App {
     pub fn setup_services(&mut self, services: &[ServiceName]) -> Result<(), anyhow::Error> {
         // Register enabled services with the manager
         if services.contains(&ServiceName::Web) {
-            let web_service =
-                Box::new(WebService::new(self.config.port, self.banner_state.clone()));
+            let web_service = Box::new(WebService::new(self.config.port));
             self.service_manager
                 .register_service(ServiceName::Web.as_str(), web_service);
         }

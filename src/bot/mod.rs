@@ -14,7 +14,6 @@ pub fn get_commands() -> Vec<poise::Command<Data, Error>> {
     vec![
         commands::search(),
         commands::terms(),
-        commands::time(),
         commands::ics(),
         commands::gcal(),
     ]

@@ -125,7 +125,13 @@ impl BotService {
                 tokio::select! {
                     _ = interval.tick() => {
                         // Get the course count, update the activity if it has changed/hasn't been set this session
-                        let course_count = app_state.get_course_count().await.unwrap();
+                        let course_count = match app_state.get_course_count().await {
+                            Ok(count) => count,
+                            Err(e) => {
+                                warn!(error = %e, "Failed to fetch course count for status update");
+                                continue;
+                            }
+                        };
                         if previous_course_count.is_none() || previous_course_count != Some(course_count) {
                             ctx.set_activity(Some(ActivityData::playing(format!(
                                 "Querying {:} classes",

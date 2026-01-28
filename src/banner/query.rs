@@ -191,7 +191,7 @@ impl SearchQuery {
             params.insert("txt_keywordlike".to_string(), keywords.join(" "));
         }
 
-        if self.open_only.is_some() {
+        if self.open_only == Some(true) {
             params.insert("chk_open_only".to_string(), "true".to_string());
         }
 
@@ -333,9 +333,9 @@ mod tests {
         let params = SearchQuery::new().open_only(true).to_params();
         assert_eq!(params.get("chk_open_only").unwrap(), "true");
 
-        // open_only(false) still sets the param (it's `.is_some()` check)
+        // open_only(false) should NOT set the param
         let params2 = SearchQuery::new().open_only(false).to_params();
-        assert_eq!(params2.get("chk_open_only").unwrap(), "true");
+        assert!(params2.get("chk_open_only").is_none());
     }
 
     #[test]
@@ -473,7 +473,7 @@ impl std::fmt::Display for SearchQuery {
         if let Some(ref keywords) = self.keywords {
             parts.push(format!("keywords={}", keywords.join(" ")));
         }
-        if self.open_only.is_some() {
+        if self.open_only == Some(true) {
             parts.push("openOnly=true".to_string());
         }
         if let Some(ref term_part) = self.term_part {

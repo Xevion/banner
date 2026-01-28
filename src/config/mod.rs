@@ -70,7 +70,7 @@ fn default_banner_base_url() -> String {
 }
 
 /// Rate limiting configuration for Banner API requests
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RateLimitingConfig {
     /// Requests per minute for session operations (very conservative)
     #[serde(default = "default_session_rpm")]
@@ -91,12 +91,18 @@ pub struct RateLimitingConfig {
 
 /// Default rate limiting configuration
 fn default_rate_limiting() -> RateLimitingConfig {
-    RateLimitingConfig {
-        session_rpm: default_session_rpm(),
-        search_rpm: default_search_rpm(),
-        metadata_rpm: default_metadata_rpm(),
-        reset_rpm: default_reset_rpm(),
-        burst_allowance: default_burst_allowance(),
+    RateLimitingConfig::default()
+}
+
+impl Default for RateLimitingConfig {
+    fn default() -> Self {
+        Self {
+            session_rpm: default_session_rpm(),
+            search_rpm: default_search_rpm(),
+            metadata_rpm: default_metadata_rpm(),
+            reset_rpm: default_reset_rpm(),
+            burst_allowance: default_burst_allowance(),
+        }
     }
 }
 

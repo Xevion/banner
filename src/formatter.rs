@@ -13,12 +13,6 @@ use tracing_subscriber::registry::LookupSpan;
 use yansi::Paint;
 
 /// Cached format description for timestamps
-/// Uses 3 subsecond digits on Emscripten, 5 otherwise for better performance
-#[cfg(target_os = "emscripten")]
-const TIMESTAMP_FORMAT: &[FormatItem<'static>] =
-    format_description!("[hour]:[minute]:[second].[subsecond digits:3]");
-
-#[cfg(not(target_os = "emscripten"))]
 const TIMESTAMP_FORMAT: &[FormatItem<'static>] =
     format_description!("[hour]:[minute]:[second].[subsecond digits:5]");
 

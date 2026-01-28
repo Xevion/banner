@@ -11,7 +11,7 @@ use once_cell::sync::Lazy;
 use rand::distr::{Alphanumeric, SampleString};
 use reqwest_middleware::ClientWithMiddleware;
 use std::collections::{HashMap, VecDeque};
-use std::num::NonZeroU32;
+
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -63,7 +63,7 @@ pub fn nonce() -> String {
 
 impl BannerSession {
     /// Creates a new session
-    pub async fn new(unique_session_id: &str, jsessionid: &str, ssb_cookie: &str) -> Result<Self> {
+    pub fn new(unique_session_id: &str, jsessionid: &str, ssb_cookie: &str) -> Result<Self> {
         let now = Instant::now();
 
         Ok(Self {
@@ -76,8 +76,8 @@ impl BannerSession {
     }
 
     /// Returns the unique session ID
-    pub fn id(&self) -> String {
-        self.unique_session_id.clone()
+    pub fn id(&self) -> &str {
+        &self.unique_session_id
     }
 
     /// Updates the last activity timestamp
@@ -312,16 +312,12 @@ impl SessionPool {
             })
             .collect::<HashMap<String, String>>();
 
-        if !cookies.contains_key("JSESSIONID") || !cookies.contains_key("SSB_COOKIE") {
-            return Err(anyhow::anyhow!("Failed to get cookies"));
-        }
-
         let jsessionid = cookies
             .get("JSESSIONID")
-            .ok_or_else(|| anyhow::anyhow!("JSESSIONID cookie missing after validation"))?;
+            .ok_or_else(|| anyhow::anyhow!("JSESSIONID cookie missing"))?;
         let ssb_cookie = cookies
             .get("SSB_COOKIE")
-            .ok_or_else(|| anyhow::anyhow!("SSB_COOKIE cookie missing after validation"))?;
+            .ok_or_else(|| anyhow::anyhow!("SSB_COOKIE cookie missing"))?;
         let cookie_header = format!("JSESSIONID={}; SSB_COOKIE={}", jsessionid, ssb_cookie);
 
         self.http
@@ -340,7 +336,7 @@ impl SessionPool {
             .await?
             .error_for_status()
             .context("Failed to get term selection page")?;
-        // TOOD: Validate success
+        // TODO: Validate success
 
         let terms = self.get_terms("", 1, 10).await?;
         if !terms.iter().any(|t| t.code == term.to_string()) {
@@ -359,7 +355,7 @@ impl SessionPool {
         self.select_term(&term.to_string(), &unique_session_id, &cookie_header)
             .await?;
 
-        BannerSession::new(&unique_session_id, jsessionid, ssb_cookie).await
+        BannerSession::new(&unique_session_id, jsessionid, ssb_cookie)
     }
 
     /// Retrieves a list of terms from the Banner API.

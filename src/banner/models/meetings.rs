@@ -1,9 +1,39 @@
 use bitflags::{Flags, bitflags};
-use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc, Weekday};
+use extension_traits::extension;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{cmp::Ordering, collections::HashSet, fmt::Display, str::FromStr};
+use std::{cmp::Ordering, fmt::Display, str::FromStr};
 
 use super::terms::Term;
+
+#[extension(pub trait WeekdayExt)]
+impl Weekday {
+    /// Short two-letter representation (used for ICS generation)
+    fn to_short_string(self) -> &'static str {
+        match self {
+            Weekday::Mon => "Mo",
+            Weekday::Tue => "Tu",
+            Weekday::Wed => "We",
+            Weekday::Thu => "Th",
+            Weekday::Fri => "Fr",
+            Weekday::Sat => "Sa",
+            Weekday::Sun => "Su",
+        }
+    }
+
+    /// Full day name
+    fn to_full_string(self) -> &'static str {
+        match self {
+            Weekday::Mon => "Monday",
+            Weekday::Tue => "Tuesday",
+            Weekday::Wed => "Wednesday",
+            Weekday::Thu => "Thursday",
+            Weekday::Fri => "Friday",
+            Weekday::Sat => "Saturday",
+            Weekday::Sun => "Sunday",
+        }
+    }
+}
 
 /// Deserialize a string field into a u32
 fn deserialize_string_to_u32<'de, D>(deserializer: D) -> Result<u32, D::Error>
@@ -114,69 +144,33 @@ impl MeetingDays {
     }
 }
 
+impl Ord for MeetingDays {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.bits().cmp(&other.bits())
+    }
+}
+
 impl PartialOrd for MeetingDays {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.bits().cmp(&other.bits()))
+        Some(self.cmp(other))
     }
 }
 
-impl From<DayOfWeek> for MeetingDays {
-    fn from(day: DayOfWeek) -> Self {
+impl From<Weekday> for MeetingDays {
+    fn from(day: Weekday) -> Self {
         match day {
-            DayOfWeek::Monday => MeetingDays::Monday,
-            DayOfWeek::Tuesday => MeetingDays::Tuesday,
-            DayOfWeek::Wednesday => MeetingDays::Wednesday,
-            DayOfWeek::Thursday => MeetingDays::Thursday,
-            DayOfWeek::Friday => MeetingDays::Friday,
-            DayOfWeek::Saturday => MeetingDays::Saturday,
-            DayOfWeek::Sunday => MeetingDays::Sunday,
+            Weekday::Mon => MeetingDays::Monday,
+            Weekday::Tue => MeetingDays::Tuesday,
+            Weekday::Wed => MeetingDays::Wednesday,
+            Weekday::Thu => MeetingDays::Thursday,
+            Weekday::Fri => MeetingDays::Friday,
+            Weekday::Sat => MeetingDays::Saturday,
+            Weekday::Sun => MeetingDays::Sunday,
         }
     }
 }
 
-/// Days of the week for meeting schedules
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum DayOfWeek {
-    Monday,
-    Tuesday,
-    Wednesday,
-    Thursday,
-    Friday,
-    Saturday,
-    Sunday,
-}
-
-impl DayOfWeek {
-    /// Convert to short string representation
-    ///
-    /// Do not change these, these are used for ICS generation. Casing does not matter though.
-    pub fn to_short_string(self) -> &'static str {
-        match self {
-            DayOfWeek::Monday => "Mo",
-            DayOfWeek::Tuesday => "Tu",
-            DayOfWeek::Wednesday => "We",
-            DayOfWeek::Thursday => "Th",
-            DayOfWeek::Friday => "Fr",
-            DayOfWeek::Saturday => "Sa",
-            DayOfWeek::Sunday => "Su",
-        }
-    }
-
-    /// Convert to full string representation
-    pub fn to_full_string(self) -> &'static str {
-        match self {
-            DayOfWeek::Monday => "Monday",
-            DayOfWeek::Tuesday => "Tuesday",
-            DayOfWeek::Wednesday => "Wednesday",
-            DayOfWeek::Thursday => "Thursday",
-            DayOfWeek::Friday => "Friday",
-            DayOfWeek::Saturday => "Saturday",
-            DayOfWeek::Sunday => "Sunday",
-        }
-    }
-}
-
-impl TryFrom<MeetingDays> for DayOfWeek {
+impl TryFrom<MeetingDays> for Weekday {
     type Error = anyhow::Error;
 
     fn try_from(days: MeetingDays) -> Result<Self, Self::Error> {
@@ -187,13 +181,13 @@ impl TryFrom<MeetingDays> for DayOfWeek {
         let count = days.into_iter().count();
         if count == 1 {
             return Ok(match days {
-                MeetingDays::Monday => DayOfWeek::Monday,
-                MeetingDays::Tuesday => DayOfWeek::Tuesday,
-                MeetingDays::Wednesday => DayOfWeek::Wednesday,
-                MeetingDays::Thursday => DayOfWeek::Thursday,
-                MeetingDays::Friday => DayOfWeek::Friday,
-                MeetingDays::Saturday => DayOfWeek::Saturday,
-                MeetingDays::Sunday => DayOfWeek::Sunday,
+                MeetingDays::Monday => Weekday::Mon,
+                MeetingDays::Tuesday => Weekday::Tue,
+                MeetingDays::Wednesday => Weekday::Wed,
+                MeetingDays::Thursday => Weekday::Thu,
+                MeetingDays::Friday => Weekday::Fri,
+                MeetingDays::Saturday => Weekday::Sat,
+                MeetingDays::Sunday => Weekday::Sun,
                 _ => unreachable!(),
             });
         }
@@ -254,7 +248,12 @@ impl TimeRange {
         let minute = time.minute();
 
         let meridiem = if hour < 12 { "AM" } else { "PM" };
-        format!("{hour}:{minute:02}{meridiem}")
+        let display_hour = match hour {
+            0 => 12,
+            13..=23 => hour - 12,
+            _ => hour,
+        };
+        format!("{display_hour}:{minute:02}{meridiem}")
     }
 
     /// Get duration in minutes
@@ -365,24 +364,32 @@ pub enum MeetingLocation {
 impl MeetingLocation {
     /// Create from raw MeetingTime data
     pub fn from_meeting_time(meeting_time: &MeetingTime) -> Self {
-        if meeting_time.campus.is_none()
-            || meeting_time.building.is_none()
-            || meeting_time.building_description.is_none()
-            || meeting_time.room.is_none()
-            || meeting_time.campus_description.is_none()
-            || meeting_time
-                .campus_description
-                .eq(&Some("Internet".to_string()))
-        {
-            return MeetingLocation::Online;
-        }
+        if let (
+            Some(campus),
+            Some(campus_description),
+            Some(building),
+            Some(building_description),
+            Some(room),
+        ) = (
+            &meeting_time.campus,
+            &meeting_time.campus_description,
+            &meeting_time.building,
+            &meeting_time.building_description,
+            &meeting_time.room,
+        ) {
+            if campus_description == "Internet" {
+                return MeetingLocation::Online;
+            }
 
-        MeetingLocation::InPerson {
-            campus: meeting_time.campus.as_ref().unwrap().clone(),
-            campus_description: meeting_time.campus_description.as_ref().unwrap().clone(),
-            building: meeting_time.building.as_ref().unwrap().clone(),
-            building_description: meeting_time.building_description.as_ref().unwrap().clone(),
-            room: meeting_time.room.as_ref().unwrap().clone(),
+            MeetingLocation::InPerson {
+                campus: campus.clone(),
+                campus_description: campus_description.clone(),
+                building: building.clone(),
+                building_description: building_description.clone(),
+                room: room.clone(),
+            }
+        } else {
+            MeetingLocation::Online
         }
     }
 }
@@ -451,11 +458,11 @@ impl MeetingScheduleInfo {
         }
     }
 
-    /// Convert the meeting days bitset to a enum vector
-    pub fn days_of_week(&self) -> Vec<DayOfWeek> {
+    /// Convert the meeting days bitset to a weekday vector
+    pub fn days_of_week(&self) -> Vec<Weekday> {
         self.days
             .iter()
-            .map(|day| <MeetingDays as TryInto<DayOfWeek>>::try_into(day).unwrap())
+            .map(|day| <MeetingDays as TryInto<Weekday>>::try_into(day).unwrap())
             .collect()
     }
 
@@ -483,9 +490,9 @@ impl MeetingScheduleInfo {
             );
 
             if ambiguous {
-                |day: &DayOfWeek| day.to_short_string().to_string()
+                |day: &Weekday| day.to_short_string().to_string()
             } else {
-                |day: &DayOfWeek| day.to_short_string().chars().next().unwrap().to_string()
+                |day: &Weekday| day.to_short_string().chars().next().unwrap().to_string()
             }
         };
 
@@ -507,6 +514,19 @@ impl MeetingScheduleInfo {
                 campus, building_description, building, room
             ),
         }
+    }
+
+    /// Sort a slice of meeting schedule infos by start time, with stable fallback to day bits.
+    ///
+    /// Meetings with a time range sort before those without one.
+    /// Among meetings without a time range, ties break by day-of-week bits.
+    pub fn sort_by_start_time(meetings: &mut [MeetingScheduleInfo]) {
+        meetings.sort_unstable_by(|a, b| match (&a.time_range, &b.time_range) {
+            (Some(a_time), Some(b_time)) => a_time.start.cmp(&b_time.start),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.days.bits().cmp(&b.days.bits()),
+        });
     }
 
     /// Get the start and end date times for the meeting

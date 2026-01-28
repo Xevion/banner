@@ -1,5 +1,5 @@
 use super::Service;
-use crate::web::{BannerState, create_router};
+use crate::web::create_router;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
@@ -8,15 +8,13 @@ use tracing::{info, trace, warn};
 /// Web server service implementation
 pub struct WebService {
     port: u16,
-    banner_state: BannerState,
     shutdown_tx: Option<broadcast::Sender<()>>,
 }
 
 impl WebService {
-    pub fn new(port: u16, banner_state: BannerState) -> Self {
+    pub fn new(port: u16) -> Self {
         Self {
             port,
-            banner_state,
             shutdown_tx: None,
         }
     }
@@ -30,7 +28,7 @@ impl Service for WebService {
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
         // Create the main router with Banner API routes
-        let app = create_router(self.banner_state.clone());
+        let app = create_router();
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.port));
 

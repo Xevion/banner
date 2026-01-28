@@ -76,9 +76,3 @@ impl Course {
             .unwrap_or("Unknown")
     }
 }
-
-/// Class details (to be implemented)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClassDetails {
-    // TODO: Implement based on Banner API response
-}

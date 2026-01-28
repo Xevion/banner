@@ -1,32 +1,18 @@
 //! Main Banner API client implementation.
 
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::collections::HashMap;
 
 use crate::banner::{
-    BannerSession, SessionPool, create_shared_rate_limiter,
-    errors::BannerApiError,
-    json::parse_json_with_context,
-    middleware::TransparentMiddleware,
-    models::*,
-    nonce,
-    query::SearchQuery,
-    rate_limit_middleware::RateLimitMiddleware,
-    rate_limiter::{RateLimitConfig, SharedRateLimiter},
-    util::user_agent,
+    SessionPool, create_shared_rate_limiter, errors::BannerApiError, json::parse_json_with_context,
+    middleware::TransparentMiddleware, models::*, nonce, query::SearchQuery,
+    rate_limit_middleware::RateLimitMiddleware, util::user_agent,
 };
+use crate::config::RateLimitingConfig;
 use anyhow::{Context, Result, anyhow};
-use cookie::Cookie;
-use dashmap::DashMap;
 use http::HeaderValue;
-use reqwest::{Client, Request, Response};
+use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use serde_json;
-use tl;
-use tracing::{Level, Metadata, Span, debug, error, field::ValueSet, info, span, trace, warn};
+use tracing::debug;
 
 /// Main Banner API client.
 pub struct BannerApi {
@@ -39,11 +25,14 @@ pub struct BannerApi {
 impl BannerApi {
     /// Creates a new Banner API client.
     pub fn new(base_url: String) -> Result<Self> {
-        Self::new_with_config(base_url, RateLimitConfig::default())
+        Self::new_with_config(base_url, RateLimitingConfig::default())
     }
 
     /// Creates a new Banner API client with custom rate limiting configuration.
-    pub fn new_with_config(base_url: String, rate_limit_config: RateLimitConfig) -> Result<Self> {
+    pub fn new_with_config(
+        base_url: String,
+        rate_limit_config: RateLimitingConfig,
+    ) -> Result<Self> {
         let rate_limiter = create_shared_rate_limiter(Some(rate_limit_config));
 
         let http = ClientBuilder::new(
@@ -111,7 +100,7 @@ impl BannerApi {
 
         let session = self.sessions.acquire(term.parse()?).await?;
         let url = format!("{}/classSearch/{}", self.base_url, endpoint);
-        let params = self.build_list_params(search, term, offset, max_results, &session.id());
+        let params = self.build_list_params(search, term, offset, max_results, session.id());
 
         let response = self
             .http
@@ -179,7 +168,7 @@ impl BannerApi {
 
         session.touch();
 
-        let params = self.build_search_params(query, term, &session.id(), sort, sort_descending);
+        let params = self.build_search_params(query, term, session.id(), sort, sort_descending);
 
         debug!(
             term = term,
@@ -357,30 +346,5 @@ impl BannerApi {
         Ok(search_result
             .data
             .and_then(|courses| courses.into_iter().next()))
-    }
-
-    /// Gets course details (placeholder - needs implementation).
-    pub async fn get_course_details(&self, term: &str, crn: &str) -> Result<ClassDetails> {
-        let body = serde_json::json!({
-            "term": term,
-            "courseReferenceNumber": crn,
-            "first": "first"
-        });
-
-        let url = format!("{}/searchResults/getClassDetails", self.base_url);
-        let response = self
-            .http
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .context("Failed to get course details")?;
-
-        let details: ClassDetails = response
-            .json()
-            .await
-            .context("Failed to parse course details response")?;
-
-        Ok(details)
     }
 }

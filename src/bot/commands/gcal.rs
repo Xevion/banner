@@ -1,8 +1,8 @@
 //! Google Calendar command implementation.
 
-use crate::banner::{Course, DayOfWeek, MeetingScheduleInfo};
+use crate::banner::{Course, MeetingScheduleInfo};
 use crate::bot::{Context, Error, utils};
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Weekday};
 use std::collections::HashMap;
 use tracing::info;
 use url::Url;
@@ -39,25 +39,18 @@ pub async fn gcal(
         1.. => {
             // Sort meeting times by start time of their TimeRange
             let mut sorted_meeting_times = meeting_times.to_vec();
-            sorted_meeting_times.sort_unstable_by(|a, b| {
-                // Primary sort: by start time
-                match (&a.time_range, &b.time_range) {
-                    (Some(a_time), Some(b_time)) => a_time.start.cmp(&b_time.start),
-                    (Some(_), None) => std::cmp::Ordering::Less,
-                    (None, Some(_)) => std::cmp::Ordering::Greater,
-                    (None, None) => a.days.bits().cmp(&b.days.bits()),
-                }
-            });
+            MeetingScheduleInfo::sort_by_start_time(&mut sorted_meeting_times);
 
             let links = sorted_meeting_times
                 .iter()
                 .map(|m| {
                     let link = generate_gcal_url(&course, m)?;
+                    let days = m.days_string().unwrap_or_else(|| "TBA".to_string());
                     let detail = match &m.time_range {
                         Some(range) => {
-                            format!("{} {}", m.days_string().unwrap(), range.format_12hr())
+                            format!("{days} {}", range.format_12hr())
                         }
-                        None => m.days_string().unwrap(),
+                        None => days,
                     };
                     Ok(LinkDetail { link, detail })
                 })
@@ -105,7 +98,9 @@ fn generate_gcal_url(
         "CRN: {}\nInstructor: {}\nDays: {}",
         course.course_reference_number,
         instructor_name,
-        meeting_time.days_string().unwrap()
+        meeting_time
+            .days_string()
+            .unwrap_or_else(|| "TBA".to_string())
     );
 
     // The event location
@@ -133,13 +128,13 @@ fn generate_rrule(meeting_time: &MeetingScheduleInfo, end_date: NaiveDate) -> St
     let by_day = days_of_week
         .iter()
         .map(|day| match day {
-            DayOfWeek::Monday => "MO",
-            DayOfWeek::Tuesday => "TU",
-            DayOfWeek::Wednesday => "WE",
-            DayOfWeek::Thursday => "TH",
-            DayOfWeek::Friday => "FR",
-            DayOfWeek::Saturday => "SA",
-            DayOfWeek::Sunday => "SU",
+            Weekday::Mon => "MO",
+            Weekday::Tue => "TU",
+            Weekday::Wed => "WE",
+            Weekday::Thu => "TH",
+            Weekday::Fri => "FR",
+            Weekday::Sat => "SA",
+            Weekday::Sun => "SU",
         })
         .collect::<Vec<&str>>()
         .join(",");

@@ -3,7 +3,7 @@
 use axum::{
     Router,
     body::Body,
-    extract::{Request, State},
+    extract::Request,
     response::{Json, Response},
     routing::get,
 };
@@ -20,7 +20,7 @@ use std::{collections::BTreeMap, time::Duration};
 #[cfg(not(feature = "embed-assets"))]
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::{classify::ServerErrorsFailureClass, timeout::TimeoutLayer, trace::TraceLayer};
-use tracing::{Span, debug, info, warn};
+use tracing::{Span, debug, trace, warn};
 
 #[cfg(feature = "embed-assets")]
 use crate::web::assets::{WebAssets, get_asset_metadata_cached};
@@ -62,17 +62,12 @@ fn set_caching_headers(response: &mut Response, path: &str, etag: &str) {
     }
 }
 
-/// Shared application state for web server
-#[derive(Clone)]
-pub struct BannerState {}
-
 /// Creates the web server router
-pub fn create_router(state: BannerState) -> Router {
+pub fn create_router() -> Router {
     let api_router = Router::new()
         .route("/health", get(health))
         .route("/status", get(status))
-        .route("/metrics", get(metrics))
-        .with_state(state);
+        .route("/metrics", get(metrics));
 
     let mut router = Router::new().nest("/api", api_router);
 
@@ -215,7 +210,7 @@ async fn handle_spa_fallback_with_headers(uri: Uri, request_headers: HeaderMap) 
 
 /// Health check endpoint
 async fn health() -> Json<Value> {
-    info!("health check requested");
+    trace!("health check requested");
     Json(json!({
         "status": "healthy",
         "timestamp": chrono::Utc::now().to_rfc3339()
@@ -246,7 +241,7 @@ struct StatusResponse {
 }
 
 /// Status endpoint showing bot and system status
-async fn status(State(_state): State<BannerState>) -> Json<StatusResponse> {
+async fn status() -> Json<StatusResponse> {
     let mut services = BTreeMap::new();
 
     // Bot service status - hardcoded as disabled for now
@@ -297,7 +292,7 @@ async fn status(State(_state): State<BannerState>) -> Json<StatusResponse> {
 }
 
 /// Metrics endpoint for monitoring
-async fn metrics(State(_state): State<BannerState>) -> Json<Value> {
+async fn metrics() -> Json<Value> {
     // For now, return basic metrics structure
     Json(json!({
         "banner_api": {

@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 //! Banner API module for interacting with Ellucian Banner systems.
 //!
 //! This module provides functionality to:

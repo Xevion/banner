@@ -4,7 +4,11 @@ use crate::banner::{SearchQuery, Term};
 use crate::bot::{Context, Error};
 use anyhow::anyhow;
 use regex::Regex;
+use std::sync::LazyLock;
 use tracing::info;
+
+static RANGE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d{1,4})-(\d{1,4})?").unwrap());
+static WILDCARD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d+)(x+)").unwrap());
 
 /// Search for courses with various filters
 #[poise::command(slash_command, prefix_command)]
@@ -82,8 +86,7 @@ fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
 
     // Handle range format (e.g, "3000-3999")
     if input.contains('-') {
-        let re = Regex::new(r"(\d{1,4})-(\d{1,4})?").unwrap();
-        if let Some(captures) = re.captures(input) {
+        if let Some(captures) = RANGE_RE.captures(input) {
             let low: i32 = captures[1].parse()?;
             let high = if captures.get(2).is_some() {
                 captures[2].parse()?
@@ -110,8 +113,7 @@ fn parse_course_code(input: &str) -> Result<(i32, i32), Error> {
             return Err(anyhow!("Wildcard format must be exactly 4 characters"));
         }
 
-        let re = Regex::new(r"(\d+)(x+)").unwrap();
-        if let Some(captures) = re.captures(input) {
+        if let Some(captures) = WILDCARD_RE.captures(input) {
             let prefix: i32 = captures[1].parse()?;
             let x_count = captures[2].len();
 

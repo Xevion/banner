@@ -1,5 +1,6 @@
 //! Rate limiting for Banner API requests to prevent overwhelming the server.
 
+use crate::config::RateLimitingConfig;
 use governor::{
     Quota, RateLimiter,
     clock::DefaultClock,
@@ -22,38 +23,6 @@ pub enum RequestType {
     Reset,
 }
 
-/// Rate limiter configuration for different request types
-#[derive(Debug, Clone)]
-pub struct RateLimitConfig {
-    /// Requests per minute for session operations
-    pub session_rpm: u32,
-    /// Requests per minute for search operations
-    pub search_rpm: u32,
-    /// Requests per minute for metadata operations
-    pub metadata_rpm: u32,
-    /// Requests per minute for reset operations
-    pub reset_rpm: u32,
-    /// Burst allowance (extra requests allowed in short bursts)
-    pub burst_allowance: u32,
-}
-
-impl Default for RateLimitConfig {
-    fn default() -> Self {
-        Self {
-            // Very conservative for session creation
-            session_rpm: 6, // 1 every 10 seconds
-            // Moderate for search operations
-            search_rpm: 30, // 1 every 2 seconds
-            // Moderate for metadata
-            metadata_rpm: 20, // 1 every 3 seconds
-            // Low for resets
-            reset_rpm: 10, // 1 every 6 seconds
-            // Allow small bursts
-            burst_allowance: 3,
-        }
-    }
-}
-
 /// A rate limiter that manages different request types with different limits
 pub struct BannerRateLimiter {
     session_limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
@@ -64,7 +33,7 @@ pub struct BannerRateLimiter {
 
 impl BannerRateLimiter {
     /// Creates a new rate limiter with the given configuration
-    pub fn new(config: RateLimitConfig) -> Self {
+    pub fn new(config: RateLimitingConfig) -> Self {
         let session_quota = Quota::with_period(Duration::from_secs(60) / config.session_rpm)
             .unwrap()
             .allow_burst(NonZeroU32::new(config.burst_allowance).unwrap());
@@ -105,7 +74,7 @@ impl BannerRateLimiter {
 
 impl Default for BannerRateLimiter {
     fn default() -> Self {
-        Self::new(RateLimitConfig::default())
+        Self::new(RateLimitingConfig::default())
     }
 }
 
@@ -113,19 +82,6 @@ impl Default for BannerRateLimiter {
 pub type SharedRateLimiter = Arc<BannerRateLimiter>;
 
 /// Creates a new shared rate limiter with custom configuration
-pub fn create_shared_rate_limiter(config: Option<RateLimitConfig>) -> SharedRateLimiter {
+pub fn create_shared_rate_limiter(config: Option<RateLimitingConfig>) -> SharedRateLimiter {
     Arc::new(BannerRateLimiter::new(config.unwrap_or_default()))
-}
-
-/// Conversion from config module's RateLimitingConfig to this module's RateLimitConfig
-impl From<crate::config::RateLimitingConfig> for RateLimitConfig {
-    fn from(config: crate::config::RateLimitingConfig) -> Self {
-        Self {
-            session_rpm: config.session_rpm,
-            search_rpm: config.search_rpm,
-            metadata_rpm: config.metadata_rpm,
-            reset_rpm: config.reset_rpm,
-            burst_allowance: config.burst_allowance,
-        }
-    }
 }

@@ -1,6 +1,6 @@
 //! ICS command implementation for generating calendar files.
 
-use crate::banner::{Course, MeetingScheduleInfo};
+use crate::banner::{Course, MeetingDays, MeetingScheduleInfo, WeekdayExt};
 use crate::bot::{Context, Error, utils};
 use chrono::{Datelike, NaiveDate, Utc};
 use serenity::all::CreateAttachment;
@@ -61,7 +61,14 @@ impl Holiday {
     }
 }
 
-/// University holidays that should be excluded from class schedules
+/// University holidays excluded from class schedules.
+///
+/// WARNING: These dates are specific to the UTSA 2024-2025 academic calendar and must be
+/// updated each academic year. Many of these holidays fall on different dates annually
+/// (e.g., Labor Day is the first Monday of September, Thanksgiving is the fourth Thursday
+/// of November). Ideally these would be loaded from a configuration file or computed
+/// dynamically from federal/university calendar rules.
+// TODO: Load holiday dates from configuration or compute dynamically per academic year.
 const UNIVERSITY_HOLIDAYS: &[(&str, Holiday)] = &[
     ("Labor Day", Holiday::Single { month: 9, day: 1 }),
     (
@@ -132,12 +139,7 @@ pub async fn ics(
 
     // Sort meeting times by start time
     let mut sorted_meeting_times = meeting_times.to_vec();
-    sorted_meeting_times.sort_unstable_by(|a, b| match (&a.time_range, &b.time_range) {
-        (Some(a_time), Some(b_time)) => a_time.start.cmp(&b_time.start),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => a.days.bits().cmp(&b.days.bits()),
-    });
+    MeetingScheduleInfo::sort_by_start_time(&mut sorted_meeting_times);
 
     // Generate ICS content
     let (ics_content, excluded_holidays) =
@@ -352,26 +354,10 @@ fn generate_event_content(
     Ok((event_content, Vec::new()))
 }
 
-/// Convert chrono::Weekday to the custom DayOfWeek enum
-fn chrono_weekday_to_day_of_week(weekday: chrono::Weekday) -> crate::banner::meetings::DayOfWeek {
-    use crate::banner::meetings::DayOfWeek;
-    match weekday {
-        chrono::Weekday::Mon => DayOfWeek::Monday,
-        chrono::Weekday::Tue => DayOfWeek::Tuesday,
-        chrono::Weekday::Wed => DayOfWeek::Wednesday,
-        chrono::Weekday::Thu => DayOfWeek::Thursday,
-        chrono::Weekday::Fri => DayOfWeek::Friday,
-        chrono::Weekday::Sat => DayOfWeek::Saturday,
-        chrono::Weekday::Sun => DayOfWeek::Sunday,
-    }
-}
-
 /// Check if a class meets on a specific date based on its meeting days
 fn class_meets_on_date(meeting_time: &MeetingScheduleInfo, date: NaiveDate) -> bool {
-    let weekday = chrono_weekday_to_day_of_week(date.weekday());
-    let meeting_days = meeting_time.days_of_week();
-
-    meeting_days.contains(&weekday)
+    let day: MeetingDays = date.weekday().into();
+    meeting_time.days.contains(day)
 }
 
 /// Get holiday dates that fall within the course date range and would conflict with class meetings
