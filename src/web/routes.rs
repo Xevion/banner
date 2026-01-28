@@ -4,25 +4,29 @@ use axum::{
     Router,
     body::Body,
     extract::{Request, State},
-    http::{HeaderMap, HeaderValue, StatusCode, Uri},
-    response::{Html, IntoResponse, Json, Response},
+    response::{Json, Response},
     routing::get,
 };
+#[cfg(feature = "embed-assets")]
+use axum::{
+    http::{HeaderMap, HeaderValue, StatusCode, Uri},
+    response::{Html, IntoResponse},
+};
+#[cfg(feature = "embed-assets")]
 use http::header;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, time::Duration};
-use tower_http::timeout::TimeoutLayer;
-use tower_http::{
-    classify::ServerErrorsFailureClass,
-    cors::{Any, CorsLayer},
-    trace::TraceLayer,
-};
+#[cfg(not(feature = "embed-assets"))]
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::{classify::ServerErrorsFailureClass, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{Span, debug, info, warn};
 
+#[cfg(feature = "embed-assets")]
 use crate::web::assets::{WebAssets, get_asset_metadata_cached};
 
 /// Set appropriate caching headers based on asset type
+#[cfg(feature = "embed-assets")]
 fn set_caching_headers(response: &mut Response, path: &str, etag: &str) {
     let headers = response.headers_mut();
 
@@ -72,15 +76,21 @@ pub fn create_router(state: BannerState) -> Router {
 
     let mut router = Router::new().nest("/api", api_router);
 
-    if cfg!(debug_assertions) {
+    // When embed-assets feature is enabled, serve embedded static assets
+    #[cfg(feature = "embed-assets")]
+    {
+        router = router.fallback(fallback);
+    }
+
+    // Without embed-assets, enable CORS for dev proxy to Vite
+    #[cfg(not(feature = "embed-assets"))]
+    {
         router = router.layer(
             CorsLayer::new()
                 .allow_origin(Any)
                 .allow_methods(Any)
                 .allow_headers(Any),
-        )
-    } else {
-        router = router.fallback(fallback);
+        );
     }
 
     router.layer((
@@ -131,6 +141,7 @@ pub fn create_router(state: BannerState) -> Router {
 }
 
 /// Handler that extracts request information for caching
+#[cfg(feature = "embed-assets")]
 async fn fallback(request: Request) -> Response {
     let uri = request.uri().clone();
     let headers = request.headers().clone();
@@ -139,6 +150,7 @@ async fn fallback(request: Request) -> Response {
 
 /// Handles SPA routing by serving index.html for non-API, non-asset requests
 /// This version includes HTTP caching headers and ETag support
+#[cfg(feature = "embed-assets")]
 async fn handle_spa_fallback_with_headers(uri: Uri, request_headers: HeaderMap) -> Response {
     let path = uri.path().trim_start_matches('/');
 
