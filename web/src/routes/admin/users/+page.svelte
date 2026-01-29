@@ -6,7 +6,7 @@ import { Shield, ShieldOff } from "@lucide/svelte";
 
 let users = $state<User[]>([]);
 let error = $state<string | null>(null);
-let updating = $state<bigint | null>(null);
+let updating = $state<string | null>(null);
 
 onMount(async () => {
   try {

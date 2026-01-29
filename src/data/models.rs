@@ -1,9 +1,45 @@
 //! `sqlx` models for the database schema.
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use ts_rs::TS;
+
+/// Serialize an `i64` as a string to avoid JavaScript precision loss for values exceeding 2^53.
+fn serialize_i64_as_string<S: Serializer>(value: &i64, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&value.to_string())
+}
+
+/// Deserialize an `i64` from either a number or a string.
+fn deserialize_i64_from_string<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<i64, D::Error> {
+    use serde::de;
+
+    struct I64OrStringVisitor;
+
+    impl<'de> de::Visitor<'de> for I64OrStringVisitor {
+        type Value = i64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("an integer or a string containing an integer")
+        }
+
+        fn visit_i64<E: de::Error>(self, value: i64) -> Result<i64, E> {
+            Ok(value)
+        }
+
+        fn visit_u64<E: de::Error>(self, value: u64) -> Result<i64, E> {
+            i64::try_from(value).map_err(|_| E::custom(format!("u64 {value} out of i64 range")))
+        }
+
+        fn visit_str<E: de::Error>(self, value: &str) -> Result<i64, E> {
+            value.parse().map_err(de::Error::custom)
+        }
+    }
+
+    deserializer.deserialize_any(I64OrStringVisitor)
+}
 
 /// Represents a meeting time stored as JSONB in the courses table.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -162,6 +198,11 @@ pub struct ScrapeJob {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct User {
+    #[serde(
+        serialize_with = "serialize_i64_as_string",
+        deserialize_with = "deserialize_i64_from_string"
+    )]
+    #[ts(type = "string")]
     pub discord_id: i64,
     pub discord_username: String,
     pub discord_avatar_hash: Option<String>,

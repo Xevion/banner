@@ -167,7 +167,7 @@ export class BannerApiClient {
     return this.request<User[]>("/admin/users");
   }
 
-  async setUserAdmin(discordId: bigint, isAdmin: boolean): Promise<User> {
+  async setUserAdmin(discordId: string, isAdmin: boolean): Promise<User> {
     const response = await this.fetchFn(`${this.baseUrl}/admin/users/${discordId}/admin`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
