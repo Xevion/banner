@@ -101,11 +101,29 @@ describe("formatMeetingTime", () => {
 });
 
 describe("abbreviateInstructor", () => {
-  it("abbreviates standard name", () =>
-    expect(abbreviateInstructor("Heaps, John")).toBe("Heaps, J."));
+  it("returns short names unabbreviated", () =>
+    expect(abbreviateInstructor("Li, Bo")).toBe("Li, Bo"));
+  it("returns names within budget unabbreviated", () =>
+    expect(abbreviateInstructor("Heaps, John")).toBe("Heaps, John"));
   it("handles no comma", () => expect(abbreviateInstructor("Staff")).toBe("Staff"));
-  it("handles multiple first names", () =>
-    expect(abbreviateInstructor("Smith, Mary Jane")).toBe("Smith, M."));
+
+  // Progressive abbreviation with multiple given names
+  it("abbreviates trailing given names first", () =>
+    expect(abbreviateInstructor("Ramirez, Maria Elena")).toBe("Ramirez, Maria E."));
+  it("abbreviates all given names when needed", () =>
+    expect(abbreviateInstructor("Ramirez, Maria Elena", 16)).toBe("Ramirez, M. E."));
+  it("falls back to first initial only", () =>
+    expect(abbreviateInstructor("Ramirez, Maria Elena", 12)).toBe("Ramirez, M."));
+
+  // Single given name that exceeds budget
+  it("abbreviates single given name when over budget", () =>
+    expect(abbreviateInstructor("Bartholomew, Christopher", 18)).toBe("Bartholomew, C."));
+
+  // Respects custom maxLen
+  it("keeps full name when within custom budget", () =>
+    expect(abbreviateInstructor("Ramirez, Maria Elena", 30)).toBe("Ramirez, Maria Elena"));
+  it("always abbreviates when budget is tiny", () =>
+    expect(abbreviateInstructor("Heaps, John", 5)).toBe("Heaps, J."));
 });
 
 describe("getPrimaryInstructor", () => {

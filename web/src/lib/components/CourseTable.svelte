@@ -551,20 +551,31 @@ const table = createSvelteTable({
                                         {@const primary = getPrimaryInstructor(
                                             course.instructors,
                                         )}
+                                        {@const display = primaryInstructorDisplay(course)}
+                                        {@const commaIdx = display.indexOf(", ")}
                                         <td class="py-2 px-2 whitespace-nowrap">
-                                            <SimpleTooltip
-                                                text={primary?.displayName ??
-                                                    "Staff"}
-                                                delay={200}
-                                                side="bottom"
-                                                passthrough
-                                            >
+                                            {#if display === "Staff"}
                                                 <span
-                                                    >{primaryInstructorDisplay(
-                                                        course,
-                                                    )}</span
+                                                    class="text-xs text-muted-foreground/60 uppercase"
+                                                    >Staff</span
                                                 >
-                                            </SimpleTooltip>
+                                            {:else}
+                                                <SimpleTooltip
+                                                    text={primary?.displayName ??
+                                                        "Staff"}
+                                                    delay={200}
+                                                    side="bottom"
+                                                    passthrough
+                                                >
+                                                    {#if commaIdx !== -1}
+                                                        <span>{display.slice(0, commaIdx)},
+                                                            <span class="text-muted-foreground">{display.slice(commaIdx + 1)}</span
+                                                        ></span>
+                                                    {:else}
+                                                        <span>{display}</span>
+                                                    {/if}
+                                                </SimpleTooltip>
+                                            {/if}
                                             {#if primaryRating(course)}
                                                 {@const r =
                                                     primaryRating(course)!}

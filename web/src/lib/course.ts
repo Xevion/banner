@@ -54,13 +54,45 @@ export function formatMeetingTime(mt: DbMeetingTime): string {
   return `${days} ${begin}–${end}`;
 }
 
-/** Abbreviate instructor name: "Heaps, John" → "Heaps, J." */
-export function abbreviateInstructor(name: string): string {
+/**
+ * Progressively abbreviate an instructor name to fit within a character budget.
+ *
+ * Tries each level until the result fits `maxLen`:
+ *   1. Full name: "Ramirez, Maria Elena"
+ *   2. Abbreviate trailing given names: "Ramirez, Maria E."
+ *   3. Abbreviate all given names: "Ramirez, M. E."
+ *   4. First initial only: "Ramirez, M."
+ *
+ * Names without a comma (e.g. "Staff") are returned as-is.
+ */
+export function abbreviateInstructor(name: string, maxLen: number = 18): string {
+  if (name.length <= maxLen) return name;
+
   const commaIdx = name.indexOf(", ");
   if (commaIdx === -1) return name;
+
   const last = name.slice(0, commaIdx);
-  const first = name.slice(commaIdx + 2);
-  return `${last}, ${first.charAt(0)}.`;
+  const parts = name.slice(commaIdx + 2).split(" ");
+
+  // Level 2: abbreviate trailing given names, keep first given name intact
+  // "Maria Elena" → "Maria E."
+  if (parts.length > 1) {
+    const abbreviated = [parts[0], ...parts.slice(1).map((p) => `${p[0]}.`)].join(" ");
+    const result = `${last}, ${abbreviated}`;
+    if (result.length <= maxLen) return result;
+  }
+
+  // Level 3: abbreviate all given names
+  // "Maria Elena" → "M. E."
+  if (parts.length > 1) {
+    const allInitials = parts.map((p) => `${p[0]}.`).join(" ");
+    const result = `${last}, ${allInitials}`;
+    if (result.length <= maxLen) return result;
+  }
+
+  // Level 4: first initial only
+  // "Maria Elena" → "M."  or  "John" → "J."
+  return `${last}, ${parts[0][0]}.`;
 }
 
 /** Get primary instructor from a course, or first instructor */
