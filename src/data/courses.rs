@@ -12,7 +12,7 @@ use sqlx::PgPool;
 pub async fn search_courses(
     db_pool: &PgPool,
     term_code: &str,
-    subject: Option<&str>,
+    subject: Option<&[String]>,
     title_query: Option<&str>,
     course_number_low: Option<i32>,
     course_number_high: Option<i32>,
@@ -34,7 +34,7 @@ pub async fn search_courses(
         SELECT *
         FROM courses
         WHERE term_code = $1
-          AND ($2::text IS NULL OR subject = $2)
+          AND ($2::text[] IS NULL OR subject = ANY($2))
           AND ($3::text IS NULL OR title_search @@ plainto_tsquery('simple', $3) OR title ILIKE '%' || $3 || '%')
           AND ($4::int IS NULL OR course_number::int >= $4)
           AND ($5::int IS NULL OR course_number::int <= $5)
@@ -65,7 +65,7 @@ pub async fn search_courses(
         SELECT COUNT(*)
         FROM courses
         WHERE term_code = $1
-          AND ($2::text IS NULL OR subject = $2)
+          AND ($2::text[] IS NULL OR subject = ANY($2))
           AND ($3::text IS NULL OR title_search @@ plainto_tsquery('simple', $3) OR title ILIKE '%' || $3 || '%')
           AND ($4::int IS NULL OR course_number::int >= $4)
           AND ($5::int IS NULL OR course_number::int <= $5)
@@ -138,6 +138,32 @@ pub async fn get_course_instructors(
         "#,
     )
     .bind(course_id)
+    .fetch_all(db_pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Get subjects for a term, sorted by total enrollment (descending).
+///
+/// Returns only subjects that have courses in the given term, with their
+/// descriptions from reference_data and enrollment totals for ranking.
+pub async fn get_subjects_by_enrollment(
+    db_pool: &PgPool,
+    term_code: &str,
+) -> Result<Vec<(String, String, i64)>> {
+    let rows: Vec<(String, String, i64)> = sqlx::query_as(
+        r#"
+        SELECT c.subject,
+               COALESCE(rd.description, c.subject),
+               COALESCE(SUM(c.enrollment), 0) as total_enrollment
+        FROM courses c
+        LEFT JOIN reference_data rd ON rd.category = 'subject' AND rd.code = c.subject
+        WHERE c.term_code = $1
+        GROUP BY c.subject, rd.description
+        ORDER BY total_enrollment DESC
+        "#,
+    )
+    .bind(term_code)
     .fetch_all(db_pool)
     .await?;
     Ok(rows)

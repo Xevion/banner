@@ -70,6 +70,65 @@ body {
   margin: 0;
 }
 
+/* Focus styling - only visible on keyboard navigation */
+*:focus {
+  outline: none;
+}
+
+/* Form inputs get outline-based focus directly on border */
+input[type="text"]:focus-visible,
+input[type="search"]:focus-visible,
+input[type="email"]:focus-visible,
+input[type="password"]:focus-visible,
+input[type="number"]:focus-visible,
+input[type="url"]:focus-visible,
+input[type="tel"]:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
+}
+
+/* Buttons get rounded box-shadow focus (outline doesn't support border-radius) */
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+
+/* Checkboxes get direct outline focus */
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Checkbox styling - theme-aware appearance */
+input[type="checkbox"] {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid var(--border);
+  border-radius: 0.25rem;
+  background-color: var(--card);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  flex-shrink: 0;
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--foreground);
+  border-color: var(--foreground);
+}
+
+input[type="checkbox"]:checked::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: var(--background);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
 html:not(.no-transition) body,
 html:not(.no-transition) body * {
   transition: background-color 300ms, color 300ms, border-color 300ms, fill 300ms;

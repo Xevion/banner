@@ -49,7 +49,7 @@ export type SortDirection = "asc" | "desc";
 
 export interface SearchParams {
   term: string;
-  subject?: string;
+  subjects?: string[];
   q?: string;
   open_only?: boolean;
   limit?: number;
@@ -92,7 +92,11 @@ export class BannerApiClient {
   async searchCourses(params: SearchParams): Promise<SearchResponse> {
     const query = new URLSearchParams();
     query.set("term", params.term);
-    if (params.subject) query.set("subject", params.subject);
+    if (params.subjects) {
+      for (const s of params.subjects) {
+        query.append("subject", s);
+      }
+    }
     if (params.q) query.set("q", params.q);
     if (params.open_only) query.set("open_only", "true");
     if (params.limit !== undefined) query.set("limit", String(params.limit));

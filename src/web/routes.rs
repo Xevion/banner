@@ -299,9 +299,15 @@ async fn metrics() -> Json<Value> {
 // ============================================================
 
 #[derive(Deserialize)]
+struct SubjectsParams {
+    term: String,
+}
+
+#[derive(Deserialize)]
 struct SearchParams {
     term: String,
-    subject: Option<String>,
+    #[serde(default)]
+    subject: Vec<String>,
     q: Option<String>,
     course_number_low: Option<i32>,
     course_number_high: Option<i32>,
@@ -484,7 +490,7 @@ async fn build_course_response(
 /// `GET /api/courses/search`
 async fn search_courses(
     State(state): State<AppState>,
-    Query(params): Query<SearchParams>,
+    axum_extra::extract::Query(params): axum_extra::extract::Query<SearchParams>,
 ) -> Result<Json<SearchResponse>, (AxumStatusCode, String)> {
     let limit = params.limit.clamp(1, 100);
     let offset = params.offset.max(0);
@@ -494,7 +500,7 @@ async fn search_courses(
     let (courses, total_count) = crate::data::courses::search_courses(
         &state.db_pool,
         &params.term,
-        params.subject.as_deref(),
+        if params.subject.is_empty() { None } else { Some(&params.subject) },
         params.q.as_deref(),
         params.course_number_low,
         params.course_number_high,
@@ -575,19 +581,24 @@ async fn get_terms(
     Ok(Json(terms))
 }
 
-/// `GET /api/subjects?term=202420`
+/// `GET /api/subjects?term=202620`
 async fn get_subjects(
     State(state): State<AppState>,
+    Query(params): Query<SubjectsParams>,
 ) -> Result<Json<Vec<CodeDescription>>, (AxumStatusCode, String)> {
-    let cache = state.reference_cache.read().await;
-    let entries = cache.entries_for_category("subject");
+    let rows = crate::data::courses::get_subjects_by_enrollment(&state.db_pool, &params.term)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to get subjects");
+            (
+                AxumStatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get subjects".to_string(),
+            )
+        })?;
 
-    let subjects: Vec<CodeDescription> = entries
+    let subjects: Vec<CodeDescription> = rows
         .into_iter()
-        .map(|(code, description)| CodeDescription {
-            code: code.to_string(),
-            description: description.to_string(),
-        })
+        .map(|(code, description, _enrollment)| CodeDescription { code, description })
         .collect();
 
     Ok(Json(subjects))

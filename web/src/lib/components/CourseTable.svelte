@@ -10,7 +10,7 @@ import {
   isTimeTBA,
 } from "$lib/course";
 import CourseDetail from "./CourseDetail.svelte";
-import { slide } from "svelte/transition";
+import { fade, fly, slide } from "svelte/transition";
 import { onMount } from "svelte";
 import { OverlayScrollbars } from "overlayscrollbars";
 import { themeStore } from "$lib/stores/theme.svelte";
@@ -24,9 +24,8 @@ import {
   type Updater,
 } from "@tanstack/table-core";
 import { ArrowUp, ArrowDown, ArrowUpDown, Columns3, Check, RotateCcw } from "@lucide/svelte";
-import { DropdownMenu, ContextMenu, Tooltip } from "bits-ui";
+import { DropdownMenu, ContextMenu } from "bits-ui";
 import SimpleTooltip from "./SimpleTooltip.svelte";
-import { fade, fly } from "svelte/transition";
 
 let {
   courses,
@@ -46,6 +45,8 @@ let {
 
 let expandedCrn: string | null = $state(null);
 let tableWrapper: HTMLDivElement = undefined!;
+let copiedCrn: string | null = $state(null);
+let copyTimeoutId: number | undefined;
 
 onMount(() => {
   const osInstance = OverlayScrollbars(tableWrapper, {
@@ -76,10 +77,8 @@ onMount(() => {
 // Column visibility state
 let columnVisibility: VisibilityState = $state({});
 
-const DEFAULT_VISIBILITY: VisibilityState = {};
-
 function resetColumnVisibility() {
-  columnVisibility = { ...DEFAULT_VISIBILITY };
+  columnVisibility = {};
 }
 
 function handleVisibilityChange(updater: Updater<VisibilityState>) {
@@ -91,6 +90,33 @@ function handleVisibilityChange(updater: Updater<VisibilityState>) {
 
 function toggleRow(crn: string) {
   expandedCrn = expandedCrn === crn ? null : crn;
+}
+
+async function handleCopyCrn(event: MouseEvent | KeyboardEvent, crn: string) {
+  event.stopPropagation();
+
+  try {
+    await navigator.clipboard.writeText(crn);
+
+    if (copyTimeoutId !== undefined) {
+      clearTimeout(copyTimeoutId);
+    }
+
+    copiedCrn = crn;
+    copyTimeoutId = window.setTimeout(() => {
+      copiedCrn = null;
+      copyTimeoutId = undefined;
+    }, 1000);
+  } catch (err) {
+    console.error("Failed to copy CRN:", err);
+  }
+}
+
+function handleCrnKeydown(event: KeyboardEvent, crn: string) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    handleCopyCrn(event, crn);
+  }
 }
 
 function openSeats(course: CourseResponse): number {
@@ -224,290 +250,475 @@ const table = createSvelteTable({
 </script>
 
 {#snippet columnVisibilityItems(variant: "dropdown" | "context")}
-  {#if variant === "dropdown"}
-    <DropdownMenu.Group>
-      <DropdownMenu.GroupHeading class="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-        Toggle columns
-      </DropdownMenu.GroupHeading>
-      {#each columns as col}
-        {@const id = col.id!}
-        {@const label = typeof col.header === "string" ? col.header : id}
-        <DropdownMenu.CheckboxItem
-          checked={columnVisibility[id] !== false}
-          closeOnSelect={false}
-          onCheckedChange={(checked) => {
-            columnVisibility = { ...columnVisibility, [id]: checked };
-          }}
-          class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-        >
-          {#snippet children({ checked })}
-            <span class="flex size-4 items-center justify-center rounded-sm border border-border">
-              {#if checked}
-                <Check class="size-3" />
-              {/if}
-            </span>
-            {label}
-          {/snippet}
-        </DropdownMenu.CheckboxItem>
-      {/each}
-    </DropdownMenu.Group>
-    {#if hasCustomVisibility}
-      <DropdownMenu.Separator class="mx-1 my-1 h-px bg-border" />
-      <DropdownMenu.Item
-        class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-        onSelect={resetColumnVisibility}
-      >
-        <RotateCcw class="size-3.5" />
-        Reset to default
-      </DropdownMenu.Item>
+    {#if variant === "dropdown"}
+        <DropdownMenu.Group>
+            <DropdownMenu.GroupHeading
+                class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+            >
+                Toggle columns
+            </DropdownMenu.GroupHeading>
+            {#each columns as col}
+                {@const id = col.id!}
+                {@const label =
+                    typeof col.header === "string" ? col.header : id}
+                <DropdownMenu.CheckboxItem
+                    checked={columnVisibility[id] !== false}
+                    closeOnSelect={false}
+                    onCheckedChange={(checked) => {
+                        columnVisibility = {
+                            ...columnVisibility,
+                            [id]: checked,
+                        };
+                    }}
+                    class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                >
+                    {#snippet children({ checked })}
+                        <span
+                            class="flex size-4 items-center justify-center rounded-sm border border-border"
+                        >
+                            {#if checked}
+                                <Check class="size-3" />
+                            {/if}
+                        </span>
+                        {label}
+                    {/snippet}
+                </DropdownMenu.CheckboxItem>
+            {/each}
+        </DropdownMenu.Group>
+        {#if hasCustomVisibility}
+            <DropdownMenu.Separator class="mx-1 my-1 h-px bg-border" />
+            <DropdownMenu.Item
+                class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                onSelect={resetColumnVisibility}
+            >
+                <RotateCcw class="size-3.5" />
+                Reset to default
+            </DropdownMenu.Item>
+        {/if}
+    {:else}
+        <ContextMenu.Group>
+            <ContextMenu.GroupHeading
+                class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+            >
+                Toggle columns
+            </ContextMenu.GroupHeading>
+            {#each columns as col}
+                {@const id = col.id!}
+                {@const label =
+                    typeof col.header === "string" ? col.header : id}
+                <ContextMenu.CheckboxItem
+                    checked={columnVisibility[id] !== false}
+                    closeOnSelect={false}
+                    onCheckedChange={(checked) => {
+                        columnVisibility = {
+                            ...columnVisibility,
+                            [id]: checked,
+                        };
+                    }}
+                    class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                >
+                    {#snippet children({ checked })}
+                        <span
+                            class="flex size-4 items-center justify-center rounded-sm border border-border"
+                        >
+                            {#if checked}
+                                <Check class="size-3" />
+                            {/if}
+                        </span>
+                        {label}
+                    {/snippet}
+                </ContextMenu.CheckboxItem>
+            {/each}
+        </ContextMenu.Group>
+        {#if hasCustomVisibility}
+            <ContextMenu.Separator class="mx-1 my-1 h-px bg-border" />
+            <ContextMenu.Item
+                class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                onSelect={resetColumnVisibility}
+            >
+                <RotateCcw class="size-3.5" />
+                Reset to default
+            </ContextMenu.Item>
+        {/if}
     {/if}
-  {:else}
-    <ContextMenu.Group>
-      <ContextMenu.GroupHeading class="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-        Toggle columns
-      </ContextMenu.GroupHeading>
-      {#each columns as col}
-        {@const id = col.id!}
-        {@const label = typeof col.header === "string" ? col.header : id}
-        <ContextMenu.CheckboxItem
-          checked={columnVisibility[id] !== false}
-          closeOnSelect={false}
-          onCheckedChange={(checked) => {
-            columnVisibility = { ...columnVisibility, [id]: checked };
-          }}
-          class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-        >
-          {#snippet children({ checked })}
-            <span class="flex size-4 items-center justify-center rounded-sm border border-border">
-              {#if checked}
-                <Check class="size-3" />
-              {/if}
-            </span>
-            {label}
-          {/snippet}
-        </ContextMenu.CheckboxItem>
-      {/each}
-    </ContextMenu.Group>
-    {#if hasCustomVisibility}
-      <ContextMenu.Separator class="mx-1 my-1 h-px bg-border" />
-      <ContextMenu.Item
-        class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-        onSelect={resetColumnVisibility}
-      >
-        <RotateCcw class="size-3.5" />
-        Reset to default
-      </ContextMenu.Item>
-    {/if}
-  {/if}
 {/snippet}
 
 <!-- Toolbar: View columns button -->
 <div class="flex items-center justify-end pb-2">
-  <DropdownMenu.Root>
-    <Tooltip.Root delayDuration={150} disableHoverableContent>
-      <Tooltip.Trigger>
+    <DropdownMenu.Root>
         <DropdownMenu.Trigger
-          class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+            class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
         >
-          <Columns3 class="size-3.5" />
-          View
+            <Columns3 class="size-3.5" />
+            View
         </DropdownMenu.Trigger>
-      </Tooltip.Trigger>
-      <Tooltip.Content
-        side="bottom"
-        sideOffset={6}
-        class="z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md"
-      >
-        Show or hide table columns
-      </Tooltip.Content>
-    </Tooltip.Root>
-
-    <DropdownMenu.Portal>
-      <DropdownMenu.Content
-        class="z-50 min-w-[160px] rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
-        align="end"
-        sideOffset={4}
-        forceMount
-      >
-        {#snippet child({ wrapperProps, props, open })}
-          {#if open}
-            <div {...wrapperProps}>
-              <div {...props} transition:fly={{ duration: 150, y: -10 }}>
-                {@render columnVisibilityItems("dropdown")}
-              </div>
-            </div>
-          {/if}
-        {/snippet}
-      </DropdownMenu.Content>
-    </DropdownMenu.Portal>
-  </DropdownMenu.Root>
+        <DropdownMenu.Portal>
+            <DropdownMenu.Content
+                class="z-50 min-w-40 rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
+                align="end"
+                sideOffset={4}
+                forceMount
+            >
+                {#snippet child({ wrapperProps, props, open })}
+                    {#if open}
+                        <div {...wrapperProps}>
+                            <div
+                                {...props}
+                                transition:fly={{ duration: 150, y: -10 }}
+                            >
+                                {@render columnVisibilityItems("dropdown")}
+                            </div>
+                        </div>
+                    {/if}
+                {/snippet}
+            </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+    </DropdownMenu.Root>
 </div>
 
 <!-- Table with context menu on header -->
 <div bind:this={tableWrapper} class="overflow-x-auto">
-  <ContextMenu.Root>
-    <ContextMenu.Trigger class="contents">
-      <table class="w-full min-w-[640px] border-collapse text-sm">
-        <thead>
-          {#each table.getHeaderGroups() as headerGroup}
-            <tr class="border-b border-border text-left text-muted-foreground">
-              {#each headerGroup.headers as header}
-                {#if header.column.getIsVisible()}
-                  <th
-                    class="py-2 px-2 font-medium {header.id === 'seats' ? 'text-right' : ''}"
-                    class:cursor-pointer={header.column.getCanSort()}
-                    class:select-none={header.column.getCanSort()}
-                    onclick={header.column.getToggleSortingHandler()}
-                  >
-                    {#if header.column.getCanSort()}
-                      <span class="inline-flex items-center gap-1">
-                        {#if typeof header.column.columnDef.header === "string"}
-                          {header.column.columnDef.header}
-                        {:else}
-                          <FlexRender content={header.column.columnDef.header} context={header.getContext()} />
-                        {/if}
-                        {#if header.column.getIsSorted() === "asc"}
-                          <ArrowUp class="size-3.5" />
-                        {:else if header.column.getIsSorted() === "desc"}
-                          <ArrowDown class="size-3.5" />
-                        {:else}
-                          <ArrowUpDown class="size-3.5 text-muted-foreground/40" />
-                        {/if}
-                      </span>
-                    {:else if typeof header.column.columnDef.header === "string"}
-                      {header.column.columnDef.header}
+    <ContextMenu.Root>
+        <ContextMenu.Trigger class="contents">
+            <table class="w-full min-w-160 border-collapse text-sm">
+                <thead>
+                    {#each table.getHeaderGroups() as headerGroup}
+                        <tr
+                            class="border-b border-border text-left text-muted-foreground"
+                        >
+                            {#each headerGroup.headers as header}
+                                {#if header.column.getIsVisible()}
+                                    <th
+                                        class="py-2 px-2 font-medium {header.id ===
+                                        'seats'
+                                            ? 'text-right'
+                                            : ''}"
+                                        class:cursor-pointer={header.column.getCanSort()}
+                                        class:select-none={header.column.getCanSort()}
+                                        onclick={header.column.getToggleSortingHandler()}
+                                    >
+                                        {#if header.column.getCanSort()}
+                                            <span
+                                                class="inline-flex items-center gap-1"
+                                            >
+                                                {#if typeof header.column.columnDef.header === "string"}
+                                                    {header.column.columnDef
+                                                        .header}
+                                                {:else}
+                                                    <FlexRender
+                                                        content={header.column
+                                                            .columnDef.header}
+                                                        context={header.getContext()}
+                                                    />
+                                                {/if}
+                                                {#if header.column.getIsSorted() === "asc"}
+                                                    <ArrowUp class="size-3.5" />
+                                                {:else if header.column.getIsSorted() === "desc"}
+                                                    <ArrowDown
+                                                        class="size-3.5"
+                                                    />
+                                                {:else}
+                                                    <ArrowUpDown
+                                                        class="size-3.5 text-muted-foreground/40"
+                                                    />
+                                                {/if}
+                                            </span>
+                                        {:else if typeof header.column.columnDef.header === "string"}
+                                            {header.column.columnDef.header}
+                                        {:else}
+                                            <FlexRender
+                                                content={header.column.columnDef
+                                                    .header}
+                                                context={header.getContext()}
+                                            />
+                                        {/if}
+                                    </th>
+                                {/if}
+                            {/each}
+                        </tr>
+                    {/each}
+                </thead>
+                <tbody>
+                    {#if loading && courses.length === 0}
+                        {#each Array(5) as _}
+                            <tr class="border-b border-border">
+                                {#each table.getVisibleLeafColumns() as col}
+                                    <td class="py-2.5 px-2">
+                                        <div
+                                            class="h-4 bg-muted rounded animate-pulse {col.id ===
+                                            'seats'
+                                                ? 'w-14 ml-auto'
+                                                : col.id === 'title'
+                                                  ? 'w-40'
+                                                  : col.id === 'crn'
+                                                    ? 'w-10'
+                                                    : 'w-20'}"
+                                        ></div>
+                                    </td>
+                                {/each}
+                            </tr>
+                        {/each}
+                    {:else if courses.length === 0}
+                        <tr>
+                            <td
+                                colspan={visibleColumnIds.length}
+                                class="py-12 text-center text-muted-foreground"
+                            >
+                                No courses found. Try adjusting your filters.
+                            </td>
+                        </tr>
                     {:else}
-                      <FlexRender content={header.column.columnDef.header} context={header.getContext()} />
+                        {#each table.getRowModel().rows as row (row.id)}
+                            {@const course = row.original}
+                            <tr
+                                class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn ===
+                                course.crn
+                                    ? 'bg-muted/30'
+                                    : ''}"
+                                onclick={() => toggleRow(course.crn)}
+                            >
+                                {#each row.getVisibleCells() as cell (cell.id)}
+                                    {@const colId = cell.column.id}
+                                    {#if colId === "crn"}
+                                        <td class="py-2 px-2 relative">
+                                            <button
+                                                class="relative inline-flex items-center rounded-full px-2 py-0.5 border border-border/50 bg-muted/20 hover:bg-muted/40 hover:border-foreground/30 transition-colors duration-150 cursor-copy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring font-mono text-xs text-muted-foreground/70"
+                                                onclick={(e) =>
+                                                    handleCopyCrn(
+                                                        e,
+                                                        course.crn,
+                                                    )}
+                                                onkeydown={(e) =>
+                                                    handleCrnKeydown(
+                                                        e,
+                                                        course.crn,
+                                                    )}
+                                                aria-label="Copy CRN {course.crn} to clipboard"
+                                            >
+                                                {course.crn}
+                                                {#if copiedCrn === course.crn}
+                                                    <span
+                                                        class="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs px-2 py-1 rounded-md bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-300 pointer-events-none z-10"
+                                                        in:fade={{
+                                                            duration: 100,
+                                                        }}
+                                                        out:fade={{
+                                                            duration: 200,
+                                                        }}
+                                                    >
+                                                        Copied!
+                                                    </span>
+                                                {/if}
+                                            </button>
+                                        </td>
+                                    {:else if colId === "course_code"}
+                                        {@const subjectDesc =
+                                            subjectMap[course.subject]}
+                                        <td class="py-2 px-2 whitespace-nowrap">
+                                            <SimpleTooltip
+                                                text={subjectDesc
+                                                    ? `${subjectDesc} ${course.courseNumber}`
+                                                    : `${course.subject} ${course.courseNumber}`}
+                                                delay={200}
+                                                side="bottom"
+                                                passthrough
+                                            >
+                                                <span class="font-semibold"
+                                                    >{course.subject}
+                                                    {course.courseNumber}</span
+                                                >{#if course.sequenceNumber}<span
+                                                        class="text-muted-foreground"
+                                                        >-{course.sequenceNumber}</span
+                                                    >{/if}
+                                            </SimpleTooltip>
+                                        </td>
+                                    {:else if colId === "title"}
+                                        <td
+                                            class="py-2 px-2 font-medium max-w-50 truncate"
+                                        >
+                                            <SimpleTooltip
+                                                text={course.title}
+                                                delay={200}
+                                                side="bottom"
+                                                passthrough
+                                            >
+                                                <span class="block truncate"
+                                                    >{course.title}</span
+                                                >
+                                            </SimpleTooltip>
+                                        </td>
+                                    {:else if colId === "instructor"}
+                                        {@const primary = getPrimaryInstructor(
+                                            course.instructors,
+                                        )}
+                                        <td class="py-2 px-2 whitespace-nowrap">
+                                            <SimpleTooltip
+                                                text={primary?.displayName ??
+                                                    "Staff"}
+                                                delay={200}
+                                                side="bottom"
+                                                passthrough
+                                            >
+                                                <span
+                                                    >{primaryInstructorDisplay(
+                                                        course,
+                                                    )}</span
+                                                >
+                                            </SimpleTooltip>
+                                            {#if primaryRating(course)}
+                                                {@const r =
+                                                    primaryRating(course)!}
+                                                <SimpleTooltip
+                                                    text="{r.rating.toFixed(
+                                                        1,
+                                                    )}/5 ({r.count} ratings on RateMyProfessors)"
+                                                    delay={150}
+                                                    side="bottom"
+                                                    passthrough
+                                                >
+                                                    <span
+                                                        class="ml-1 text-xs font-medium {ratingColor(
+                                                            r.rating,
+                                                        )}"
+                                                        >{r.rating.toFixed(
+                                                            1,
+                                                        )}★</span
+                                                    >
+                                                </SimpleTooltip>
+                                            {/if}
+                                        </td>
+                                    {:else if colId === "time"}
+                                        <td class="py-2 px-2 whitespace-nowrap">
+                                            {#if timeIsTBA(course)}
+                                                <span
+                                                    class="text-xs text-muted-foreground/60"
+                                                    >TBA</span
+                                                >
+                                            {:else}
+                                                {@const mt =
+                                                    course.meetingTimes[0]}
+                                                {#if !isMeetingTimeTBA(mt)}
+                                                    <span
+                                                        class="font-mono font-medium"
+                                                        >{formatMeetingDays(
+                                                            mt,
+                                                        )}</span
+                                                    >
+                                                    {" "}
+                                                {/if}
+                                                {#if !isTimeTBA(mt)}
+                                                    <span
+                                                        class="text-muted-foreground"
+                                                        >{formatTime(
+                                                            mt.begin_time,
+                                                        )}&ndash;{formatTime(
+                                                            mt.end_time,
+                                                        )}</span
+                                                    >
+                                                {:else}
+                                                    <span
+                                                        class="text-xs text-muted-foreground/60"
+                                                        >TBA</span
+                                                    >
+                                                {/if}
+                                            {/if}
+                                        </td>
+                                    {:else if colId === "location"}
+                                        <td class="py-2 px-2 whitespace-nowrap">
+                                            {#if formatLocation(course)}
+                                                <span
+                                                    class="text-muted-foreground"
+                                                    >{formatLocation(
+                                                        course,
+                                                    )}</span
+                                                >
+                                            {:else}
+                                                <span
+                                                    class="text-xs text-muted-foreground/50"
+                                                    >—</span
+                                                >
+                                            {/if}
+                                        </td>
+                                    {:else if colId === "seats"}
+                                        <td
+                                            class="py-2 px-2 text-right whitespace-nowrap"
+                                        >
+                                            <SimpleTooltip
+                                                text="{openSeats(
+                                                    course,
+                                                )} of {course.maxEnrollment} seats open, {course.enrollment} enrolled{course.waitCount >
+                                                0
+                                                    ? `, ${course.waitCount} waitlisted`
+                                                    : ''}"
+                                                delay={200}
+                                                side="left"
+                                                passthrough
+                                            >
+                                                <span
+                                                    class="inline-flex items-center gap-1.5"
+                                                >
+                                                    <span
+                                                        class="size-1.5 rounded-full {seatsDotColor(
+                                                            course,
+                                                        )} shrink-0"
+                                                    ></span>
+                                                    <span
+                                                        class="{seatsColor(
+                                                            course,
+                                                        )} font-medium tabular-nums"
+                                                        >{#if openSeats(course) === 0}Full{:else}{openSeats(
+                                                                course,
+                                                            )} open{/if}</span
+                                                    >
+                                                    <span
+                                                        class="text-muted-foreground/60 tabular-nums"
+                                                        >{course.enrollment}/{course.maxEnrollment}{#if course.waitCount > 0}
+                                                            · WL {course.waitCount}/{course.waitCapacity}{/if}</span
+                                                    >
+                                                </span>
+                                            </SimpleTooltip>
+                                        </td>
+                                    {/if}
+                                {/each}
+                            </tr>
+                            {#if expandedCrn === course.crn}
+                                <tr>
+                                    <td
+                                        colspan={visibleColumnIds.length}
+                                        class="p-0"
+                                    >
+                                        <div
+                                            transition:slide={{ duration: 200 }}
+                                        >
+                                            <CourseDetail {course} />
+                                        </div>
+                                    </td>
+                                </tr>
+                            {/if}
+                        {/each}
                     {/if}
-                  </th>
-                {/if}
-              {/each}
-            </tr>
-          {/each}
-        </thead>
-        <tbody>
-          {#if loading && courses.length === 0}
-            {#each Array(5) as _}
-              <tr class="border-b border-border">
-                {#each table.getVisibleLeafColumns() as col}
-                  <td class="py-2.5 px-2">
-                    <div class="h-4 bg-muted rounded animate-pulse {col.id === 'seats' ? 'w-14 ml-auto' : col.id === 'title' ? 'w-40' : col.id === 'crn' ? 'w-10' : 'w-20'}"></div>
-                  </td>
-                {/each}
-              </tr>
-            {/each}
-          {:else if courses.length === 0}
-            <tr>
-              <td colspan={visibleColumnIds.length} class="py-12 text-center text-muted-foreground">
-                No courses found. Try adjusting your filters.
-              </td>
-            </tr>
-          {:else}
-            {#each table.getRowModel().rows as row (row.id)}
-              {@const course = row.original}
-              <tr
-                class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn === course.crn ? 'bg-muted/30' : ''}"
-                onclick={() => toggleRow(course.crn)}
-              >
-                {#each row.getVisibleCells() as cell (cell.id)}
-                  {@const colId = cell.column.id}
-                  {#if colId === "crn"}
-                    <td class="py-2 px-2 font-mono text-xs text-muted-foreground/70">{course.crn}</td>
-                  {:else if colId === "course_code"}
-                    {@const subjectDesc = subjectMap[course.subject]}
-                    <td class="py-2 px-2 whitespace-nowrap">
-                      <SimpleTooltip text={subjectDesc ? `${subjectDesc} ${course.courseNumber}` : `${course.subject} ${course.courseNumber}`} delay={200} side="bottom" passthrough>
-                        <span class="font-semibold">{course.subject} {course.courseNumber}</span>{#if course.sequenceNumber}<span class="text-muted-foreground">-{course.sequenceNumber}</span>{/if}
-                      </SimpleTooltip>
-                    </td>
-                  {:else if colId === "title"}
-                    <td class="py-2 px-2 font-medium max-w-[200px] truncate">
-                      <SimpleTooltip text={course.title} delay={200} side="bottom" passthrough>
-                        <span class="block truncate">{course.title}</span>
-                      </SimpleTooltip>
-                    </td>
-                  {:else if colId === "instructor"}
-                    {@const primary = getPrimaryInstructor(course.instructors)}
-                    <td class="py-2 px-2 whitespace-nowrap">
-                      <SimpleTooltip text={primary?.displayName ?? "Staff"} delay={200} side="bottom" passthrough>
-                        <span>{primaryInstructorDisplay(course)}</span>
-                      </SimpleTooltip>
-                      {#if primaryRating(course)}
-                        {@const r = primaryRating(course)!}
-                        <SimpleTooltip text="{r.rating.toFixed(1)}/5 ({r.count} ratings on RateMyProfessors)" delay={150} side="bottom" passthrough>
-                          <span
-                            class="ml-1 text-xs font-medium {ratingColor(r.rating)}"
-                          >{r.rating.toFixed(1)}★</span>
-                        </SimpleTooltip>
-                      {/if}
-                    </td>
-                  {:else if colId === "time"}
-                    <td class="py-2 px-2 whitespace-nowrap">
-                      {#if timeIsTBA(course)}
-                        <span class="text-xs text-muted-foreground/60">TBA</span>
-                      {:else}
-                        {@const mt = course.meetingTimes[0]}
-                        {#if !isMeetingTimeTBA(mt)}
-                          <span class="font-mono font-medium">{formatMeetingDays(mt)}</span>
-                          {" "}
-                        {/if}
-                        {#if !isTimeTBA(mt)}
-                          <span class="text-muted-foreground">{formatTime(mt.begin_time)}&ndash;{formatTime(mt.end_time)}</span>
-                        {:else}
-                          <span class="text-xs text-muted-foreground/60">TBA</span>
-                        {/if}
-                      {/if}
-                    </td>
-                  {:else if colId === "location"}
-                    <td class="py-2 px-2 whitespace-nowrap">
-                      {#if formatLocation(course)}
-                        <span class="text-muted-foreground">{formatLocation(course)}</span>
-                      {:else}
-                        <span class="text-xs text-muted-foreground/50">—</span>
-                      {/if}
-                    </td>
-                  {:else if colId === "seats"}
-                    <td class="py-2 px-2 text-right whitespace-nowrap">
-                      <SimpleTooltip text="{openSeats(course)} of {course.maxEnrollment} seats open, {course.enrollment} enrolled{course.waitCount > 0 ? `, ${course.waitCount} waitlisted` : ''}" delay={200} side="left" passthrough>
-                        <span class="inline-flex items-center gap-1.5">
-                          <span class="size-1.5 rounded-full {seatsDotColor(course)} shrink-0"></span>
-                          <span class="{seatsColor(course)} font-medium tabular-nums">{#if openSeats(course) === 0}Full{:else}{openSeats(course)} open{/if}</span>
-                          <span class="text-muted-foreground/60 tabular-nums">{course.enrollment}/{course.maxEnrollment}{#if course.waitCount > 0} · WL {course.waitCount}/{course.waitCapacity}{/if}</span>
-                        </span>
-                      </SimpleTooltip>
-                    </td>
-                  {/if}
-                {/each}
-              </tr>
-              {#if expandedCrn === course.crn}
-                <tr>
-                  <td colspan={visibleColumnIds.length} class="p-0">
-                    <div transition:slide={{ duration: 200 }}>
-                      <CourseDetail {course} />
-                    </div>
-                  </td>
-                </tr>
-              {/if}
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-    </ContextMenu.Trigger>
-    <ContextMenu.Portal>
-      <ContextMenu.Content
-        class="z-50 min-w-[160px] rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
-        forceMount
-      >
-        {#snippet child({ wrapperProps, props, open })}
-          {#if open}
-            <div {...wrapperProps}>
-              <div {...props} in:fade={{ duration: 100 }} out:fade={{ duration: 100 }}>
-                {@render columnVisibilityItems("context")}
-              </div>
-            </div>
-          {/if}
-        {/snippet}
-      </ContextMenu.Content>
-    </ContextMenu.Portal>
-  </ContextMenu.Root>
+                </tbody>
+            </table>
+        </ContextMenu.Trigger>
+        <ContextMenu.Portal>
+            <ContextMenu.Content
+                class="z-50 min-w-40 rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
+                forceMount
+            >
+                {#snippet child({ wrapperProps, props, open })}
+                    {#if open}
+                        <div {...wrapperProps}>
+                            <div
+                                {...props}
+                                in:fade={{ duration: 100 }}
+                                out:fade={{ duration: 100 }}
+                            >
+                                {@render columnVisibilityItems("context")}
+                            </div>
+                        </div>
+                    {/if}
+                {/snippet}
+            </ContextMenu.Content>
+        </ContextMenu.Portal>
+    </ContextMenu.Root>
 </div>

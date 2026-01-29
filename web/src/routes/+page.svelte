@@ -20,7 +20,7 @@ const initialParams = untrack(() => new URLSearchParams(data.url.search));
 
 // Filter state
 let selectedTerm = $state(untrack(() => initialParams.get("term") ?? data.terms[0]?.code ?? ""));
-let selectedSubject = $state(initialParams.get("subject") ?? "");
+let selectedSubjects: string[] = $state(untrack(() => initialParams.getAll("subject")));
 let query = $state(initialParams.get("q") ?? "");
 let openOnly = $state(initialParams.get("open") === "true");
 let offset = $state(Number(initialParams.get("offset")) || 0);
@@ -64,9 +64,8 @@ $effect(() => {
   if (!term) return;
   client.getSubjects(term).then((s) => {
     subjects = s;
-    if (selectedSubject && !s.some((sub) => sub.code === selectedSubject)) {
-      selectedSubject = "";
-    }
+    const validCodes = new Set(s.map((sub) => sub.code));
+    selectedSubjects = selectedSubjects.filter((code) => validCodes.has(code));
   });
 });
 
@@ -74,7 +73,7 @@ $effect(() => {
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 $effect(() => {
   const term = selectedTerm;
-  const subject = selectedSubject;
+  const subs = selectedSubjects;
   const q = query;
   const open = openOnly;
   const off = offset;
@@ -82,7 +81,7 @@ $effect(() => {
 
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    performSearch(term, subject, q, open, off, sort);
+    performSearch(term, subs, q, open, off, sort);
   }, 300);
 
   return () => clearTimeout(searchTimeout);
@@ -91,7 +90,7 @@ $effect(() => {
 // Reset offset when filters change (not offset itself)
 let prevFilters = $state("");
 $effect(() => {
-  const key = `${selectedTerm}|${selectedSubject}|${query}|${openOnly}`;
+  const key = `${selectedTerm}|${selectedSubjects.join(",")}|${query}|${openOnly}`;
   if (prevFilters && key !== prevFilters) {
     offset = 0;
   }
@@ -100,7 +99,7 @@ $effect(() => {
 
 async function performSearch(
   term: string,
-  subject: string,
+  subjects: string[],
   q: string,
   open: boolean,
   off: number,
@@ -110,15 +109,15 @@ async function performSearch(
   loading = true;
   error = null;
 
-  // Derive server sort params from TanStack sorting state
   const sortBy = sort.length > 0 ? SORT_COLUMN_MAP[sort[0].id] : undefined;
   const sortDir: SortDirection | undefined =
     sort.length > 0 ? (sort[0].desc ? "desc" : "asc") : undefined;
 
-  // Sync URL
   const params = new URLSearchParams();
   params.set("term", term);
-  if (subject) params.set("subject", subject);
+  for (const s of subjects) {
+    params.append("subject", s);
+  }
   if (q) params.set("q", q);
   if (open) params.set("open", "true");
   if (off > 0) params.set("offset", String(off));
@@ -129,7 +128,7 @@ async function performSearch(
   try {
     searchResult = await client.searchCourses({
       term,
-      subject: subject || undefined,
+      subjects: subjects.length > 0 ? subjects : undefined,
       q: q || undefined,
       open_only: open || undefined,
       limit,
@@ -150,7 +149,7 @@ function handlePageChange(newOffset: number) {
 </script>
 
 <div class="min-h-screen flex flex-col items-center p-5">
-  <div class="w-full max-w-4xl flex flex-col gap-6">
+  <div class="w-full max-w-6xl flex flex-col gap-6">
     <!-- Title -->
     <div class="text-center pt-8 pb-2">
       <h1 class="text-2xl font-semibold text-foreground">UTSA Course Search</h1>
@@ -161,7 +160,7 @@ function handlePageChange(newOffset: number) {
       terms={data.terms}
       {subjects}
       bind:selectedTerm
-      bind:selectedSubject
+      bind:selectedSubjects
       bind:query
       bind:openOnly
     />
@@ -171,7 +170,7 @@ function handlePageChange(newOffset: number) {
       <div class="text-center py-8">
         <p class="text-status-red">{error}</p>
         <button
-          onclick={() => performSearch(selectedTerm, selectedSubject, query, openOnly, offset, sorting)}
+          onclick={() => performSearch(selectedTerm, selectedSubjects, query, openOnly, offset, sorting)}
           class="mt-2 text-sm text-muted-foreground hover:underline"
         >
           Retry

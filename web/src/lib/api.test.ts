@@ -77,7 +77,7 @@ describe("BannerApiClient", () => {
 
     const result = await apiClient.searchCourses({
       term: "202420",
-      subject: "CS",
+      subjects: ["CS"],
       q: "data",
       open_only: true,
       limit: 25,
