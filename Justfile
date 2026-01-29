@@ -168,9 +168,21 @@ dev *flags:
     const profileDir = release ? "release" : "debug";
 
     const procs = [];
-    const cleanup = () => { for (const p of procs) p.kill(); };
-    process.on("SIGINT", () => { cleanup(); process.exit(130); });
-    process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+    const cleanup = async () => {
+      for (const p of procs) p.kill();
+      await Promise.all(procs.map(p => p.exited));
+    };
+    process.on("SIGINT", async () => { await cleanup(); process.exit(0); });
+    process.on("SIGTERM", async () => { await cleanup(); process.exit(0); });
+
+    // Build frontend first when embedding assets (backend will bake them in)
+    if (embed && !noBuild) {
+      console.log(`\x1b[1;36m→ Building frontend (for embedding)...\x1b[0m`);
+      const fb = Bun.spawnSync(["bun", "run", "--cwd", "web", "build"], {
+        stdio: ["inherit", "inherit", "inherit"],
+      });
+      if (fb.exitCode !== 0) process.exit(fb.exitCode);
+    }
 
     // Frontend: Vite dev server
     if (runFrontend) {
