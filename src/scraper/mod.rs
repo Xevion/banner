@@ -3,6 +3,7 @@ pub mod scheduler;
 pub mod worker;
 
 use crate::banner::BannerApi;
+use crate::data::scrape_jobs;
 use crate::services::Service;
 use crate::state::ReferenceCache;
 use crate::status::{ServiceStatus, ServiceStatusRegistry};
@@ -49,7 +50,17 @@ impl ScraperService {
     }
 
     /// Starts the scheduler and a pool of workers.
-    pub fn start(&mut self) {
+    ///
+    /// Force-unlocks any jobs left locked by a previous unclean shutdown before
+    /// spawning workers, so those jobs re-enter the queue immediately.
+    pub async fn start(&mut self) {
+        // Recover jobs left locked by a previous crash/unclean shutdown
+        match scrape_jobs::force_unlock_all(&self.db_pool).await {
+            Ok(0) => {}
+            Ok(count) => warn!(count, "Force-unlocked stale jobs from previous run"),
+            Err(e) => warn!(error = ?e, "Failed to force-unlock stale jobs"),
+        }
+
         info!("ScraperService starting");
 
         // Create shutdown channel
@@ -92,7 +103,7 @@ impl Service for ScraperService {
     }
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
-        self.start();
+        self.start().await;
         std::future::pending::<()>().await;
         Ok(())
     }

@@ -5,11 +5,33 @@ use crate::error::Result;
 use sqlx::PgPool;
 use std::collections::HashSet;
 
+/// Force-unlock all jobs that have a non-NULL `locked_at`.
+///
+/// Intended to be called once at startup to recover jobs left locked by
+/// a previous unclean shutdown (crash, OOM kill, etc.).
+///
+/// # Returns
+/// The number of jobs that were unlocked.
+pub async fn force_unlock_all(db_pool: &PgPool) -> Result<u64> {
+    let result = sqlx::query("UPDATE scrape_jobs SET locked_at = NULL WHERE locked_at IS NOT NULL")
+        .execute(db_pool)
+        .await?;
+    Ok(result.rows_affected())
+}
+
+/// How long a lock can be held before it is considered expired and reclaimable.
+///
+/// This acts as a safety net for cases where a worker dies without unlocking
+/// (OOM kill, crash, network partition). Under normal operation, the worker's
+/// own job timeout fires well before this threshold.
+const LOCK_EXPIRY: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
 /// Atomically fetch and lock the next available scrape job.
 ///
 /// Uses `FOR UPDATE SKIP LOCKED` to allow multiple workers to poll the queue
-/// concurrently without conflicts. Only jobs that are unlocked and ready to
-/// execute (based on `execute_at`) are considered.
+/// concurrently without conflicts. Considers jobs that are:
+/// - Unlocked and ready to execute, OR
+/// - Locked but past [`LOCK_EXPIRY`] (abandoned by a dead worker)
 ///
 /// # Arguments
 /// * `db_pool` - PostgreSQL connection pool
@@ -20,9 +42,16 @@ use std::collections::HashSet;
 pub async fn fetch_and_lock_job(db_pool: &PgPool) -> Result<Option<ScrapeJob>> {
     let mut tx = db_pool.begin().await?;
 
+    let lock_expiry_secs = LOCK_EXPIRY.as_secs() as i32;
     let job = sqlx::query_as::<_, ScrapeJob>(
-        "SELECT * FROM scrape_jobs WHERE locked_at IS NULL AND execute_at <= NOW() ORDER BY priority DESC, execute_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+        "SELECT * FROM scrape_jobs \
+         WHERE (locked_at IS NULL OR locked_at < NOW() - make_interval(secs => $1::double precision)) \
+         AND execute_at <= NOW() \
+         ORDER BY priority DESC, execute_at ASC \
+         LIMIT 1 \
+         FOR UPDATE SKIP LOCKED"
     )
+    .bind(lock_expiry_secs)
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -90,7 +119,7 @@ pub async fn unlock_and_increment_retry(
         "UPDATE scrape_jobs
          SET locked_at = NULL, retry_count = retry_count + 1
          WHERE id = $1
-         RETURNING CASE WHEN retry_count < $2 THEN retry_count ELSE NULL END",
+         RETURNING CASE WHEN retry_count <= $2 THEN retry_count ELSE NULL END",
     )
     .bind(job_id)
     .bind(max_retries)
@@ -100,10 +129,10 @@ pub async fn unlock_and_increment_retry(
     Ok(result.is_some())
 }
 
-/// Find existing unlocked job payloads matching the given target type and candidates.
+/// Find existing job payloads matching the given target type and candidates.
 ///
-/// Returns a set of stringified JSON payloads that already exist in the queue,
-/// used for deduplication when scheduling new jobs.
+/// Returns a set of stringified JSON payloads that already exist in the queue
+/// (both locked and unlocked), used for deduplication when scheduling new jobs.
 ///
 /// # Arguments
 /// * `target_type` - The target type to filter by
@@ -111,7 +140,7 @@ pub async fn unlock_and_increment_retry(
 /// * `db_pool` - PostgreSQL connection pool
 ///
 /// # Returns
-/// A `HashSet` of stringified JSON payloads that already have pending jobs
+/// A `HashSet` of stringified JSON payloads that already have pending or in-progress jobs
 pub async fn find_existing_job_payloads(
     target_type: TargetType,
     candidate_payloads: &[serde_json::Value],
@@ -119,7 +148,7 @@ pub async fn find_existing_job_payloads(
 ) -> Result<HashSet<String>> {
     let existing_jobs: Vec<(serde_json::Value,)> = sqlx::query_as(
         "SELECT target_payload FROM scrape_jobs
-         WHERE target_type = $1 AND target_payload = ANY($2) AND locked_at IS NULL",
+         WHERE target_type = $1 AND target_payload = ANY($2)",
     )
     .bind(target_type)
     .bind(candidate_payloads)

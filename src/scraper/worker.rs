@@ -10,6 +10,9 @@ use tokio::sync::broadcast;
 use tokio::time;
 use tracing::{Instrument, debug, error, info, trace, warn};
 
+/// Maximum time a single job is allowed to run before being considered stuck.
+const JOB_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
 /// A single worker instance.
 ///
 /// Each worker runs in its own asynchronous task and continuously polls the
@@ -62,13 +65,23 @@ impl Worker {
             let max_retries = job.max_retries;
             let start = std::time::Instant::now();
 
-            // Process the job, racing against shutdown signal
+            // Process the job, racing against shutdown signal and timeout
             let process_result = tokio::select! {
                 _ = shutdown_rx.recv() => {
                     self.handle_shutdown_during_processing(job_id).await;
                     break;
                 }
-                result = self.process_job(job) => result
+                result = async {
+                    match time::timeout(JOB_TIMEOUT, self.process_job(job)).await {
+                        Ok(result) => result,
+                        Err(_elapsed) => {
+                            Err(JobError::Recoverable(anyhow::anyhow!(
+                                "job timed out after {}s",
+                                JOB_TIMEOUT.as_secs()
+                            )))
+                        }
+                    }
+                } => result
             };
 
             let duration = start.elapsed();

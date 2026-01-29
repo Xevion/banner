@@ -241,7 +241,7 @@ async fn unlock_and_increment_retry_exhausted(pool: PgPool) {
         json!({"subject": "CS"}),
         ScrapePriority::Medium,
         true,
-        2, // retry_count
+        3, // retry_count (already used all 3 retries)
         3, // max_retries
     )
     .await;
@@ -251,7 +251,7 @@ async fn unlock_and_increment_retry_exhausted(pool: PgPool) {
         .unwrap();
     assert!(
         !has_retries,
-        "should NOT have retries remaining (2→3, max=3)"
+        "should NOT have retries remaining (3→4, max=3)"
     );
 
     let (retry_count,): (i32,) =
@@ -260,7 +260,7 @@ async fn unlock_and_increment_retry_exhausted(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(retry_count, 3);
+    assert_eq!(retry_count, 4);
 }
 
 #[sqlx::test]
@@ -346,7 +346,7 @@ async fn find_existing_payloads_returns_matching(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn find_existing_payloads_ignores_locked(pool: PgPool) {
+async fn find_existing_payloads_includes_locked(pool: PgPool) {
     let payload = json!({"subject": "CS"});
 
     helpers::insert_scrape_job(
@@ -365,7 +365,10 @@ async fn find_existing_payloads_ignores_locked(pool: PgPool) {
         .await
         .unwrap();
 
-    assert!(existing.is_empty(), "locked jobs should be ignored");
+    assert!(
+        existing.contains(&payload.to_string()),
+        "locked jobs should be included in deduplication"
+    );
 }
 
 #[sqlx::test]
