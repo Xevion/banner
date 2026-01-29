@@ -14,6 +14,7 @@ mod data;
 mod error;
 mod formatter;
 mod logging;
+mod rmp;
 mod scraper;
 mod services;
 mod signals;

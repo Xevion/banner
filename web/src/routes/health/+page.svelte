@@ -45,7 +45,10 @@ type StatusState =
   | { mode: "error"; lastFetch: Date }
   | { mode: "timeout"; lastFetch: Date };
 
-const STATUS_ICONS: Record<ServiceStatus | "Unreachable", { icon: typeof CheckCircle; color: string }> = {
+const STATUS_ICONS: Record<
+  ServiceStatus | "Unreachable",
+  { icon: typeof CheckCircle; color: string }
+> = {
   active: { icon: CheckCircle, color: "var(--status-green)" },
   connected: { icon: CheckCircle, color: "var(--status-green)" },
   starting: { icon: Hourglass, color: "var(--status-orange)" },

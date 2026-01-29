@@ -1,87 +1,201 @@
 <script lang="ts">
-  import type { CourseResponse } from "$lib/api";
-  import {
-    formatTime,
-    formatMeetingDays,
-    formatCreditHours,
-  } from "$lib/course";
+import type { CourseResponse } from "$lib/api";
+import {
+  formatTime,
+  formatCreditHours,
+  formatDate,
+  formatMeetingDaysLong,
+  isMeetingTimeTBA,
+  isTimeTBA,
+} from "$lib/course";
+import { Tooltip } from "bits-ui";
+import { Info, Copy, Check } from "@lucide/svelte";
 
-  let { course }: { course: CourseResponse } = $props();
+let { course }: { course: CourseResponse } = $props();
+
+let copiedEmail: string | null = $state(null);
+
+async function copyEmail(email: string, event: MouseEvent) {
+  event.stopPropagation();
+  await navigator.clipboard.writeText(email);
+  copiedEmail = email;
+  setTimeout(() => {
+    copiedEmail = null;
+  }, 2000);
+}
 </script>
 
-<div class="bg-muted p-4 text-sm border-b border-border">
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<div class="bg-muted/60 p-5 text-sm border-b border-border">
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
     <!-- Instructors -->
     <div>
-      <h4 class="font-medium text-foreground mb-1">Instructors</h4>
+      <h4 class="text-sm text-foreground mb-2">
+        Instructors
+      </h4>
       {#if course.instructors.length > 0}
-        <ul class="space-y-0.5">
+        <div class="flex flex-wrap gap-1.5">
           {#each course.instructors as instructor}
-            <li class="text-muted-foreground">
-              {instructor.displayName}
-              {#if instructor.isPrimary}
-                <span class="text-xs bg-card border border-border rounded px-1 py-0.5 ml-1">primary</span>
-              {/if}
-              {#if instructor.email}
-                <span class="text-xs"> — {instructor.email}</span>
-              {/if}
-            </li>
+            <Tooltip.Root delayDuration={200}>
+              <Tooltip.Trigger>
+                <span
+                  class="inline-flex items-center gap-1.5 text-sm font-medium bg-card border border-border rounded-md px-2.5 py-1 text-foreground hover:border-foreground/20 hover:bg-card/80 transition-colors"
+                >
+                  {instructor.displayName}
+                  {#if 'rmpRating' in instructor && instructor.rmpRating}
+                    {@const rating = instructor.rmpRating as number}
+                    <span
+                      class="text-[10px] font-semibold {rating >= 4.0 ? 'text-status-green' : rating >= 3.0 ? 'text-yellow-500' : 'text-status-red'}"
+                    >{rating.toFixed(1)}★</span>
+                  {/if}
+                </span>
+              </Tooltip.Trigger>
+              <Tooltip.Content
+                class="bg-card text-card-foreground text-xs border border-border rounded-md px-3 py-2 shadow-md max-w-72"
+              >
+                <div class="space-y-1.5">
+                  <div class="font-medium">{instructor.displayName}</div>
+                  {#if instructor.isPrimary}
+                    <div class="text-muted-foreground">Primary instructor</div>
+                  {/if}
+                  {#if 'rmpRating' in instructor && instructor.rmpRating}
+                    <div class="text-muted-foreground">
+                      {(instructor.rmpRating as number).toFixed(1)}/5 ({(instructor as any).rmpNumRatings ?? 0} ratings)
+                    </div>
+                  {/if}
+                  {#if instructor.email}
+                    <button
+                      onclick={(e) => copyEmail(instructor.email!, e)}
+                      class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      {#if copiedEmail === instructor.email}
+                        <Check class="size-3" />
+                        <span>Copied!</span>
+                      {:else}
+                        <Copy class="size-3" />
+                        <span>{instructor.email}</span>
+                      {/if}
+                    </button>
+                  {/if}
+                </div>
+              </Tooltip.Content>
+            </Tooltip.Root>
           {/each}
-        </ul>
+        </div>
       {:else}
-        <span class="text-muted-foreground">Staff</span>
+        <span class="text-muted-foreground italic">Staff</span>
       {/if}
     </div>
 
     <!-- Meeting Times -->
     <div>
-      <h4 class="font-medium text-foreground mb-1">Meeting Times</h4>
+      <h4 class="text-sm text-foreground mb-2">
+        Meeting Times
+      </h4>
       {#if course.meetingTimes.length > 0}
-        <ul class="space-y-1">
+        <ul class="space-y-2">
           {#each course.meetingTimes as mt}
-            <li class="text-muted-foreground">
-              <span class="font-mono">{formatMeetingDays(mt) || "TBA"}</span>
-              {formatTime(mt.begin_time)}–{formatTime(mt.end_time)}
-              {#if mt.building || mt.room}
-                <span class="text-xs">
-                  ({mt.building_description ?? mt.building}{mt.room ? ` ${mt.room}` : ""})
-                </span>
+            <li>
+              {#if isMeetingTimeTBA(mt) && isTimeTBA(mt)}
+                <span class="italic text-muted-foreground">TBA</span>
+              {:else}
+                <div class="flex items-baseline gap-1.5">
+                  {#if !isMeetingTimeTBA(mt)}
+                    <span class="font-medium text-foreground">
+                      {formatMeetingDaysLong(mt)}
+                    </span>
+                  {/if}
+                  {#if !isTimeTBA(mt)}
+                    <span class="text-muted-foreground">
+                      {formatTime(mt.begin_time)}&ndash;{formatTime(mt.end_time)}
+                    </span>
+                  {:else}
+                    <span class="italic text-muted-foreground">Time TBA</span>
+                  {/if}
+                </div>
               {/if}
-              <div class="text-xs opacity-70">{mt.start_date} – {mt.end_date}</div>
+              {#if mt.building || mt.room}
+                <div class="text-xs text-muted-foreground mt-0.5">
+                  {mt.building_description ?? mt.building}{mt.room ? ` ${mt.room}` : ""}
+                </div>
+              {/if}
+              <div class="text-xs text-muted-foreground/70 mt-0.5">
+                {formatDate(mt.start_date)} &ndash; {formatDate(mt.end_date)}
+              </div>
             </li>
           {/each}
         </ul>
       {:else}
-        <span class="text-muted-foreground">TBA</span>
+        <span class="italic text-muted-foreground">TBA</span>
       {/if}
     </div>
 
     <!-- Delivery -->
     <div>
-      <h4 class="font-medium text-foreground mb-1">Delivery</h4>
-      <span class="text-muted-foreground">
+      <h4 class="text-sm text-foreground mb-2">
+        <span class="inline-flex items-center gap-1">
+          Delivery
+          <Tooltip.Root delayDuration={100}>
+            <Tooltip.Trigger>
+              <Info class="size-3 text-muted-foreground/50" />
+            </Tooltip.Trigger>
+            <Tooltip.Content
+              class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
+            >
+              How the course is taught: in-person, online, hybrid, etc.
+            </Tooltip.Content>
+          </Tooltip.Root>
+        </span>
+      </h4>
+      <span class="text-foreground">
         {course.instructionalMethod ?? "—"}
         {#if course.campus}
-          · {course.campus}
+          <span class="text-muted-foreground"> · {course.campus}</span>
         {/if}
       </span>
     </div>
 
     <!-- Credits -->
     <div>
-      <h4 class="font-medium text-foreground mb-1">Credits</h4>
-      <span class="text-muted-foreground">{formatCreditHours(course)}</span>
+      <h4 class="text-sm text-foreground mb-2">
+        Credits
+      </h4>
+      <span class="text-foreground">{formatCreditHours(course)}</span>
     </div>
 
     <!-- Attributes -->
     {#if course.attributes.length > 0}
       <div>
-        <h4 class="font-medium text-foreground mb-1">Attributes</h4>
-        <div class="flex flex-wrap gap-1">
+        <h4 class="text-sm text-foreground mb-2">
+          <span class="inline-flex items-center gap-1">
+            Attributes
+            <Tooltip.Root delayDuration={100}>
+              <Tooltip.Trigger>
+                <Info class="size-3 text-muted-foreground/50" />
+              </Tooltip.Trigger>
+              <Tooltip.Content
+                class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
+              >
+                Course flags for degree requirements, core curriculum, or special designations
+              </Tooltip.Content>
+            </Tooltip.Root>
+          </span>
+        </h4>
+        <div class="flex flex-wrap gap-1.5">
           {#each course.attributes as attr}
-            <span class="text-xs bg-card border border-border rounded px-1.5 py-0.5 text-muted-foreground">
-              {attr}
-            </span>
+            <Tooltip.Root delayDuration={100}>
+              <Tooltip.Trigger>
+                <span
+                  class="inline-flex text-xs font-medium bg-card border border-border rounded-md px-2 py-0.5 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+                >
+                  {attr}
+                </span>
+              </Tooltip.Trigger>
+              <Tooltip.Content
+                class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-64"
+              >
+                Course attribute code
+              </Tooltip.Content>
+            </Tooltip.Root>
           {/each}
         </div>
       </div>
@@ -90,21 +204,53 @@
     <!-- Cross-list -->
     {#if course.crossList}
       <div>
-        <h4 class="font-medium text-foreground mb-1">Cross-list</h4>
-        <span class="text-muted-foreground">
-          {course.crossList}
-          {#if course.crossListCount != null && course.crossListCapacity != null}
-            ({course.crossListCount}/{course.crossListCapacity})
-          {/if}
-        </span>
+        <h4 class="text-sm text-foreground mb-2">
+          <span class="inline-flex items-center gap-1">
+            Cross-list
+            <Tooltip.Root delayDuration={100}>
+              <Tooltip.Trigger>
+                <Info class="size-3 text-muted-foreground/50" />
+              </Tooltip.Trigger>
+              <Tooltip.Content
+                class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
+              >
+                Cross-listed sections share enrollment across multiple course numbers. Students in any linked section attend the same class.
+              </Tooltip.Content>
+            </Tooltip.Root>
+          </span>
+        </h4>
+        <Tooltip.Root delayDuration={100}>
+          <Tooltip.Trigger>
+            <span class="inline-flex items-center gap-1.5 text-foreground font-mono">
+              <span class="bg-card border border-border rounded-md px-2 py-0.5 text-xs font-medium">
+                {course.crossList}
+              </span>
+              {#if course.crossListCount != null && course.crossListCapacity != null}
+                <span class="text-muted-foreground text-xs">
+                  {course.crossListCount}/{course.crossListCapacity}
+                </span>
+              {/if}
+            </span>
+          </Tooltip.Trigger>
+          <Tooltip.Content
+            class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
+          >
+            Group <span class="font-mono font-medium">{course.crossList}</span>
+            {#if course.crossListCount != null && course.crossListCapacity != null}
+              — {course.crossListCount} enrolled across {course.crossListCapacity} shared seats
+            {/if}
+          </Tooltip.Content>
+        </Tooltip.Root>
       </div>
     {/if}
 
     <!-- Waitlist -->
     {#if course.waitCapacity > 0}
       <div>
-        <h4 class="font-medium text-foreground mb-1">Waitlist</h4>
-        <span class="text-muted-foreground">{course.waitCount} / {course.waitCapacity}</span>
+        <h4 class="text-sm text-foreground mb-2">
+          Waitlist
+        </h4>
+        <span class="text-foreground">{course.waitCount} / {course.waitCapacity}</span>
       </div>
     {/if}
   </div>

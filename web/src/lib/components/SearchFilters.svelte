@@ -1,21 +1,21 @@
 <script lang="ts">
-  import type { Term, Subject } from "$lib/api";
+import type { Term, Subject } from "$lib/api";
 
-  let {
-    terms,
-    subjects,
-    selectedTerm = $bindable(),
-    selectedSubject = $bindable(),
-    query = $bindable(),
-    openOnly = $bindable(),
-  }: {
-    terms: Term[];
-    subjects: Subject[];
-    selectedTerm: string;
-    selectedSubject: string;
-    query: string;
-    openOnly: boolean;
-  } = $props();
+let {
+  terms,
+  subjects,
+  selectedTerm = $bindable(),
+  selectedSubject = $bindable(),
+  query = $bindable(),
+  openOnly = $bindable(),
+}: {
+  terms: Term[];
+  subjects: Subject[];
+  selectedTerm: string;
+  selectedSubject: string;
+  query: string;
+  openOnly: boolean;
+} = $props();
 </script>
 
 <div class="flex flex-wrap gap-3 items-center">

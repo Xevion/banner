@@ -1,15 +1,20 @@
 <script lang="ts">
-  let { totalCount, offset, limit, onPageChange }: {
-    totalCount: number;
-    offset: number;
-    limit: number;
-    onPageChange: (newOffset: number) => void;
-  } = $props();
+let {
+  totalCount,
+  offset,
+  limit,
+  onPageChange,
+}: {
+  totalCount: number;
+  offset: number;
+  limit: number;
+  onPageChange: (newOffset: number) => void;
+} = $props();
 
-  const start = $derived(offset + 1);
-  const end = $derived(Math.min(offset + limit, totalCount));
-  const hasPrev = $derived(offset > 0);
-  const hasNext = $derived(offset + limit < totalCount);
+const start = $derived(offset + 1);
+const end = $derived(Math.min(offset + limit, totalCount));
+const hasPrev = $derived(offset > 0);
+const hasNext = $derived(offset + limit < totalCount);
 </script>
 
 {#if totalCount > 0}

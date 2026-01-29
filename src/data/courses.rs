@@ -98,23 +98,26 @@ pub async fn get_course_by_crn(
 
 /// Get instructors for a course by course ID.
 ///
-/// Returns `(banner_id, display_name, email, is_primary)` tuples.
+/// Returns `(banner_id, display_name, email, is_primary, rmp_avg_rating, rmp_num_ratings)` tuples.
 pub async fn get_course_instructors(
     db_pool: &PgPool,
     course_id: i32,
-) -> Result<Vec<(String, String, Option<String>, bool)>> {
-    let rows: Vec<(String, String, Option<String>, bool)> = sqlx::query_as(
-        r#"
-        SELECT i.banner_id, i.display_name, i.email, ci.is_primary
+) -> Result<Vec<(String, String, Option<String>, bool, Option<f32>, Option<i32>)>> {
+    let rows: Vec<(String, String, Option<String>, bool, Option<f32>, Option<i32>)> =
+        sqlx::query_as(
+            r#"
+        SELECT i.banner_id, i.display_name, i.email, ci.is_primary,
+               rp.avg_rating, rp.num_ratings
         FROM course_instructors ci
         JOIN instructors i ON i.banner_id = ci.instructor_id
+        LEFT JOIN rmp_professors rp ON rp.legacy_id = i.rmp_legacy_id
         WHERE ci.course_id = $1
         ORDER BY ci.is_primary DESC, i.display_name
         "#,
-    )
-    .bind(course_id)
-    .fetch_all(db_pool)
-    .await?;
+        )
+        .bind(course_id)
+        .fetch_all(db_pool)
+        .await?;
     Ok(rows)
 }
 

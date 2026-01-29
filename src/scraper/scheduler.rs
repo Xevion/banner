@@ -2,6 +2,7 @@ use crate::banner::{BannerApi, Term};
 use crate::data::models::{ReferenceData, ScrapePriority, TargetType};
 use crate::data::scrape_jobs;
 use crate::error::Result;
+use crate::rmp::RmpClient;
 use crate::scraper::jobs::subject::SubjectJob;
 use crate::state::ReferenceCache;
 use serde_json::json;
@@ -15,6 +16,9 @@ use tracing::{debug, error, info, warn};
 
 /// How often reference data is re-scraped (6 hours).
 const REFERENCE_DATA_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+
+/// How often RMP data is synced (24 hours).
+const RMP_SYNC_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Periodically analyzes data and enqueues prioritized scrape jobs.
 pub struct Scheduler {
@@ -53,6 +57,8 @@ impl Scheduler {
         let mut current_work: Option<(tokio::task::JoinHandle<()>, CancellationToken)> = None;
         // Scrape reference data immediately on first cycle
         let mut last_ref_scrape = Instant::now() - REFERENCE_DATA_INTERVAL;
+        // Sync RMP data immediately on first cycle
+        let mut last_rmp_sync = Instant::now() - RMP_SYNC_INTERVAL;
 
         loop {
             tokio::select! {
@@ -60,6 +66,7 @@ impl Scheduler {
                     let cancel_token = CancellationToken::new();
 
                     let should_scrape_ref = last_ref_scrape.elapsed() >= REFERENCE_DATA_INTERVAL;
+                    let should_sync_rmp = last_rmp_sync.elapsed() >= RMP_SYNC_INTERVAL;
 
                     // Spawn work in separate task to allow graceful cancellation during shutdown.
                     let work_handle = tokio::spawn({
@@ -68,27 +75,46 @@ impl Scheduler {
                         let cancel_token = cancel_token.clone();
                         let reference_cache = self.reference_cache.clone();
 
-                        async move {
-                            tokio::select! {
-                                _ = async {
-                                    if should_scrape_ref
-                                        && let Err(e) = Self::scrape_reference_data(&db_pool, &banner_api, &reference_cache).await
-                                    {
-                                        error!(error = ?e, "Failed to scrape reference data");
+                                async move {
+                                    tokio::select! {
+                                        _ = async {
+                                            // RMP sync is independent of Banner API — run it
+                                            // concurrently with reference data scraping so it
+                                            // doesn't wait behind rate-limited Banner calls.
+                                            let rmp_fut = async {
+                                                if should_sync_rmp
+                                                    && let Err(e) = Self::sync_rmp_data(&db_pool).await
+                                                {
+                                                    error!(error = ?e, "Failed to sync RMP data");
+                                                }
+                                            };
+
+                                            let ref_fut = async {
+                                                if should_scrape_ref
+                                                    && let Err(e) = Self::scrape_reference_data(&db_pool, &banner_api, &reference_cache).await
+                                                {
+                                                    error!(error = ?e, "Failed to scrape reference data");
+                                                }
+                                            };
+
+                                            tokio::join!(rmp_fut, ref_fut);
+
+                                            if let Err(e) = Self::schedule_jobs_impl(&db_pool, &banner_api).await {
+                                                error!(error = ?e, "Failed to schedule jobs");
+                                            }
+                                        } => {}
+                                        _ = cancel_token.cancelled() => {
+                                            debug!("Scheduling work cancelled gracefully");
+                                        }
                                     }
-                                    if let Err(e) = Self::schedule_jobs_impl(&db_pool, &banner_api).await {
-                                        error!(error = ?e, "Failed to schedule jobs");
-                                    }
-                                } => {}
-                                _ = cancel_token.cancelled() => {
-                                    debug!("Scheduling work cancelled gracefully");
                                 }
-                            }
-                        }
                     });
 
                     if should_scrape_ref {
                         last_ref_scrape = Instant::now();
+                    }
+                    if should_sync_rmp {
+                        last_rmp_sync = Instant::now();
                     }
 
                     current_work = Some((work_handle, cancel_token));
@@ -191,6 +217,24 @@ impl Scheduler {
         }
 
         debug!("Job scheduling complete");
+        Ok(())
+    }
+
+    /// Fetch all RMP professors, upsert to DB, and auto-match against Banner instructors.
+    #[tracing::instrument(skip_all)]
+    async fn sync_rmp_data(db_pool: &PgPool) -> Result<()> {
+        info!("Starting RMP data sync");
+
+        let client = RmpClient::new();
+        let professors = client.fetch_all_professors().await?;
+        let total = professors.len();
+
+        crate::data::rmp::batch_upsert_rmp_professors(&professors, db_pool).await?;
+        info!(total, "RMP professors upserted");
+
+        let matched = crate::data::rmp::auto_match_instructors(db_pool).await?;
+        info!(total, matched, "RMP sync complete");
+
         Ok(())
     }
 

@@ -27,6 +27,23 @@ export function formatMeetingDays(mt: DbMeetingTime): string {
     .join("");
 }
 
+/** Longer day names for detail view: single day → "Thursdays", multiple → "Mon, Wed, Fri" */
+export function formatMeetingDaysLong(mt: DbMeetingTime): string {
+  const days: [boolean, string, string][] = [
+    [mt.monday, "Mon", "Mondays"],
+    [mt.tuesday, "Tue", "Tuesdays"],
+    [mt.wednesday, "Wed", "Wednesdays"],
+    [mt.thursday, "Thur", "Thursdays"],
+    [mt.friday, "Fri", "Fridays"],
+    [mt.saturday, "Sat", "Saturdays"],
+    [mt.sunday, "Sun", "Sundays"],
+  ];
+  const active = days.filter(([a]) => a);
+  if (active.length === 0) return "";
+  if (active.length === 1) return active[0][2];
+  return active.map(([, short]) => short).join(", ");
+}
+
 /** Condensed meeting time: "MWF 9:00 AM–9:50 AM" */
 export function formatMeetingTime(mt: DbMeetingTime): string {
   const days = formatMeetingDays(mt);
@@ -47,8 +64,59 @@ export function abbreviateInstructor(name: string): string {
 }
 
 /** Get primary instructor from a course, or first instructor */
-export function getPrimaryInstructor(instructors: InstructorResponse[]): InstructorResponse | undefined {
+export function getPrimaryInstructor(
+  instructors: InstructorResponse[]
+): InstructorResponse | undefined {
   return instructors.find((i) => i.isPrimary) ?? instructors[0];
+}
+
+/** Check if a meeting time has no scheduled days */
+export function isMeetingTimeTBA(mt: DbMeetingTime): boolean {
+  return (
+    !mt.monday &&
+    !mt.tuesday &&
+    !mt.wednesday &&
+    !mt.thursday &&
+    !mt.friday &&
+    !mt.saturday &&
+    !mt.sunday
+  );
+}
+
+/** Check if a meeting time has no begin/end times */
+export function isTimeTBA(mt: DbMeetingTime): boolean {
+  return !mt.begin_time || mt.begin_time.length !== 4;
+}
+
+/** Format a date string to "January 20, 2026". Accepts YYYY-MM-DD or MM/DD/YYYY. */
+export function formatDate(dateStr: string): string {
+  let year: number, month: number, day: number;
+  if (dateStr.includes("-")) {
+    [year, month, day] = dateStr.split("-").map(Number);
+  } else if (dateStr.includes("/")) {
+    [month, day, year] = dateStr.split("/").map(Number);
+  } else {
+    return dateStr;
+  }
+  if (!year || !month || !day) return dateStr;
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
+/** Short location string from first meeting time: "MH 2.206" or campus fallback */
+export function formatLocation(course: CourseResponse): string | null {
+  for (const mt of course.meetingTimes) {
+    if (mt.building && mt.room) return `${mt.building} ${mt.room}`;
+    if (mt.building) return mt.building;
+  }
+  return course.campus ?? null;
+}
+
+/** Longer location string using building description: "Main Hall 2.206" */
+export function formatLocationLong(mt: DbMeetingTime): string | null {
+  const name = mt.building_description ?? mt.building;
+  if (!name) return null;
+  return mt.room ? `${name} ${mt.room}` : name;
 }
 
 /** Format credit hours display */

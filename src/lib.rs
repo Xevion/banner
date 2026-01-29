@@ -7,6 +7,7 @@ pub mod data;
 pub mod error;
 pub mod formatter;
 pub mod logging;
+pub mod rmp;
 pub mod scraper;
 pub mod services;
 pub mod signals;

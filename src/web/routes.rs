@@ -357,6 +357,8 @@ pub struct InstructorResponse {
     display_name: String,
     email: Option<String>,
     is_primary: bool,
+    rmp_rating: Option<f32>,
+    rmp_num_ratings: Option<i32>,
 }
 
 #[derive(Serialize, TS)]
@@ -387,11 +389,15 @@ async fn build_course_response(
         .unwrap_or_default()
         .into_iter()
         .map(
-            |(banner_id, display_name, email, is_primary)| InstructorResponse {
-                banner_id,
-                display_name,
-                email,
-                is_primary,
+            |(banner_id, display_name, email, is_primary, rmp_rating, rmp_num_ratings)| {
+                InstructorResponse {
+                    banner_id,
+                    display_name,
+                    email,
+                    is_primary,
+                    rmp_rating,
+                    rmp_num_ratings,
+                }
             },
         )
         .collect();

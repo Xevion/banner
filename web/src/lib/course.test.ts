@@ -6,6 +6,10 @@ import {
   abbreviateInstructor,
   formatCreditHours,
   getPrimaryInstructor,
+  isMeetingTimeTBA,
+  isTimeTBA,
+  formatDate,
+  formatMeetingDaysLong,
 } from "$lib/course";
 import type { DbMeetingTime, CourseResponse, InstructorResponse } from "$lib/api";
 
@@ -45,9 +49,9 @@ describe("formatTime", () => {
 
 describe("formatMeetingDays", () => {
   it("returns MWF for mon/wed/fri", () => {
-    expect(formatMeetingDays(makeMeetingTime({ monday: true, wednesday: true, friday: true }))).toBe(
-      "MWF"
-    );
+    expect(
+      formatMeetingDays(makeMeetingTime({ monday: true, wednesday: true, friday: true }))
+    ).toBe("MWF");
   });
   it("returns TR for tue/thu", () => {
     expect(formatMeetingDays(makeMeetingTime({ tuesday: true, thursday: true }))).toBe("TR");
@@ -76,12 +80,20 @@ describe("formatMeetingTime", () => {
   it("formats a standard meeting time", () => {
     expect(
       formatMeetingTime(
-        makeMeetingTime({ monday: true, wednesday: true, friday: true, begin_time: "0900", end_time: "0950" })
+        makeMeetingTime({
+          monday: true,
+          wednesday: true,
+          friday: true,
+          begin_time: "0900",
+          end_time: "0950",
+        })
       )
     ).toBe("MWF 9:00 AM–9:50 AM");
   });
   it("returns TBA when no days", () => {
-    expect(formatMeetingTime(makeMeetingTime({ begin_time: "0900", end_time: "0950" }))).toBe("TBA");
+    expect(formatMeetingTime(makeMeetingTime({ begin_time: "0900", end_time: "0950" }))).toBe(
+      "TBA"
+    );
   });
   it("returns days + TBA when no times", () => {
     expect(formatMeetingTime(makeMeetingTime({ monday: true }))).toBe("M TBA");
@@ -89,7 +101,8 @@ describe("formatMeetingTime", () => {
 });
 
 describe("abbreviateInstructor", () => {
-  it("abbreviates standard name", () => expect(abbreviateInstructor("Heaps, John")).toBe("Heaps, J."));
+  it("abbreviates standard name", () =>
+    expect(abbreviateInstructor("Heaps, John")).toBe("Heaps, J."));
   it("handles no comma", () => expect(abbreviateInstructor("Staff")).toBe("Staff"));
   it("handles multiple first names", () =>
     expect(abbreviateInstructor("Smith, Mary Jane")).toBe("Smith, M."));
@@ -117,17 +130,99 @@ describe("getPrimaryInstructor", () => {
 describe("formatCreditHours", () => {
   it("returns creditHours when set", () => {
     expect(
-      formatCreditHours({ creditHours: 3, creditHourLow: null, creditHourHigh: null } as CourseResponse)
+      formatCreditHours({
+        creditHours: 3,
+        creditHourLow: null,
+        creditHourHigh: null,
+      } as CourseResponse)
     ).toBe("3");
   });
   it("returns range when variable", () => {
     expect(
-      formatCreditHours({ creditHours: null, creditHourLow: 1, creditHourHigh: 3 } as CourseResponse)
+      formatCreditHours({
+        creditHours: null,
+        creditHourLow: 1,
+        creditHourHigh: 3,
+      } as CourseResponse)
     ).toBe("1–3");
   });
   it("returns dash when no credit info", () => {
     expect(
-      formatCreditHours({ creditHours: null, creditHourLow: null, creditHourHigh: null } as CourseResponse)
+      formatCreditHours({
+        creditHours: null,
+        creditHourLow: null,
+        creditHourHigh: null,
+      } as CourseResponse)
     ).toBe("—");
+  });
+});
+
+describe("isMeetingTimeTBA", () => {
+  it("returns true when no days set", () => {
+    expect(isMeetingTimeTBA(makeMeetingTime())).toBe(true);
+  });
+  it("returns false when any day is set", () => {
+    expect(isMeetingTimeTBA(makeMeetingTime({ monday: true }))).toBe(false);
+  });
+  it("returns false when multiple days set", () => {
+    expect(isMeetingTimeTBA(makeMeetingTime({ tuesday: true, thursday: true }))).toBe(false);
+  });
+});
+
+describe("isTimeTBA", () => {
+  it("returns true when begin_time is null", () => {
+    expect(isTimeTBA(makeMeetingTime())).toBe(true);
+  });
+  it("returns true when begin_time is empty", () => {
+    expect(isTimeTBA(makeMeetingTime({ begin_time: "" }))).toBe(true);
+  });
+  it("returns true when begin_time is short", () => {
+    expect(isTimeTBA(makeMeetingTime({ begin_time: "09" }))).toBe(true);
+  });
+  it("returns false when begin_time is valid", () => {
+    expect(isTimeTBA(makeMeetingTime({ begin_time: "0900" }))).toBe(false);
+  });
+});
+
+describe("formatDate", () => {
+  it("formats standard date", () => {
+    expect(formatDate("2024-08-26")).toBe("August 26, 2024");
+  });
+  it("formats December date", () => {
+    expect(formatDate("2024-12-12")).toBe("December 12, 2024");
+  });
+  it("formats January 1st", () => {
+    expect(formatDate("2026-01-01")).toBe("January 1, 2026");
+  });
+  it("formats MM/DD/YYYY date", () => {
+    expect(formatDate("01/20/2026")).toBe("January 20, 2026");
+  });
+  it("formats MM/DD/YYYY with May", () => {
+    expect(formatDate("05/13/2026")).toBe("May 13, 2026");
+  });
+  it("returns original string for invalid input", () => {
+    expect(formatDate("bad-date")).toBe("bad-date");
+  });
+});
+
+describe("formatMeetingDaysLong", () => {
+  it("returns full plural for single day", () => {
+    expect(formatMeetingDaysLong(makeMeetingTime({ thursday: true }))).toBe("Thursdays");
+  });
+  it("returns full plural for Monday only", () => {
+    expect(formatMeetingDaysLong(makeMeetingTime({ monday: true }))).toBe("Mondays");
+  });
+  it("returns semi-abbreviated for multiple days", () => {
+    expect(
+      formatMeetingDaysLong(makeMeetingTime({ monday: true, wednesday: true, friday: true }))
+    ).toBe("Mon, Wed, Fri");
+  });
+  it("returns semi-abbreviated for TR", () => {
+    expect(formatMeetingDaysLong(makeMeetingTime({ tuesday: true, thursday: true }))).toBe(
+      "Tue, Thur"
+    );
+  });
+  it("returns empty string when no days", () => {
+    expect(formatMeetingDaysLong(makeMeetingTime())).toBe("");
   });
 });
