@@ -44,6 +44,9 @@ export interface MetricsResponse {
 }
 
 // Client-side only — not generated from Rust
+export type SortColumn = "course_code" | "title" | "instructor" | "time" | "seats";
+export type SortDirection = "asc" | "desc";
+
 export interface SearchParams {
   term: string;
   subject?: string;
@@ -51,6 +54,8 @@ export interface SearchParams {
   open_only?: boolean;
   limit?: number;
   offset?: number;
+  sort_by?: SortColumn;
+  sort_dir?: SortDirection;
 }
 
 export class BannerApiClient {
@@ -92,6 +97,8 @@ export class BannerApiClient {
     if (params.open_only) query.set("open_only", "true");
     if (params.limit !== undefined) query.set("limit", String(params.limit));
     if (params.offset !== undefined) query.set("offset", String(params.offset));
+    if (params.sort_by) query.set("sort_by", params.sort_by);
+    if (params.sort_dir) query.set("sort_dir", params.sort_dir);
     return this.request<SearchResponse>(`/courses/search?${query.toString()}`);
   }
 

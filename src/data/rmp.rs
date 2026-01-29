@@ -28,21 +28,22 @@ pub async fn batch_upsert_rmp_professors(
 
     let legacy_ids: Vec<i32> = deduped.iter().map(|p| p.legacy_id).collect();
     let graphql_ids: Vec<&str> = deduped.iter().map(|p| p.graphql_id.as_str()).collect();
-    let first_names: Vec<String> = deduped.iter().map(|p| p.first_name.trim().to_string()).collect();
-    let first_name_refs: Vec<&str> = first_names.iter().map(|s| s.as_str()).collect();
-    let last_names: Vec<String> = deduped.iter().map(|p| p.last_name.trim().to_string()).collect();
-    let last_name_refs: Vec<&str> = last_names.iter().map(|s| s.as_str()).collect();
-    let departments: Vec<Option<&str>> = deduped
+    let first_names: Vec<String> = deduped
         .iter()
-        .map(|p| p.department.as_deref())
+        .map(|p| p.first_name.trim().to_string())
         .collect();
+    let first_name_refs: Vec<&str> = first_names.iter().map(|s| s.as_str()).collect();
+    let last_names: Vec<String> = deduped
+        .iter()
+        .map(|p| p.last_name.trim().to_string())
+        .collect();
+    let last_name_refs: Vec<&str> = last_names.iter().map(|s| s.as_str()).collect();
+    let departments: Vec<Option<&str>> = deduped.iter().map(|p| p.department.as_deref()).collect();
     let avg_ratings: Vec<Option<f32>> = deduped.iter().map(|p| p.avg_rating).collect();
     let avg_difficulties: Vec<Option<f32>> = deduped.iter().map(|p| p.avg_difficulty).collect();
     let num_ratings: Vec<i32> = deduped.iter().map(|p| p.num_ratings).collect();
-    let would_take_again_pcts: Vec<Option<f32>> = deduped
-        .iter()
-        .map(|p| p.would_take_again_pct)
-        .collect();
+    let would_take_again_pcts: Vec<Option<f32>> =
+        deduped.iter().map(|p| p.would_take_again_pct).collect();
 
     sqlx::query(
         r#"
@@ -129,11 +130,10 @@ pub async fn auto_match_instructors(db_pool: &PgPool) -> Result<u64> {
     }
 
     // Load all RMP professors
-    let professors: Vec<(i32, String, String)> = sqlx::query_as(
-        "SELECT legacy_id, first_name, last_name FROM rmp_professors",
-    )
-    .fetch_all(db_pool)
-    .await?;
+    let professors: Vec<(i32, String, String)> =
+        sqlx::query_as("SELECT legacy_id, first_name, last_name FROM rmp_professors")
+            .fetch_all(db_pool)
+            .await?;
 
     // Build a lookup: (normalized_last, normalized_first) -> list of legacy_ids
     let mut rmp_index: HashMap<(String, String), Vec<i32>> = HashMap::new();

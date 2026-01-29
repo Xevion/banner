@@ -1,7 +1,14 @@
 <script lang="ts">
 import { untrack } from "svelte";
 import { goto } from "$app/navigation";
-import { type Subject, type SearchResponse, client } from "$lib/api";
+import {
+  type Subject,
+  type SearchResponse,
+  type SortColumn,
+  type SortDirection,
+  client,
+} from "$lib/api";
+import type { SortingState } from "@tanstack/table-core";
 import SearchFilters from "$lib/components/SearchFilters.svelte";
 import CourseTable from "$lib/components/CourseTable.svelte";
 import Pagination from "$lib/components/Pagination.svelte";
@@ -18,6 +25,29 @@ let query = $state(initialParams.get("q") ?? "");
 let openOnly = $state(initialParams.get("open") === "true");
 let offset = $state(Number(initialParams.get("offset")) || 0);
 const limit = 25;
+
+// Sorting state — maps TanStack column IDs to server sort params
+const SORT_COLUMN_MAP: Record<string, SortColumn> = {
+  course_code: "course_code",
+  title: "title",
+  instructor: "instructor",
+  time: "time",
+  seats: "seats",
+};
+
+let sorting: SortingState = $state(
+  (() => {
+    const sortBy = initialParams.get("sort_by");
+    const sortDir = initialParams.get("sort_dir");
+    if (!sortBy) return [];
+    return [{ id: sortBy, desc: sortDir === "desc" }];
+  })()
+);
+
+function handleSortingChange(newSorting: SortingState) {
+  sorting = newSorting;
+  offset = 0;
+}
 
 // Data state
 let subjects: Subject[] = $state([]);
@@ -45,10 +75,11 @@ $effect(() => {
   const q = query;
   const open = openOnly;
   const off = offset;
+  const sort = sorting;
 
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    performSearch(term, subject, q, open, off);
+    performSearch(term, subject, q, open, off, sort);
   }, 300);
 
   return () => clearTimeout(searchTimeout);
@@ -64,10 +95,22 @@ $effect(() => {
   prevFilters = key;
 });
 
-async function performSearch(term: string, subject: string, q: string, open: boolean, off: number) {
+async function performSearch(
+  term: string,
+  subject: string,
+  q: string,
+  open: boolean,
+  off: number,
+  sort: SortingState
+) {
   if (!term) return;
   loading = true;
   error = null;
+
+  // Derive server sort params from TanStack sorting state
+  const sortBy = sort.length > 0 ? SORT_COLUMN_MAP[sort[0].id] : undefined;
+  const sortDir: SortDirection | undefined =
+    sort.length > 0 ? (sort[0].desc ? "desc" : "asc") : undefined;
 
   // Sync URL
   const params = new URLSearchParams();
@@ -76,6 +119,8 @@ async function performSearch(term: string, subject: string, q: string, open: boo
   if (q) params.set("q", q);
   if (open) params.set("open", "true");
   if (off > 0) params.set("offset", String(off));
+  if (sortBy) params.set("sort_by", sortBy);
+  if (sortDir && sortBy) params.set("sort_dir", sortDir);
   goto(`?${params.toString()}`, { replaceState: true, noScroll: true, keepFocus: true });
 
   try {
@@ -86,6 +131,8 @@ async function performSearch(term: string, subject: string, q: string, open: boo
       open_only: open || undefined,
       limit,
       offset: off,
+      sort_by: sortBy,
+      sort_dir: sortDir,
     });
   } catch (e) {
     error = e instanceof Error ? e.message : "Search failed";
@@ -121,14 +168,20 @@ function handlePageChange(newOffset: number) {
       <div class="text-center py-8">
         <p class="text-status-red">{error}</p>
         <button
-          onclick={() => performSearch(selectedTerm, selectedSubject, query, openOnly, offset)}
+          onclick={() => performSearch(selectedTerm, selectedSubject, query, openOnly, offset, sorting)}
           class="mt-2 text-sm text-muted-foreground hover:underline"
         >
           Retry
         </button>
       </div>
     {:else}
-      <CourseTable courses={searchResult?.courses ?? []} {loading} />
+      <CourseTable
+        courses={searchResult?.courses ?? []}
+        {loading}
+        {sorting}
+        onSortingChange={handleSortingChange}
+        manualSorting={true}
+      />
 
       {#if searchResult}
         <Pagination

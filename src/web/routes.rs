@@ -313,10 +313,61 @@ struct SearchParams {
     limit: i32,
     #[serde(default)]
     offset: i32,
+    sort_by: Option<SortColumn>,
+    sort_dir: Option<SortDirection>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SortColumn {
+    CourseCode,
+    Title,
+    Instructor,
+    Time,
+    Seats,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SortDirection {
+    Asc,
+    Desc,
 }
 
 fn default_limit() -> i32 {
     25
+}
+
+/// Build a safe ORDER BY clause from the validated sort column and direction.
+fn sort_clause(column: Option<SortColumn>, direction: Option<SortDirection>) -> String {
+    let dir = match direction.unwrap_or(SortDirection::Asc) {
+        SortDirection::Asc => "ASC",
+        SortDirection::Desc => "DESC",
+    };
+
+    match column {
+        Some(SortColumn::CourseCode) => {
+            format!("subject {dir}, course_number {dir}, sequence_number {dir}")
+        }
+        Some(SortColumn::Title) => format!("title {dir}"),
+        Some(SortColumn::Instructor) => {
+            // Sort by primary instructor display name via a subquery
+            format!(
+                "(SELECT i.display_name FROM course_instructors ci \
+                 JOIN instructors i ON i.banner_id = ci.instructor_id \
+                 WHERE ci.course_id = courses.id AND ci.is_primary = true \
+                 LIMIT 1) {dir} NULLS LAST"
+            )
+        }
+        Some(SortColumn::Time) => {
+            // Sort by first meeting time's begin_time via JSONB
+            format!("(meeting_times->0->>'begin_time') {dir} NULLS LAST")
+        }
+        Some(SortColumn::Seats) => {
+            format!("(max_enrollment - enrollment) {dir}")
+        }
+        None => "subject ASC, course_number ASC, sequence_number ASC".to_string(),
+    }
 }
 
 #[derive(Serialize, TS)]
@@ -438,6 +489,8 @@ async fn search_courses(
     let limit = params.limit.clamp(1, 100);
     let offset = params.offset.max(0);
 
+    let order_by = sort_clause(params.sort_by, params.sort_dir);
+
     let (courses, total_count) = crate::data::courses::search_courses(
         &state.db_pool,
         &params.term,
@@ -450,6 +503,7 @@ async fn search_courses(
         params.campus.as_deref(),
         limit,
         offset,
+        &order_by,
     )
     .await
     .map_err(|e| {

@@ -10,10 +10,50 @@ import {
   isTimeTBA,
 } from "$lib/course";
 import CourseDetail from "./CourseDetail.svelte";
+import { createSvelteTable, FlexRender } from "$lib/components/ui/data-table/index.js";
+import {
+  getCoreRowModel,
+  getSortedRowModel,
+  type ColumnDef,
+  type SortingState,
+  type VisibilityState,
+  type Updater,
+} from "@tanstack/table-core";
+import { ArrowUp, ArrowDown, ArrowUpDown, Columns3, Check, RotateCcw } from "@lucide/svelte";
+import { DropdownMenu, ContextMenu } from "bits-ui";
+import { fade, fly } from "svelte/transition";
 
-let { courses, loading }: { courses: CourseResponse[]; loading: boolean } = $props();
+let {
+  courses,
+  loading,
+  sorting = [],
+  onSortingChange,
+  manualSorting = false,
+}: {
+  courses: CourseResponse[];
+  loading: boolean;
+  sorting?: SortingState;
+  onSortingChange?: (sorting: SortingState) => void;
+  manualSorting?: boolean;
+} = $props();
 
 let expandedCrn: string | null = $state(null);
+
+// Column visibility state
+let columnVisibility: VisibilityState = $state({});
+
+const DEFAULT_VISIBILITY: VisibilityState = {};
+
+function resetColumnVisibility() {
+  columnVisibility = { ...DEFAULT_VISIBILITY };
+}
+
+function handleVisibilityChange(updater: Updater<VisibilityState>) {
+  const newVisibility = typeof updater === "function" ? updater(columnVisibility) : updater;
+  columnVisibility = newVisibility;
+}
+
+// visibleColumnIds and hasCustomVisibility derived after column definitions below
 
 function toggleRow(crn: string) {
   expandedCrn = expandedCrn === crn ? null : crn;
@@ -60,101 +100,353 @@ function timeIsTBA(course: CourseResponse): boolean {
   const mt = course.meetingTimes[0];
   return isMeetingTimeTBA(mt) && isTimeTBA(mt);
 }
+
+// Column definitions
+const columns: ColumnDef<CourseResponse, unknown>[] = [
+  {
+    id: "crn",
+    accessorKey: "crn",
+    header: "CRN",
+    enableSorting: false,
+  },
+  {
+    id: "course_code",
+    accessorFn: (row) => `${row.subject} ${row.courseNumber}`,
+    header: "Course",
+    enableSorting: true,
+  },
+  {
+    id: "title",
+    accessorKey: "title",
+    header: "Title",
+    enableSorting: true,
+  },
+  {
+    id: "instructor",
+    accessorFn: (row) => primaryInstructorDisplay(row),
+    header: "Instructor",
+    enableSorting: true,
+  },
+  {
+    id: "time",
+    accessorFn: (row) => {
+      if (row.meetingTimes.length === 0) return "";
+      const mt = row.meetingTimes[0];
+      return `${formatMeetingDays(mt)} ${formatTime(mt.begin_time)}`;
+    },
+    header: "Time",
+    enableSorting: true,
+  },
+  {
+    id: "location",
+    accessorFn: (row) => formatLocation(row) ?? "",
+    header: "Location",
+    enableSorting: false,
+  },
+  {
+    id: "seats",
+    accessorFn: (row) => openSeats(row),
+    header: "Seats",
+    enableSorting: true,
+  },
+];
+
+/** Column IDs that are currently visible */
+let visibleColumnIds = $derived(
+  columns.map((c) => c.id!).filter((id) => columnVisibility[id] !== false)
+);
+
+let hasCustomVisibility = $derived(Object.values(columnVisibility).some((v) => v === false));
+
+function handleSortingChange(updater: Updater<SortingState>) {
+  const newSorting = typeof updater === "function" ? updater(sorting) : updater;
+  onSortingChange?.(newSorting);
+}
+
+const table = createSvelteTable({
+  get data() {
+    return courses;
+  },
+  columns,
+  state: {
+    get sorting() {
+      return sorting;
+    },
+    get columnVisibility() {
+      return columnVisibility;
+    },
+  },
+  onSortingChange: handleSortingChange,
+  onColumnVisibilityChange: handleVisibilityChange,
+  getCoreRowModel: getCoreRowModel(),
+  get getSortedRowModel() {
+    return manualSorting ? undefined : getSortedRowModel<CourseResponse>();
+  },
+  get manualSorting() {
+    return manualSorting;
+  },
+  enableSortingRemoval: true,
+});
 </script>
 
+{#snippet columnVisibilityItems(variant: "dropdown" | "context")}
+  {#if variant === "dropdown"}
+    <DropdownMenu.Group>
+      <DropdownMenu.GroupHeading class="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+        Toggle columns
+      </DropdownMenu.GroupHeading>
+      {#each columns as col}
+        {@const id = col.id!}
+        {@const label = typeof col.header === "string" ? col.header : id}
+        <DropdownMenu.CheckboxItem
+          checked={columnVisibility[id] !== false}
+          closeOnSelect={false}
+          onCheckedChange={(checked) => {
+            columnVisibility = { ...columnVisibility, [id]: checked };
+          }}
+          class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+        >
+          {#snippet children({ checked })}
+            <span class="flex size-4 items-center justify-center rounded-sm border border-border">
+              {#if checked}
+                <Check class="size-3" />
+              {/if}
+            </span>
+            {label}
+          {/snippet}
+        </DropdownMenu.CheckboxItem>
+      {/each}
+    </DropdownMenu.Group>
+    {#if hasCustomVisibility}
+      <DropdownMenu.Separator class="mx-1 my-1 h-px bg-border" />
+      <DropdownMenu.Item
+        class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+        onSelect={resetColumnVisibility}
+      >
+        <RotateCcw class="size-3.5" />
+        Reset to default
+      </DropdownMenu.Item>
+    {/if}
+  {:else}
+    <ContextMenu.Group>
+      <ContextMenu.GroupHeading class="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+        Toggle columns
+      </ContextMenu.GroupHeading>
+      {#each columns as col}
+        {@const id = col.id!}
+        {@const label = typeof col.header === "string" ? col.header : id}
+        <ContextMenu.CheckboxItem
+          checked={columnVisibility[id] !== false}
+          closeOnSelect={false}
+          onCheckedChange={(checked) => {
+            columnVisibility = { ...columnVisibility, [id]: checked };
+          }}
+          class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+        >
+          {#snippet children({ checked })}
+            <span class="flex size-4 items-center justify-center rounded-sm border border-border">
+              {#if checked}
+                <Check class="size-3" />
+              {/if}
+            </span>
+            {label}
+          {/snippet}
+        </ContextMenu.CheckboxItem>
+      {/each}
+    </ContextMenu.Group>
+    {#if hasCustomVisibility}
+      <ContextMenu.Separator class="mx-1 my-1 h-px bg-border" />
+      <ContextMenu.Item
+        class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+        onSelect={resetColumnVisibility}
+      >
+        <RotateCcw class="size-3.5" />
+        Reset to default
+      </ContextMenu.Item>
+    {/if}
+  {/if}
+{/snippet}
+
+<!-- Toolbar: View columns button -->
+<div class="flex items-center justify-end pb-2">
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger
+      class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+    >
+      <Columns3 class="size-3.5" />
+      View
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content
+        class="z-50 min-w-[160px] rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
+        align="end"
+        sideOffset={4}
+        forceMount
+      >
+        {#snippet child({ wrapperProps, props, open })}
+          {#if open}
+            <div {...wrapperProps}>
+              <div {...props} transition:fly={{ duration: 150, y: -10 }}>
+                {@render columnVisibilityItems("dropdown")}
+              </div>
+            </div>
+          {/if}
+        {/snippet}
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
+  </DropdownMenu.Root>
+</div>
+
+<!-- Table with context menu on header -->
 <div class="overflow-x-auto">
-  <table class="w-full border-collapse text-sm">
-    <thead>
-      <tr class="border-b border-border text-left text-muted-foreground">
-        <th class="py-2 px-2 font-medium">CRN</th>
-        <th class="py-2 px-2 font-medium">Course</th>
-        <th class="py-2 px-2 font-medium">Title</th>
-        <th class="py-2 px-2 font-medium">Instructor</th>
-        <th class="py-2 px-2 font-medium">Time</th>
-        <th class="py-2 px-2 font-medium">Location</th>
-        <th class="py-2 px-2 font-medium text-right">Seats</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#if loading && courses.length === 0}
-        {#each Array(5) as _}
-          <tr class="border-b border-border">
-            <td class="py-2.5 px-2"><div class="h-4 w-10 bg-muted rounded animate-pulse"></div></td>
-            <td class="py-2.5 px-2"><div class="h-4 w-24 bg-muted rounded animate-pulse"></div></td>
-            <td class="py-2.5 px-2"><div class="h-4 w-40 bg-muted rounded animate-pulse"></div></td>
-            <td class="py-2.5 px-2"><div class="h-4 w-20 bg-muted rounded animate-pulse"></div></td>
-            <td class="py-2.5 px-2"><div class="h-4 w-28 bg-muted rounded animate-pulse"></div></td>
-            <td class="py-2.5 px-2"><div class="h-4 w-16 bg-muted rounded animate-pulse"></div></td>
-            <td class="py-2.5 px-2"><div class="h-4 w-14 bg-muted rounded animate-pulse ml-auto"></div></td>
-          </tr>
-        {/each}
-      {:else if courses.length === 0}
-        <tr>
-          <td colspan="7" class="py-12 text-center text-muted-foreground">
-            No courses found. Try adjusting your filters.
-          </td>
-        </tr>
-      {:else}
-        {#each courses as course (course.crn)}
-          <tr
-            class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn === course.crn ? 'bg-muted/30' : ''}"
-            onclick={() => toggleRow(course.crn)}
-          >
-            <td class="py-2 px-2 font-mono text-xs text-muted-foreground/70">{course.crn}</td>
-            <td class="py-2 px-2 whitespace-nowrap">
-              <span class="font-semibold">{course.subject} {course.courseNumber}</span>{#if course.sequenceNumber}<span class="text-muted-foreground">-{course.sequenceNumber}</span>{/if}
-            </td>
-            <td class="py-2 px-2 font-medium">{course.title}</td>
-            <td class="py-2 px-2 whitespace-nowrap">
-              {primaryInstructorDisplay(course)}
-              {#if primaryRating(course)}
-                {@const r = primaryRating(course)!}
-                <span
-                  class="ml-1 text-xs font-medium {ratingColor(r.rating)}"
-                  title="{r.rating.toFixed(1)}/5 ({r.count} ratings)"
-                >{r.rating.toFixed(1)}★</span>
-              {/if}
-            </td>
-            <td class="py-2 px-2 whitespace-nowrap">
-              {#if timeIsTBA(course)}
-                <span class="text-xs text-muted-foreground/60">TBA</span>
-              {:else}
-                {@const mt = course.meetingTimes[0]}
-                {#if !isMeetingTimeTBA(mt)}
-                  <span class="font-mono font-medium">{formatMeetingDays(mt)}</span>
-                  {" "}
+  <ContextMenu.Root>
+    <ContextMenu.Trigger class="contents">
+      <table class="w-full border-collapse text-sm">
+        <thead>
+          {#each table.getHeaderGroups() as headerGroup}
+            <tr class="border-b border-border text-left text-muted-foreground">
+              {#each headerGroup.headers as header}
+                {#if header.column.getIsVisible()}
+                  <th
+                    class="py-2 px-2 font-medium {header.id === 'seats' ? 'text-right' : ''}"
+                    class:cursor-pointer={header.column.getCanSort()}
+                    class:select-none={header.column.getCanSort()}
+                    onclick={header.column.getToggleSortingHandler()}
+                  >
+                    {#if header.column.getCanSort()}
+                      <span class="inline-flex items-center gap-1">
+                        {#if typeof header.column.columnDef.header === "string"}
+                          {header.column.columnDef.header}
+                        {:else}
+                          <FlexRender content={header.column.columnDef.header} context={header.getContext()} />
+                        {/if}
+                        {#if header.column.getIsSorted() === "asc"}
+                          <ArrowUp class="size-3.5" />
+                        {:else if header.column.getIsSorted() === "desc"}
+                          <ArrowDown class="size-3.5" />
+                        {:else}
+                          <ArrowUpDown class="size-3.5 text-muted-foreground/40" />
+                        {/if}
+                      </span>
+                    {:else if typeof header.column.columnDef.header === "string"}
+                      {header.column.columnDef.header}
+                    {:else}
+                      <FlexRender content={header.column.columnDef.header} context={header.getContext()} />
+                    {/if}
+                  </th>
                 {/if}
-                {#if !isTimeTBA(mt)}
-                  <span class="text-muted-foreground">{formatTime(mt.begin_time)}&ndash;{formatTime(mt.end_time)}</span>
-                {:else}
-                  <span class="text-xs text-muted-foreground/60">TBA</span>
-                {/if}
-              {/if}
-            </td>
-            <td class="py-2 px-2 whitespace-nowrap">
-              {#if formatLocation(course)}
-                <span class="text-muted-foreground">{formatLocation(course)}</span>
-              {:else}
-                <span class="text-xs text-muted-foreground/50">—</span>
-              {/if}
-            </td>
-            <td class="py-2 px-2 text-right whitespace-nowrap">
-              <span class="inline-flex items-center gap-1.5">
-                <span class="size-1.5 rounded-full {seatsDotColor(course)} shrink-0"></span>
-                <span class="{seatsColor(course)} font-medium tabular-nums">{#if openSeats(course) === 0}Full{:else}{openSeats(course)} open{/if}</span>
-                <span class="text-muted-foreground/60 tabular-nums">{course.enrollment}/{course.maxEnrollment}{#if course.waitCount > 0} · WL {course.waitCount}/{course.waitCapacity}{/if}</span>
-              </span>
-            </td>
-          </tr>
-          {#if expandedCrn === course.crn}
+              {/each}
+            </tr>
+          {/each}
+        </thead>
+        <tbody>
+          {#if loading && courses.length === 0}
+            {#each Array(5) as _}
+              <tr class="border-b border-border">
+                {#each table.getVisibleLeafColumns() as col}
+                  <td class="py-2.5 px-2">
+                    <div class="h-4 bg-muted rounded animate-pulse {col.id === 'seats' ? 'w-14 ml-auto' : col.id === 'title' ? 'w-40' : col.id === 'crn' ? 'w-10' : 'w-20'}"></div>
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          {:else if courses.length === 0}
             <tr>
-              <td colspan="7" class="p-0">
-                <CourseDetail {course} />
+              <td colspan={visibleColumnIds.length} class="py-12 text-center text-muted-foreground">
+                No courses found. Try adjusting your filters.
               </td>
             </tr>
+          {:else}
+            {#each table.getRowModel().rows as row (row.id)}
+              {@const course = row.original}
+              <tr
+                class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn === course.crn ? 'bg-muted/30' : ''}"
+                onclick={() => toggleRow(course.crn)}
+              >
+                {#each row.getVisibleCells() as cell (cell.id)}
+                  {@const colId = cell.column.id}
+                  {#if colId === "crn"}
+                    <td class="py-2 px-2 font-mono text-xs text-muted-foreground/70">{course.crn}</td>
+                  {:else if colId === "course_code"}
+                    <td class="py-2 px-2 whitespace-nowrap">
+                      <span class="font-semibold">{course.subject} {course.courseNumber}</span>{#if course.sequenceNumber}<span class="text-muted-foreground">-{course.sequenceNumber}</span>{/if}
+                    </td>
+                  {:else if colId === "title"}
+                    <td class="py-2 px-2 font-medium">{course.title}</td>
+                  {:else if colId === "instructor"}
+                    <td class="py-2 px-2 whitespace-nowrap">
+                      {primaryInstructorDisplay(course)}
+                      {#if primaryRating(course)}
+                        {@const r = primaryRating(course)!}
+                        <span
+                          class="ml-1 text-xs font-medium {ratingColor(r.rating)}"
+                          title="{r.rating.toFixed(1)}/5 ({r.count} ratings)"
+                        >{r.rating.toFixed(1)}★</span>
+                      {/if}
+                    </td>
+                  {:else if colId === "time"}
+                    <td class="py-2 px-2 whitespace-nowrap">
+                      {#if timeIsTBA(course)}
+                        <span class="text-xs text-muted-foreground/60">TBA</span>
+                      {:else}
+                        {@const mt = course.meetingTimes[0]}
+                        {#if !isMeetingTimeTBA(mt)}
+                          <span class="font-mono font-medium">{formatMeetingDays(mt)}</span>
+                          {" "}
+                        {/if}
+                        {#if !isTimeTBA(mt)}
+                          <span class="text-muted-foreground">{formatTime(mt.begin_time)}&ndash;{formatTime(mt.end_time)}</span>
+                        {:else}
+                          <span class="text-xs text-muted-foreground/60">TBA</span>
+                        {/if}
+                      {/if}
+                    </td>
+                  {:else if colId === "location"}
+                    <td class="py-2 px-2 whitespace-nowrap">
+                      {#if formatLocation(course)}
+                        <span class="text-muted-foreground">{formatLocation(course)}</span>
+                      {:else}
+                        <span class="text-xs text-muted-foreground/50">—</span>
+                      {/if}
+                    </td>
+                  {:else if colId === "seats"}
+                    <td class="py-2 px-2 text-right whitespace-nowrap">
+                      <span class="inline-flex items-center gap-1.5">
+                        <span class="size-1.5 rounded-full {seatsDotColor(course)} shrink-0"></span>
+                        <span class="{seatsColor(course)} font-medium tabular-nums">{#if openSeats(course) === 0}Full{:else}{openSeats(course)} open{/if}</span>
+                        <span class="text-muted-foreground/60 tabular-nums">{course.enrollment}/{course.maxEnrollment}{#if course.waitCount > 0} · WL {course.waitCount}/{course.waitCapacity}{/if}</span>
+                      </span>
+                    </td>
+                  {/if}
+                {/each}
+              </tr>
+              {#if expandedCrn === course.crn}
+                <tr>
+                  <td colspan={visibleColumnIds.length} class="p-0">
+                    <CourseDetail {course} />
+                  </td>
+                </tr>
+              {/if}
+            {/each}
           {/if}
-        {/each}
-      {/if}
-    </tbody>
-  </table>
+        </tbody>
+      </table>
+    </ContextMenu.Trigger>
+    <ContextMenu.Portal>
+      <ContextMenu.Content
+        class="z-50 min-w-[160px] rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
+        forceMount
+      >
+        {#snippet child({ wrapperProps, props, open })}
+          {#if open}
+            <div {...wrapperProps}>
+              <div {...props} in:fade={{ duration: 100 }} out:fade={{ duration: 100 }}>
+                {@render columnVisibilityItems("context")}
+              </div>
+            </div>
+          {/if}
+        {/snippet}
+      </ContextMenu.Content>
+    </ContextMenu.Portal>
+  </ContextMenu.Root>
 </div>

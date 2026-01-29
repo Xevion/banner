@@ -122,14 +122,8 @@ impl RmpClient {
                         .as_str()
                         .ok_or_else(|| anyhow::anyhow!("Missing id"))?
                         .to_string(),
-                    first_name: node["firstName"]
-                        .as_str()
-                        .unwrap_or_default()
-                        .to_string(),
-                    last_name: node["lastName"]
-                        .as_str()
-                        .unwrap_or_default()
-                        .to_string(),
+                    first_name: node["firstName"].as_str().unwrap_or_default().to_string(),
+                    last_name: node["lastName"].as_str().unwrap_or_default().to_string(),
                     department: node["department"].as_str().map(|s| s.to_string()),
                     avg_rating: node["avgRating"].as_f64().map(|v| v as f32),
                     avg_difficulty: node["avgDifficulty"].as_f64().map(|v| v as f32),
@@ -145,14 +139,9 @@ impl RmpClient {
                 break;
             }
 
-            cursor = page_info["endCursor"]
-                .as_str()
-                .map(|s| s.to_string());
+            cursor = page_info["endCursor"].as_str().map(|s| s.to_string());
 
-            debug!(
-                fetched = all.len(),
-                "RMP pagination: fetching next page"
-            );
+            debug!(fetched = all.len(), "RMP pagination: fetching next page");
         }
 
         info!(total = all.len(), "Fetched all RMP professors");

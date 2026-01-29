@@ -21,10 +21,15 @@ pub async fn search_courses(
     campus: Option<&str>,
     limit: i32,
     offset: i32,
+    order_by: &str,
 ) -> Result<(Vec<Course>, i64)> {
     // Build WHERE clauses dynamically via parameter binding + COALESCE trick:
     // each optional filter uses ($N IS NULL OR column = $N) so NULL means "no filter".
-    let courses = sqlx::query_as::<_, Course>(
+    //
+    // ORDER BY is interpolated as a string since column names can't be bound as
+    // parameters. The caller must provide a safe, pre-validated clause (see
+    // `sort_clause` in routes.rs).
+    let query = format!(
         r#"
         SELECT *
         FROM courses
@@ -36,22 +41,24 @@ pub async fn search_courses(
           AND ($6::bool = false OR max_enrollment > enrollment)
           AND ($7::text IS NULL OR instructional_method = $7)
           AND ($8::text IS NULL OR campus = $8)
-        ORDER BY subject, course_number, sequence_number
+        ORDER BY {order_by}
         LIMIT $9 OFFSET $10
-        "#,
-    )
-    .bind(term_code)
-    .bind(subject)
-    .bind(title_query)
-    .bind(course_number_low)
-    .bind(course_number_high)
-    .bind(open_only)
-    .bind(instructional_method)
-    .bind(campus)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(db_pool)
-    .await?;
+        "#
+    );
+
+    let courses = sqlx::query_as::<_, Course>(&query)
+        .bind(term_code)
+        .bind(subject)
+        .bind(title_query)
+        .bind(course_number_low)
+        .bind(course_number_high)
+        .bind(open_only)
+        .bind(instructional_method)
+        .bind(campus)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(db_pool)
+        .await?;
 
     let total: (i64,) = sqlx::query_as(
         r#"
@@ -102,10 +109,25 @@ pub async fn get_course_by_crn(
 pub async fn get_course_instructors(
     db_pool: &PgPool,
     course_id: i32,
-) -> Result<Vec<(String, String, Option<String>, bool, Option<f32>, Option<i32>)>> {
-    let rows: Vec<(String, String, Option<String>, bool, Option<f32>, Option<i32>)> =
-        sqlx::query_as(
-            r#"
+) -> Result<
+    Vec<(
+        String,
+        String,
+        Option<String>,
+        bool,
+        Option<f32>,
+        Option<i32>,
+    )>,
+> {
+    let rows: Vec<(
+        String,
+        String,
+        Option<String>,
+        bool,
+        Option<f32>,
+        Option<i32>,
+    )> = sqlx::query_as(
+        r#"
         SELECT i.banner_id, i.display_name, i.email, ci.is_primary,
                rp.avg_rating, rp.num_ratings
         FROM course_instructors ci
@@ -114,10 +136,10 @@ pub async fn get_course_instructors(
         WHERE ci.course_id = $1
         ORDER BY ci.is_primary DESC, i.display_name
         "#,
-        )
-        .bind(course_id)
-        .fetch_all(db_pool)
-        .await?;
+    )
+    .bind(course_id)
+    .fetch_all(db_pool)
+    .await?;
     Ok(rows)
 }
 
