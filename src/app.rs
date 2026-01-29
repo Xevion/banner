@@ -6,6 +6,7 @@ use crate::services::bot::BotService;
 use crate::services::manager::ServiceManager;
 use crate::services::web::WebService;
 use crate::state::AppState;
+use crate::web::auth::AuthConfig;
 use anyhow::Context;
 use figment::value::UncasedStr;
 use figment::{Figment, providers::Env};
@@ -84,6 +85,14 @@ impl App {
             info!(error = ?e, "Could not load reference cache on startup (may be empty)");
         }
 
+        // Seed the initial admin user if configured
+        if let Some(admin_id) = config.admin_discord_id {
+            let user = crate::data::users::ensure_seed_admin(&db_pool, admin_id as i64)
+                .await
+                .context("Failed to seed admin user")?;
+            info!(discord_id = admin_id, username = %user.discord_username, "Seed admin ensured");
+        }
+
         Ok(App {
             config,
             db_pool,
@@ -97,7 +106,16 @@ impl App {
     pub fn setup_services(&mut self, services: &[ServiceName]) -> Result<(), anyhow::Error> {
         // Register enabled services with the manager
         if services.contains(&ServiceName::Web) {
-            let web_service = Box::new(WebService::new(self.config.port, self.app_state.clone()));
+            let auth_config = AuthConfig {
+                client_id: self.config.discord_client_id.clone(),
+                client_secret: self.config.discord_client_secret.clone(),
+                redirect_base: self.config.discord_redirect_uri.clone(),
+            };
+            let web_service = Box::new(WebService::new(
+                self.config.port,
+                self.app_state.clone(),
+                auth_config,
+            ));
             self.service_manager
                 .register_service(ServiceName::Web.as_str(), web_service);
         }

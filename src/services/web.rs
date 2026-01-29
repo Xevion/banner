@@ -1,6 +1,7 @@
 use super::Service;
 use crate::state::AppState;
 use crate::status::ServiceStatus;
+use crate::web::auth::AuthConfig;
 use crate::web::create_router;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
@@ -11,14 +12,16 @@ use tracing::{info, trace, warn};
 pub struct WebService {
     port: u16,
     app_state: AppState,
+    auth_config: AuthConfig,
     shutdown_tx: Option<broadcast::Sender<()>>,
 }
 
 impl WebService {
-    pub fn new(port: u16, app_state: AppState) -> Self {
+    pub fn new(port: u16, app_state: AppState, auth_config: AuthConfig) -> Self {
         Self {
             port,
             app_state,
+            auth_config,
             shutdown_tx: None,
         }
     }
@@ -58,7 +61,7 @@ impl Service for WebService {
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
         // Create the main router with Banner API routes
-        let app = create_router(self.app_state.clone());
+        let app = create_router(self.app_state.clone(), self.auth_config.clone());
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.port));
 

@@ -92,9 +92,8 @@ pub async fn search_courses(
 ) -> Result<(Vec<Course>, i64)> {
     let order_by = sort_clause(sort_by, sort_dir);
 
-    let data_query = format!(
-        "SELECT * FROM courses {SEARCH_WHERE} ORDER BY {order_by} LIMIT $9 OFFSET $10"
-    );
+    let data_query =
+        format!("SELECT * FROM courses {SEARCH_WHERE} ORDER BY {order_by} LIMIT $9 OFFSET $10");
     let count_query = format!("SELECT COUNT(*) FROM courses {SEARCH_WHERE}");
 
     let courses = sqlx::query_as::<_, Course>(&data_query)

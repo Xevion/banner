@@ -155,3 +155,27 @@ pub struct ScrapeJob {
     /// Maximum number of retry attempts allowed (non-negative, enforced by CHECK constraint)
     pub max_retries: i32,
 }
+
+/// A user authenticated via Discord OAuth.
+#[derive(sqlx::FromRow, Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct User {
+    pub discord_id: i64,
+    pub discord_username: String,
+    pub discord_avatar_hash: Option<String>,
+    pub is_admin: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A server-side session for an authenticated user.
+#[allow(dead_code)] // Fields read via sqlx::FromRow; some only used in DB queries
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct UserSession {
+    pub id: String,
+    pub user_id: i64,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub last_active_at: DateTime<Utc>,
+}

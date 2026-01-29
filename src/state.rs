@@ -4,6 +4,7 @@ use crate::banner::BannerApi;
 use crate::banner::Course;
 use crate::data::models::ReferenceData;
 use crate::status::ServiceStatusRegistry;
+use crate::web::session_cache::{OAuthStateStore, SessionCache};
 use anyhow::Result;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -72,11 +73,15 @@ pub struct AppState {
     pub db_pool: PgPool,
     pub service_statuses: ServiceStatusRegistry,
     pub reference_cache: Arc<RwLock<ReferenceCache>>,
+    pub session_cache: SessionCache,
+    pub oauth_state_store: OAuthStateStore,
 }
 
 impl AppState {
     pub fn new(banner_api: Arc<BannerApi>, db_pool: PgPool) -> Self {
         Self {
+            session_cache: SessionCache::new(db_pool.clone()),
+            oauth_state_store: OAuthStateStore::new(),
             banner_api,
             db_pool,
             service_statuses: ServiceStatusRegistry::new(),

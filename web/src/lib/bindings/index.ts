@@ -6,3 +6,4 @@ export type { SearchResponse } from "./SearchResponse";
 export type { ServiceInfo } from "./ServiceInfo";
 export type { ServiceStatus } from "./ServiceStatus";
 export type { StatusResponse } from "./StatusResponse";
+export type { User } from "./User";

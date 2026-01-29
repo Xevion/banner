@@ -1,13 +1,16 @@
 //! Web API endpoints for Banner bot monitoring and metrics.
 
 use axum::{
-    Router,
+    Extension, Router,
     body::Body,
     extract::{Path, Query, Request, State},
     http::StatusCode as AxumStatusCode,
     response::{Json, Response},
-    routing::get,
+    routing::{get, post, put},
 };
+
+use crate::web::admin;
+use crate::web::auth::{self, AuthConfig};
 #[cfg(feature = "embed-assets")]
 use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, Uri},
@@ -68,7 +71,7 @@ fn set_caching_headers(response: &mut Response, path: &str, etag: &str) {
 }
 
 /// Creates the web server router
-pub fn create_router(app_state: AppState) -> Router {
+pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
     let api_router = Router::new()
         .route("/health", get(health))
         .route("/status", get(status))
@@ -78,9 +81,31 @@ pub fn create_router(app_state: AppState) -> Router {
         .route("/terms", get(get_terms))
         .route("/subjects", get(get_subjects))
         .route("/reference/{category}", get(get_reference))
+        .with_state(app_state.clone());
+
+    let auth_router = Router::new()
+        .route("/auth/login", get(auth::auth_login))
+        .route("/auth/callback", get(auth::auth_callback))
+        .route("/auth/logout", post(auth::auth_logout))
+        .route("/auth/me", get(auth::auth_me))
+        .layer(Extension(auth_config))
+        .with_state(app_state.clone());
+
+    let admin_router = Router::new()
+        .route("/admin/status", get(admin::admin_status))
+        .route("/admin/users", get(admin::list_users))
+        .route(
+            "/admin/users/{discord_id}/admin",
+            put(admin::set_user_admin),
+        )
+        .route("/admin/scrape-jobs", get(admin::list_scrape_jobs))
+        .route("/admin/audit-log", get(admin::list_audit_log))
         .with_state(app_state);
 
-    let mut router = Router::new().nest("/api", api_router);
+    let mut router = Router::new()
+        .nest("/api", api_router)
+        .nest("/api", auth_router)
+        .nest("/api", admin_router);
 
     // When embed-assets feature is enabled, serve embedded static assets
     #[cfg(feature = "embed-assets")]

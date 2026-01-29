@@ -47,6 +47,19 @@ pub struct Config {
     /// Rate limiting configuration for Banner API requests
     #[serde(default = "default_rate_limiting")]
     pub rate_limiting: RateLimitingConfig,
+
+    /// Discord OAuth2 client ID for web authentication
+    #[serde(deserialize_with = "deserialize_string_or_uint")]
+    pub discord_client_id: String,
+    /// Discord OAuth2 client secret for web authentication
+    pub discord_client_secret: String,
+    /// Optional base URL override for OAuth2 redirect (e.g. "https://banner.xevion.dev").
+    /// When unset, the redirect URI is derived from the incoming request's Origin/Host.
+    #[serde(default)]
+    pub discord_redirect_uri: Option<String>,
+    /// Discord user ID to seed as initial admin on startup (optional)
+    #[serde(default)]
+    pub admin_discord_id: Option<u64>,
 }
 
 /// Default log level of "info"
@@ -214,6 +227,43 @@ where
     }
 
     deserializer.deserialize_any(DurationVisitor)
+}
+
+/// Deserializes a value that may arrive as either a string or unsigned integer.
+///
+/// Figment's env provider infers types from raw values, so numeric-looking strings
+/// like Discord client IDs get parsed as integers. This accepts both forms.
+fn deserialize_string_or_uint<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Visitor;
+
+    struct StringOrUintVisitor;
+
+    impl<'de> Visitor<'de> for StringOrUintVisitor {
+        type Value = String;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a string or unsigned integer")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(value.to_owned())
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(value.to_string())
+        }
+    }
+
+    deserializer.deserialize_any(StringOrUintVisitor)
 }
 
 #[cfg(test)]

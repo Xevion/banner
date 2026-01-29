@@ -7,6 +7,7 @@ import type {
   ServiceInfo,
   ServiceStatus,
   StatusResponse,
+  User,
 } from "$lib/bindings";
 
 const API_BASE_URL = "/api";
@@ -33,6 +34,43 @@ export type SearchResponse = SearchResponseGenerated;
 // Client-side only — not generated from Rust
 export type SortColumn = "course_code" | "title" | "instructor" | "time" | "seats";
 export type SortDirection = "asc" | "desc";
+
+export interface AdminStatus {
+  userCount: number;
+  sessionCount: number;
+  courseCount: number;
+  scrapeJobCount: number;
+  services: { name: string; status: string }[];
+}
+
+export interface ScrapeJob {
+  id: number;
+  targetType: string;
+  targetPayload: unknown;
+  priority: string;
+  executeAt: string;
+  createdAt: string;
+  lockedAt: string | null;
+  retryCount: number;
+  maxRetries: number;
+}
+
+export interface ScrapeJobsResponse {
+  jobs: ScrapeJob[];
+}
+
+export interface AuditLogEntry {
+  id: number;
+  courseId: number;
+  timestamp: string;
+  fieldChanged: string;
+  oldValue: string;
+  newValue: string;
+}
+
+export interface AuditLogResponse {
+  entries: AuditLogEntry[];
+}
 
 export interface SearchParams {
   term: string;
@@ -95,6 +133,33 @@ export class BannerApiClient {
 
   async getReference(category: string): Promise<ReferenceEntry[]> {
     return this.request<ReferenceEntry[]>(`/reference/${encodeURIComponent(category)}`);
+  }
+
+  // Admin endpoints
+  async getAdminStatus(): Promise<AdminStatus> {
+    return this.request<AdminStatus>("/admin/status");
+  }
+
+  async getAdminUsers(): Promise<User[]> {
+    return this.request<User[]>("/admin/users");
+  }
+
+  async setUserAdmin(discordId: string, isAdmin: boolean): Promise<User> {
+    const response = await this.fetchFn(`${this.baseUrl}/admin/users/${discordId}/admin`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_admin: isAdmin }),
+    });
+    if (!response.ok) throw new Error(`API request failed: ${response.status}`);
+    return (await response.json()) as User;
+  }
+
+  async getAdminScrapeJobs(): Promise<ScrapeJobsResponse> {
+    return this.request<ScrapeJobsResponse>("/admin/scrape-jobs");
+  }
+
+  async getAdminAuditLog(): Promise<AuditLogResponse> {
+    return this.request<AuditLogResponse>("/admin/audit-log");
   }
 }
 
