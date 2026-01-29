@@ -29,6 +29,7 @@ let {
   <input
     type="text"
     placeholder="Search courses..."
+    aria-label="Search courses"
     bind:value={query}
     class="h-9 border border-border bg-card text-foreground rounded-md px-3 text-sm flex-1 min-w-[200px]
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background

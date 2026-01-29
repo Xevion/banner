@@ -262,97 +262,56 @@ const table = createSvelteTable({
 });
 </script>
 
-{#snippet columnVisibilityItems(variant: "dropdown" | "context")}
-    {#if variant === "dropdown"}
-        <DropdownMenu.Group>
-            <DropdownMenu.GroupHeading
-                class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+{#snippet columnVisibilityGroup(
+    Group: typeof DropdownMenu.Group,
+    GroupHeading: typeof DropdownMenu.GroupHeading,
+    CheckboxItem: typeof DropdownMenu.CheckboxItem,
+    Separator: typeof DropdownMenu.Separator,
+    Item: typeof DropdownMenu.Item,
+)}
+    <Group>
+        <GroupHeading
+            class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+        >
+            Toggle columns
+        </GroupHeading>
+        {#each columns as col}
+            {@const id = col.id!}
+            {@const label =
+                typeof col.header === "string" ? col.header : id}
+            <CheckboxItem
+                checked={columnVisibility[id] !== false}
+                closeOnSelect={false}
+                onCheckedChange={(checked) => {
+                    columnVisibility = {
+                        ...columnVisibility,
+                        [id]: checked,
+                    };
+                }}
+                class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
             >
-                Toggle columns
-            </DropdownMenu.GroupHeading>
-            {#each columns as col}
-                {@const id = col.id!}
-                {@const label =
-                    typeof col.header === "string" ? col.header : id}
-                <DropdownMenu.CheckboxItem
-                    checked={columnVisibility[id] !== false}
-                    closeOnSelect={false}
-                    onCheckedChange={(checked) => {
-                        columnVisibility = {
-                            ...columnVisibility,
-                            [id]: checked,
-                        };
-                    }}
-                    class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                >
-                    {#snippet children({ checked })}
-                        <span
-                            class="flex size-4 items-center justify-center rounded-sm border border-border"
-                        >
-                            {#if checked}
-                                <Check class="size-3" />
-                            {/if}
-                        </span>
-                        {label}
-                    {/snippet}
-                </DropdownMenu.CheckboxItem>
-            {/each}
-        </DropdownMenu.Group>
-        {#if hasCustomVisibility}
-            <DropdownMenu.Separator class="mx-1 my-1 h-px bg-border" />
-            <DropdownMenu.Item
-                class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                onSelect={resetColumnVisibility}
-            >
-                <RotateCcw class="size-3.5" />
-                Reset to default
-            </DropdownMenu.Item>
-        {/if}
-    {:else}
-        <ContextMenu.Group>
-            <ContextMenu.GroupHeading
-                class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
-            >
-                Toggle columns
-            </ContextMenu.GroupHeading>
-            {#each columns as col}
-                {@const id = col.id!}
-                {@const label =
-                    typeof col.header === "string" ? col.header : id}
-                <ContextMenu.CheckboxItem
-                    checked={columnVisibility[id] !== false}
-                    closeOnSelect={false}
-                    onCheckedChange={(checked) => {
-                        columnVisibility = {
-                            ...columnVisibility,
-                            [id]: checked,
-                        };
-                    }}
-                    class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                >
-                    {#snippet children({ checked })}
-                        <span
-                            class="flex size-4 items-center justify-center rounded-sm border border-border"
-                        >
-                            {#if checked}
-                                <Check class="size-3" />
-                            {/if}
-                        </span>
-                        {label}
-                    {/snippet}
-                </ContextMenu.CheckboxItem>
-            {/each}
-        </ContextMenu.Group>
-        {#if hasCustomVisibility}
-            <ContextMenu.Separator class="mx-1 my-1 h-px bg-border" />
-            <ContextMenu.Item
-                class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                onSelect={resetColumnVisibility}
-            >
-                <RotateCcw class="size-3.5" />
-                Reset to default
-            </ContextMenu.Item>
-        {/if}
+                {#snippet children({ checked })}
+                    <span
+                        class="flex size-4 items-center justify-center rounded-sm border border-border"
+                    >
+                        {#if checked}
+                            <Check class="size-3" />
+                        {/if}
+                    </span>
+                    {label}
+                {/snippet}
+            </CheckboxItem>
+        {/each}
+    </Group>
+    {#if hasCustomVisibility}
+        <Separator class="mx-1 my-1 h-px bg-border" />
+        <Item
+            class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+            onSelect={resetColumnVisibility}
+        >
+            <RotateCcw class="size-3.5" />
+            Reset to default
+        </Item>
     {/if}
 {/snippet}
 
@@ -379,7 +338,13 @@ const table = createSvelteTable({
                                 {...props}
                                 transition:fly={{ duration: 150, y: -10 }}
                             >
-                                {@render columnVisibilityItems("dropdown")}
+                                {@render columnVisibilityGroup(
+                    DropdownMenu.Group,
+                    DropdownMenu.GroupHeading,
+                    DropdownMenu.CheckboxItem,
+                    DropdownMenu.Separator,
+                    DropdownMenu.Item,
+                )}
                             </div>
                         </div>
                     {/if}
@@ -574,6 +539,7 @@ const table = createSvelteTable({
                                         )}
                                         {@const display = primaryInstructorDisplay(course)}
                                         {@const commaIdx = display.indexOf(", ")}
+                                        {@const ratingData = primaryRating(course)}
                                         <td class="py-2 px-2 whitespace-nowrap">
                                             {#if display === "Staff"}
                                                 <span
@@ -597,22 +563,20 @@ const table = createSvelteTable({
                                                     {/if}
                                                 </SimpleTooltip>
                                             {/if}
-                                            {#if primaryRating(course)}
-                                                {@const r =
-                                                    primaryRating(course)!}
+                                            {#if ratingData}
                                                 <SimpleTooltip
-                                                    text="{r.rating.toFixed(
+                                                    text="{ratingData.rating.toFixed(
                                                         1,
-                                                    )}/5 ({r.count} ratings on RateMyProfessors)"
+                                                    )}/5 ({ratingData.count} ratings on RateMyProfessors)"
                                                     delay={150}
                                                     side="bottom"
                                                     passthrough
                                                 >
                                                     <span
                                                         class="ml-1 text-xs font-medium {ratingColor(
-                                                            r.rating,
+                                                            ratingData.rating,
                                                         )}"
-                                                        >{r.rating.toFixed(
+                                                        >{ratingData.rating.toFixed(
                                                             1,
                                                         )}★</span
                                                     >
@@ -772,7 +736,13 @@ const table = createSvelteTable({
                                 in:fade={{ duration: 100 }}
                                 out:fade={{ duration: 100 }}
                             >
-                                {@render columnVisibilityItems("context")}
+                                {@render columnVisibilityGroup(
+                    ContextMenu.Group,
+                    ContextMenu.GroupHeading,
+                    ContextMenu.CheckboxItem,
+                    ContextMenu.Separator,
+                    ContextMenu.Item,
+                )}
                             </div>
                         </div>
                     {/if}

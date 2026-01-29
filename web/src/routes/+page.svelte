@@ -62,11 +62,16 @@ let error = $state<string | null>(null);
 $effect(() => {
   const term = selectedTerm;
   if (!term) return;
-  client.getSubjects(term).then((s) => {
-    subjects = s;
-    const validCodes = new Set(s.map((sub) => sub.code));
-    selectedSubjects = selectedSubjects.filter((code) => validCodes.has(code));
-  });
+  client
+    .getSubjects(term)
+    .then((s) => {
+      subjects = s;
+      const validCodes = new Set(s.map((sub) => sub.code));
+      selectedSubjects = selectedSubjects.filter((code) => validCodes.has(code));
+    })
+    .catch((e) => {
+      console.error("Failed to fetch subjects:", e);
+    });
 });
 
 // Centralized throttle configuration - maps trigger source to throttle delay (ms)

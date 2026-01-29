@@ -26,8 +26,19 @@ onMount(() => {
     },
   });
 
+  const unwatch = $effect.root(() => {
+    $effect(() => {
+      osInstance.options({
+        scrollbars: {
+          theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
+        },
+      });
+    });
+  });
+
   return () => {
-    osInstance?.destroy();
+    unwatch();
+    osInstance.destroy();
   };
 });
 </script>

@@ -18,11 +18,15 @@ let copiedEmail: string | null = $state(null);
 
 async function copyEmail(email: string, event: MouseEvent) {
   event.stopPropagation();
-  await navigator.clipboard.writeText(email);
-  copiedEmail = email;
-  setTimeout(() => {
-    copiedEmail = null;
-  }, 2000);
+  try {
+    await navigator.clipboard.writeText(email);
+    copiedEmail = email;
+    setTimeout(() => {
+      copiedEmail = null;
+    }, 2000);
+  } catch (err) {
+    console.error("Failed to copy email:", err);
+  }
 }
 </script>
 
@@ -42,8 +46,8 @@ async function copyEmail(email: string, event: MouseEvent) {
                   class="inline-flex items-center gap-1.5 text-sm font-medium bg-card border border-border rounded-md px-2.5 py-1 text-foreground hover:border-foreground/20 hover:bg-card/80 transition-colors"
                 >
                   {instructor.displayName}
-                  {#if 'rmpRating' in instructor && instructor.rmpRating}
-                    {@const rating = instructor.rmpRating as number}
+                  {#if instructor.rmpRating != null}
+                    {@const rating = instructor.rmpRating}
                     <span
                       class="text-[10px] font-semibold {rating >= 4.0 ? 'text-status-green' : rating >= 3.0 ? 'text-yellow-500' : 'text-status-red'}"
                     >{rating.toFixed(1)}★</span>
@@ -59,9 +63,9 @@ async function copyEmail(email: string, event: MouseEvent) {
                   {#if instructor.isPrimary}
                     <div class="text-muted-foreground">Primary instructor</div>
                   {/if}
-                  {#if 'rmpRating' in instructor && instructor.rmpRating}
+                  {#if instructor.rmpRating != null}
                     <div class="text-muted-foreground">
-                      {(instructor.rmpRating as number).toFixed(1)}/5 ({(instructor as any).rmpNumRatings ?? 0} ratings)
+                      {instructor.rmpRating.toFixed(1)}/5 ({instructor.rmpNumRatings ?? 0} ratings)
                     </div>
                   {/if}
                   {#if instructor.email}

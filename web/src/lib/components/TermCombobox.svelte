@@ -58,12 +58,15 @@ $effect(() => {
     if (!o) searchValue = "";
   }}
 >
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="relative h-9 rounded-md border border-border bg-card
            flex items-center w-40 cursor-pointer
            has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background"
+    role="presentation"
     bind:this={containerEl}
     onclick={() => { containerEl?.querySelector('input')?.focus(); }}
+    onkeydown={() => { containerEl?.querySelector('input')?.focus(); }}
   >
     <Combobox.Input
       oninput={(e) => (searchValue = e.currentTarget.value)}

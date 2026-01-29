@@ -186,14 +186,35 @@ describe("abbreviateInstructor", () => {
 describe("getPrimaryInstructor", () => {
   it("returns primary instructor", () => {
     const instructors: InstructorResponse[] = [
-      { bannerId: "1", displayName: "A", email: null, isPrimary: false },
-      { bannerId: "2", displayName: "B", email: null, isPrimary: true },
+      {
+        bannerId: "1",
+        displayName: "A",
+        email: null,
+        isPrimary: false,
+        rmpRating: null,
+        rmpNumRatings: null,
+      },
+      {
+        bannerId: "2",
+        displayName: "B",
+        email: null,
+        isPrimary: true,
+        rmpRating: null,
+        rmpNumRatings: null,
+      },
     ];
     expect(getPrimaryInstructor(instructors)?.displayName).toBe("B");
   });
   it("returns first instructor when no primary", () => {
     const instructors: InstructorResponse[] = [
-      { bannerId: "1", displayName: "A", email: null, isPrimary: false },
+      {
+        bannerId: "1",
+        displayName: "A",
+        email: null,
+        isPrimary: false,
+        rmpRating: null,
+        rmpNumRatings: null,
+      },
     ];
     expect(getPrimaryInstructor(instructors)?.displayName).toBe("A");
   });

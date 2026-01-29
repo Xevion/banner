@@ -3,6 +3,11 @@ import { BannerApiClient } from "$lib/api";
 
 export const load: PageLoad = async ({ url, fetch }) => {
   const client = new BannerApiClient(undefined, fetch);
-  const terms = await client.getTerms();
-  return { terms, url };
+  try {
+    const terms = await client.getTerms();
+    return { terms, url };
+  } catch (e) {
+    console.error("Failed to load terms:", e);
+    return { terms: [], url };
+  }
 };

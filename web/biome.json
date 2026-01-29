@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "ignore": ["dist/", "node_modules/", ".svelte-kit/"]
+    "ignore": ["dist/", "node_modules/", ".svelte-kit/", "src/lib/bindings/"]
   },
   "formatter": {
     "enabled": true,
