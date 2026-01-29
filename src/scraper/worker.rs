@@ -96,7 +96,7 @@ impl Worker {
         let job_impl = job_type.boxed();
 
         // Create span with job context
-        let span = tracing::debug_span!(
+        let span = tracing::info_span!(
             "process_job",
             job_id = job.id,
             job_type = job_impl.description()
@@ -234,7 +234,7 @@ impl Worker {
         // Atomically unlock and increment retry count, checking if retry is allowed
         match self.unlock_and_increment_retry(job_id, max_retries).await {
             Ok(can_retry) if can_retry => {
-                info!(
+                debug!(
                     worker_id = self.id,
                     job_id,
                     retry_attempt = next_attempt,

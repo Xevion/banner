@@ -39,14 +39,14 @@ impl Job for SubjectJob {
 
         if let Some(courses_from_api) = search_result.data {
             info!(
-                subject = subject_code,
+                subject = %subject_code,
                 count = courses_from_api.len(),
                 "Found courses"
             );
             batch_upsert_courses(&courses_from_api, db_pool).await?;
         }
 
-        debug!(subject = subject_code, "Subject job completed");
+        debug!(subject = %subject_code, "Subject job completed");
         Ok(())
     }
 

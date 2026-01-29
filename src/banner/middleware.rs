@@ -48,11 +48,9 @@ impl Middleware for TransparentMiddleware {
                     }
                     Ok(response)
                 } else {
-                    let e = response.error_for_status_ref().unwrap_err();
                     warn!(
                         method = method,
                         path = path,
-                        error = ?e,
                         status = response.status().as_u16(),
                         duration_ms = duration.as_millis(),
                         "Request failed"
@@ -64,7 +62,6 @@ impl Middleware for TransparentMiddleware {
                 warn!(
                     method = method,
                     path = path,
-                    error = ?error,
                     duration_ms = duration.as_millis(),
                     "Request failed"
                 );

@@ -142,11 +142,8 @@ impl BannerApi {
 
     /// Performs a course search and handles common response processing.
     #[tracing::instrument(
-        skip(self, query),
-        fields(
-            term = %term,
-            subject = %query.get_subject().unwrap_or(&"all".to_string())
-        )
+        skip(self, query, sort, sort_descending),
+        fields(term = %term)
     )]
     async fn perform_search(
         &self,
