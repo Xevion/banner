@@ -10,6 +10,7 @@ import {
 } from "$lib/api";
 import type { SortingState } from "@tanstack/table-core";
 import SearchFilters from "$lib/components/SearchFilters.svelte";
+import SearchStatus, { type SearchMeta } from "$lib/components/SearchStatus.svelte";
 import CourseTable from "$lib/components/CourseTable.svelte";
 import Pagination from "$lib/components/Pagination.svelte";
 import Footer from "$lib/components/Footer.svelte";
@@ -56,6 +57,7 @@ let subjectMap: Record<string, string> = $derived(
   Object.fromEntries(subjects.map((s) => [s.code, s.description]))
 );
 let searchResult: SearchResponse | null = $state(null);
+let searchMeta: SearchMeta | null = $state(null);
 let loading = $state(false);
 let error = $state<string | null>(null);
 
@@ -169,6 +171,7 @@ async function performSearch(
   if (sortDir && sortBy) params.set("sort_dir", sortDir);
   goto(`?${params.toString()}`, { replaceState: true, noScroll: true, keepFocus: true });
 
+  const t0 = performance.now();
   try {
     searchResult = await client.searchCourses({
       term,
@@ -180,6 +183,11 @@ async function performSearch(
       sort_by: sortBy,
       sort_dir: sortDir,
     });
+    searchMeta = {
+      totalCount: searchResult.totalCount,
+      durationMs: performance.now() - t0,
+      timestamp: new Date(),
+    };
   } catch (e) {
     error = e instanceof Error ? e.message : "Search failed";
   } finally {
@@ -199,7 +207,10 @@ function handlePageChange(newOffset: number) {
       <h1 class="text-2xl font-semibold text-foreground">UTSA Course Search</h1>
     </div>
 
-    <!-- Filters -->
+    <!-- Search status + Filters -->
+    <div class="flex flex-col gap-1.5">
+      <SearchStatus meta={searchMeta} />
+      <!-- Filters -->
     <SearchFilters
       terms={data.terms}
       {subjects}
@@ -208,6 +219,7 @@ function handlePageChange(newOffset: number) {
       bind:query
       bind:openOnly
     />
+    </div>
 
     <!-- Results -->
     {#if error}
