@@ -4,10 +4,10 @@
 //! at compile time using rust-embed.
 
 use dashmap::DashMap;
-use once_cell::sync::Lazy;
 use rapidhash::v3::rapidhash_v3;
 use rust_embed::RustEmbed;
 use std::fmt;
+use std::sync::LazyLock;
 
 /// Embedded web assets from the dist directory
 #[derive(RustEmbed)]
@@ -65,7 +65,7 @@ impl AssetMetadata {
 }
 
 /// Global cache for asset metadata to avoid repeated calculations
-static ASSET_CACHE: Lazy<DashMap<String, AssetMetadata>> = Lazy::new(DashMap::new);
+static ASSET_CACHE: LazyLock<DashMap<String, AssetMetadata>> = LazyLock::new(DashMap::new);
 
 /// Get cached asset metadata for a file path, caching on-demand
 /// Returns AssetMetadata containing MIME type and RapidHash hash

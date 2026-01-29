@@ -20,6 +20,26 @@
   animation: pulse 2s ease-in-out infinite;
 }
 
+/* Theme toggle button */
+.theme-toggle {
+  cursor: pointer;
+  background-color: transparent;
+  border: none;
+  margin: 4px;
+  padding: 7px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-11);
+  transition: background-color 0.2s, color 0.2s;
+  transform: scale(1.25);
+}
+
+.theme-toggle:hover {
+  background-color: var(--gray-4);
+}
+
 /* Screen reader only text */
 .sr-only {
   position: absolute;

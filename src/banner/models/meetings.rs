@@ -298,7 +298,7 @@ impl DateRange {
     /// Get the number of weeks between start and end dates
     pub fn weeks_duration(&self) -> u32 {
         let duration = self.end.signed_duration_since(self.start);
-        duration.num_weeks() as u32
+        duration.num_weeks().max(0) as u32
     }
 
     /// Check if a specific date falls within this range

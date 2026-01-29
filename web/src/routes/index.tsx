@@ -1,21 +1,21 @@
+import { Card, Flex, Skeleton, Text, Tooltip } from "@radix-ui/themes";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { client, type StatusResponse, type Status } from "../lib/api";
-import { Card, Flex, Text, Tooltip, Skeleton } from "@radix-ui/themes";
 import {
-  CheckCircle,
-  XCircle,
-  Clock,
+  Activity,
   Bot,
+  CheckCircle,
+  Circle,
+  Clock,
   Globe,
   Hourglass,
-  Activity,
   MessageCircle,
-  Circle,
   WifiOff,
+  XCircle,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import TimeAgo from "react-timeago";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { type Status, type StatusResponse, client } from "../lib/api";
 import "../App.css";
 
 const REFRESH_INTERVAL = import.meta.env.DEV ? 3000 : 30000;
@@ -190,19 +190,28 @@ function App() {
   const shouldShowLastFetch = hasResponse || hasError || hasTimeout;
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let requestTimeoutId: NodeJS.Timeout | null = null;
 
     const fetchData = async () => {
       try {
         const startTime = Date.now();
 
-        // Create a timeout promise
+        // Create a timeout promise with cleanup tracking
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("Request timeout")), REQUEST_TIMEOUT);
+          requestTimeoutId = setTimeout(() => {
+            reject(new Error("Request timeout"));
+          }, REQUEST_TIMEOUT);
         });
 
         // Race between the API call and timeout
         const statusData = await Promise.race([client.getStatus(), timeoutPromise]);
+
+        // Clear the timeout if the request succeeded
+        if (requestTimeoutId) {
+          clearTimeout(requestTimeoutId);
+          requestTimeoutId = null;
+        }
 
         const endTime = Date.now();
         const responseTime = endTime - startTime;
@@ -214,9 +223,14 @@ function App() {
           lastFetch: new Date(),
         });
       } catch (err) {
+        // Clear the timeout on error as well
+        if (requestTimeoutId) {
+          clearTimeout(requestTimeoutId);
+          requestTimeoutId = null;
+        }
+
         const errorMessage = err instanceof Error ? err.message : "Failed to fetch data";
 
-        // Check if it's a timeout error
         if (errorMessage === "Request timeout") {
           setState({
             mode: "timeout",
@@ -240,6 +254,9 @@ function App() {
     return () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
+      }
+      if (requestTimeoutId) {
+        clearTimeout(requestTimeoutId);
       }
     };
   }, []);

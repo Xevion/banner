@@ -168,8 +168,9 @@ impl SearchQuery {
     }
 
     /// Sets the maximum number of results to return
+    /// Clamped to a maximum of 500 to prevent excessive API load
     pub fn max_results(mut self, max_results: i32) -> Self {
-        self.max_results = max_results;
+        self.max_results = max_results.clamp(1, 500);
         self
     }
 

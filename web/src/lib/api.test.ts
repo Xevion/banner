@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BannerApiClient } from "./api";
 
 // Mock fetch
@@ -31,12 +31,12 @@ describe("BannerApiClient", () => {
 
   it("should fetch status data", async () => {
     const mockStatus = {
-      status: "active",
+      status: "active" as const,
       version: "0.3.4",
       commit: "abc1234",
       services: {
-        web: { name: "web", status: "active" },
-        database: { name: "database", status: "connected" },
+        web: { name: "web", status: "active" as const },
+        database: { name: "database", status: "connected" as const },
       },
     };
 

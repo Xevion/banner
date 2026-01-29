@@ -7,13 +7,12 @@ use cookie::Cookie;
 use dashmap::DashMap;
 use governor::state::InMemoryState;
 use governor::{Quota, RateLimiter};
-use once_cell::sync::Lazy;
 use rand::distr::{Alphanumeric, SampleString};
 use reqwest_middleware::ClientWithMiddleware;
 use std::collections::{HashMap, VecDeque};
 
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify};
 use tracing::{debug, info, trace};
@@ -23,9 +22,9 @@ const SESSION_EXPIRY: Duration = Duration::from_secs(25 * 60); // 25 minutes
 
 // A global rate limiter to ensure we only try to create one new session every 10 seconds,
 // preventing us from overwhelming the server with session creation requests.
-static SESSION_CREATION_RATE_LIMITER: Lazy<
+static SESSION_CREATION_RATE_LIMITER: LazyLock<
     RateLimiter<governor::state::direct::NotKeyed, InMemoryState, governor::clock::DefaultClock>,
-> = Lazy::new(|| RateLimiter::direct(Quota::with_period(Duration::from_secs(10)).unwrap()));
+> = LazyLock::new(|| RateLimiter::direct(Quota::with_period(Duration::from_secs(10)).unwrap()));
 
 /// Represents an active anonymous session within the Banner API.
 /// Identified by multiple persistent cookies, as well as a client-generated "unique session ID".
@@ -63,16 +62,16 @@ pub fn nonce() -> String {
 
 impl BannerSession {
     /// Creates a new session
-    pub fn new(unique_session_id: &str, jsessionid: &str, ssb_cookie: &str) -> Result<Self> {
+    pub fn new(unique_session_id: &str, jsessionid: &str, ssb_cookie: &str) -> Self {
         let now = Instant::now();
 
-        Ok(Self {
+        Self {
             created_at: now,
             last_activity: None,
             unique_session_id: unique_session_id.to_string(),
             jsessionid: jsessionid.to_string(),
             ssb_cookie: ssb_cookie.to_string(),
-        })
+        }
     }
 
     /// Returns the unique session ID
@@ -124,47 +123,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_session_returns_ok() {
+    fn test_new_session_creates_session() {
         let session = BannerSession::new("sess-1", "JSID123", "SSB456");
-        assert!(session.is_ok());
-        assert_eq!(session.unwrap().id(), "sess-1");
+        assert_eq!(session.id(), "sess-1");
     }
 
     #[test]
     fn test_fresh_session_not_expired() {
-        let session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        let session = BannerSession::new("sess-1", "JSID123", "SSB456");
         assert!(!session.is_expired());
     }
 
     #[test]
     fn test_fresh_session_not_been_used() {
-        let session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        let session = BannerSession::new("sess-1", "JSID123", "SSB456");
         assert!(!session.been_used());
     }
 
     #[test]
     fn test_touch_marks_used() {
-        let mut session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        let mut session = BannerSession::new("sess-1", "JSID123", "SSB456");
         session.touch();
         assert!(session.been_used());
     }
 
     #[test]
     fn test_touched_session_not_expired() {
-        let mut session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        let mut session = BannerSession::new("sess-1", "JSID123", "SSB456");
         session.touch();
         assert!(!session.is_expired());
     }
 
     #[test]
     fn test_cookie_format() {
-        let session = BannerSession::new("sess-1", "JSID123", "SSB456").unwrap();
+        let session = BannerSession::new("sess-1", "JSID123", "SSB456");
         assert_eq!(session.cookie(), "JSESSIONID=JSID123; SSB_COOKIE=SSB456");
     }
 
     #[test]
     fn test_id_returns_unique_session_id() {
-        let session = BannerSession::new("my-unique-id", "JSID123", "SSB456").unwrap();
+        let session = BannerSession::new("my-unique-id", "JSID123", "SSB456");
         assert_eq!(session.id(), "my-unique-id");
     }
 
@@ -454,7 +452,7 @@ impl SessionPool {
         self.select_term(&term.to_string(), &unique_session_id, &cookie_header)
             .await?;
 
-        BannerSession::new(&unique_session_id, jsessionid, ssb_cookie)
+        Ok(BannerSession::new(&unique_session_id, jsessionid, ssb_cookie))
     }
 
     /// Retrieves a list of terms from the Banner API.

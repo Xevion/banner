@@ -5,58 +5,24 @@ use crate::data::models::TargetType;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use std::fmt;
+use thiserror::Error;
 
 /// Errors that can occur during job parsing
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum JobParseError {
-    InvalidJson(serde_json::Error),
+    #[error("Invalid JSON in job payload: {0}")]
+    InvalidJson(#[from] serde_json::Error),
+    #[error("Unsupported target type: {0:?}")]
     UnsupportedTargetType(TargetType),
 }
 
-impl fmt::Display for JobParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            JobParseError::InvalidJson(e) => write!(f, "Invalid JSON in job payload: {}", e),
-            JobParseError::UnsupportedTargetType(t) => {
-                write!(f, "Unsupported target type: {:?}", t)
-            }
-        }
-    }
-}
-
-impl std::error::Error for JobParseError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            JobParseError::InvalidJson(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
 /// Errors that can occur during job processing
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum JobError {
-    Recoverable(anyhow::Error),   // API failures, network issues
-    Unrecoverable(anyhow::Error), // Parse errors, corrupted data
-}
-
-impl fmt::Display for JobError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            JobError::Recoverable(e) => write!(f, "Recoverable error: {}", e),
-            JobError::Unrecoverable(e) => write!(f, "Unrecoverable error: {}", e),
-        }
-    }
-}
-
-impl std::error::Error for JobError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            JobError::Recoverable(e) => e.source(),
-            JobError::Unrecoverable(e) => e.source(),
-        }
-    }
+    #[error("Recoverable error: {0}")]
+    Recoverable(#[source] anyhow::Error),
+    #[error("Unrecoverable error: {0}")]
+    Unrecoverable(#[source] anyhow::Error),
 }
 
 /// Common trait interface for all job types

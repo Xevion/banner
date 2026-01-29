@@ -1,6 +1,6 @@
-import { useTheme } from "next-themes";
 import { Button } from "@radix-ui/themes";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useMemo } from "react";
 
 export function ThemeToggle() {
@@ -28,31 +28,7 @@ export function ThemeToggle() {
   }, [nextTheme]);
 
   return (
-    <Button
-      variant="ghost"
-      size="3"
-      onClick={() => setTheme(nextTheme)}
-      style={{
-        cursor: "pointer",
-        backgroundColor: "transparent",
-        border: "none",
-        margin: "4px",
-        padding: "7px",
-        borderRadius: "6px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "var(--gray-11)",
-        transition: "background-color 0.2s, color 0.2s",
-        transform: "scale(1.25)",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = "var(--gray-4)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = "transparent";
-      }}
-    >
+    <Button variant="ghost" size="3" onClick={() => setTheme(nextTheme)} className="theme-toggle">
       {icon}
       <span className="sr-only">Toggle theme</span>
     </Button>
