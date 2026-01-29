@@ -9,6 +9,7 @@ import {
   isTimeTBA,
 } from "$lib/course";
 import { Tooltip } from "bits-ui";
+import SimpleTooltip from "./SimpleTooltip.svelte";
 import { Info, Copy, Check } from "@lucide/svelte";
 
 let { course }: { course: CourseResponse } = $props();
@@ -50,7 +51,8 @@ async function copyEmail(email: string, event: MouseEvent) {
                 </span>
               </Tooltip.Trigger>
               <Tooltip.Content
-                class="bg-card text-card-foreground text-xs border border-border rounded-md px-3 py-2 shadow-md max-w-72"
+                sideOffset={6}
+                class="z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-3 py-2 shadow-md max-w-72"
               >
                 <div class="space-y-1.5">
                   <div class="font-medium">{instructor.displayName}</div>
@@ -134,16 +136,9 @@ async function copyEmail(email: string, event: MouseEvent) {
       <h4 class="text-sm text-foreground mb-2">
         <span class="inline-flex items-center gap-1">
           Delivery
-          <Tooltip.Root delayDuration={100}>
-            <Tooltip.Trigger>
-              <Info class="size-3 text-muted-foreground/50" />
-            </Tooltip.Trigger>
-            <Tooltip.Content
-              class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
-            >
-              How the course is taught: in-person, online, hybrid, etc.
-            </Tooltip.Content>
-          </Tooltip.Root>
+          <SimpleTooltip text="How the course is taught: in-person, online, hybrid, etc." delay={150} passthrough>
+            <Info class="size-3 text-muted-foreground/50" />
+          </SimpleTooltip>
         </span>
       </h4>
       <span class="text-foreground">
@@ -168,34 +163,20 @@ async function copyEmail(email: string, event: MouseEvent) {
         <h4 class="text-sm text-foreground mb-2">
           <span class="inline-flex items-center gap-1">
             Attributes
-            <Tooltip.Root delayDuration={100}>
-              <Tooltip.Trigger>
-                <Info class="size-3 text-muted-foreground/50" />
-              </Tooltip.Trigger>
-              <Tooltip.Content
-                class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
-              >
-                Course flags for degree requirements, core curriculum, or special designations
-              </Tooltip.Content>
-            </Tooltip.Root>
+            <SimpleTooltip text="Course flags for degree requirements, core curriculum, or special designations" delay={150} passthrough>
+              <Info class="size-3 text-muted-foreground/50" />
+            </SimpleTooltip>
           </span>
         </h4>
         <div class="flex flex-wrap gap-1.5">
           {#each course.attributes as attr}
-            <Tooltip.Root delayDuration={100}>
-              <Tooltip.Trigger>
-                <span
-                  class="inline-flex text-xs font-medium bg-card border border-border rounded-md px-2 py-0.5 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
-                >
-                  {attr}
-                </span>
-              </Tooltip.Trigger>
-              <Tooltip.Content
-                class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-64"
+            <SimpleTooltip text="Course attribute code" delay={150} passthrough>
+              <span
+                class="inline-flex text-xs font-medium bg-card border border-border rounded-md px-2 py-0.5 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
               >
-                Course attribute code
-              </Tooltip.Content>
-            </Tooltip.Root>
+                {attr}
+              </span>
+            </SimpleTooltip>
           {/each}
         </div>
       </div>
@@ -207,19 +188,12 @@ async function copyEmail(email: string, event: MouseEvent) {
         <h4 class="text-sm text-foreground mb-2">
           <span class="inline-flex items-center gap-1">
             Cross-list
-            <Tooltip.Root delayDuration={100}>
-              <Tooltip.Trigger>
-                <Info class="size-3 text-muted-foreground/50" />
-              </Tooltip.Trigger>
-              <Tooltip.Content
-                class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
-              >
-                Cross-listed sections share enrollment across multiple course numbers. Students in any linked section attend the same class.
-              </Tooltip.Content>
-            </Tooltip.Root>
+            <SimpleTooltip text="Cross-listed sections share enrollment across multiple course numbers. Students in any linked section attend the same class." delay={150} passthrough>
+              <Info class="size-3 text-muted-foreground/50" />
+            </SimpleTooltip>
           </span>
         </h4>
-        <Tooltip.Root delayDuration={100}>
+        <Tooltip.Root delayDuration={150} disableHoverableContent>
           <Tooltip.Trigger>
             <span class="inline-flex items-center gap-1.5 text-foreground font-mono">
               <span class="bg-card border border-border rounded-md px-2 py-0.5 text-xs font-medium">
@@ -233,7 +207,8 @@ async function copyEmail(email: string, event: MouseEvent) {
             </span>
           </Tooltip.Trigger>
           <Tooltip.Content
-            class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
+            sideOffset={6}
+            class="z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
           >
             Group <span class="font-mono font-medium">{course.crossList}</span>
             {#if course.crossListCount != null && course.crossListCapacity != null}

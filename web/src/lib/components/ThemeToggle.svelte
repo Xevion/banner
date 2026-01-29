@@ -2,6 +2,7 @@
 import { tick } from "svelte";
 import { Moon, Sun } from "@lucide/svelte";
 import { themeStore } from "$lib/stores/theme.svelte";
+import SimpleTooltip from "./SimpleTooltip.svelte";
 
 /**
  * Theme toggle with View Transitions API circular reveal animation.
@@ -42,25 +43,27 @@ async function handleToggle(event: MouseEvent) {
 }
 </script>
 
-<button
-  type="button"
-  onclick={(e) => handleToggle(e)}
-  aria-label={themeStore.isDark ? "Switch to light mode" : "Switch to dark mode"}
-  class="cursor-pointer border-none rounded-md flex items-center justify-center p-2 scale-125
-    text-muted-foreground hover:bg-muted bg-transparent transition-colors"
->
-  <div class="relative size-[18px]">
-    <Sun
-      size={18}
-      class="absolute inset-0 transition-all duration-300 {themeStore.isDark
-        ? 'rotate-90 scale-0 opacity-0'
-        : 'rotate-0 scale-100 opacity-100'}"
-    />
-    <Moon
-      size={18}
-      class="absolute inset-0 transition-all duration-300 {themeStore.isDark
-        ? 'rotate-0 scale-100 opacity-100'
-        : '-rotate-90 scale-0 opacity-0'}"
-    />
-  </div>
-</button>
+<SimpleTooltip text={themeStore.isDark ? "Switch to light mode" : "Switch to dark mode"} delay={200} side="bottom" passthrough>
+  <button
+    type="button"
+    onclick={(e) => handleToggle(e)}
+    aria-label={themeStore.isDark ? "Switch to light mode" : "Switch to dark mode"}
+    class="cursor-pointer border-none rounded-md flex items-center justify-center p-2 scale-125
+      text-muted-foreground hover:bg-muted bg-transparent transition-colors"
+  >
+    <div class="relative size-[18px]">
+      <Sun
+        size={18}
+        class="absolute inset-0 transition-all duration-300 {themeStore.isDark
+          ? 'rotate-90 scale-0 opacity-0'
+          : 'rotate-0 scale-100 opacity-100'}"
+      />
+      <Moon
+        size={18}
+        class="absolute inset-0 transition-all duration-300 {themeStore.isDark
+          ? 'rotate-0 scale-100 opacity-100'
+          : '-rotate-90 scale-0 opacity-0'}"
+      />
+    </div>
+  </button>
+</SimpleTooltip>

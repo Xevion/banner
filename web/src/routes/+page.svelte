@@ -51,6 +51,9 @@ function handleSortingChange(newSorting: SortingState) {
 
 // Data state
 let subjects: Subject[] = $state([]);
+let subjectMap: Record<string, string> = $derived(
+  Object.fromEntries(subjects.map((s) => [s.code, s.description]))
+);
 let searchResult: SearchResponse | null = $state(null);
 let loading = $state(false);
 let error = $state<string | null>(null);
@@ -181,6 +184,7 @@ function handlePageChange(newOffset: number) {
         {sorting}
         onSortingChange={handleSortingChange}
         manualSorting={true}
+        {subjectMap}
       />
 
       {#if searchResult}

@@ -12,7 +12,7 @@ import {
   WifiOff,
   XCircle,
 } from "@lucide/svelte";
-import { Tooltip } from "bits-ui";
+import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import { type ServiceStatus, type ServiceInfo, type StatusResponse, client } from "$lib/api";
 import { relativeTime } from "$lib/time";
 
@@ -290,20 +290,13 @@ onMount(() => {
               <Clock size={13} />
               <span class="text-sm text-muted-foreground">Last Updated</span>
             </div>
-            <Tooltip.Root>
-              <Tooltip.Trigger>
-                <abbr
-                  class="cursor-pointer underline decoration-dotted decoration-border underline-offset-[6px]"
-                >
-                  <span class="text-sm text-muted-foreground">{relativeLastFetch}</span>
-                </abbr>
-              </Tooltip.Trigger>
-              <Tooltip.Content
-                class="bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md"
+            <SimpleTooltip text="as of {lastFetch.toLocaleTimeString()}" delay={150} passthrough>
+              <abbr
+                class="cursor-pointer underline decoration-dotted decoration-border underline-offset-[6px]"
               >
-                as of {lastFetch.toLocaleTimeString()}
-              </Tooltip.Content>
-            </Tooltip.Root>
+                <span class="text-sm text-muted-foreground">{relativeLastFetch}</span>
+              </abbr>
+            </SimpleTooltip>
           </div>
         {/if}
       </div>

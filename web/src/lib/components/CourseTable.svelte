@@ -24,7 +24,8 @@ import {
   type Updater,
 } from "@tanstack/table-core";
 import { ArrowUp, ArrowDown, ArrowUpDown, Columns3, Check, RotateCcw } from "@lucide/svelte";
-import { DropdownMenu, ContextMenu } from "bits-ui";
+import { DropdownMenu, ContextMenu, Tooltip } from "bits-ui";
+import SimpleTooltip from "./SimpleTooltip.svelte";
 import { fade, fly } from "svelte/transition";
 
 let {
@@ -33,12 +34,14 @@ let {
   sorting = [],
   onSortingChange,
   manualSorting = false,
+  subjectMap = {},
 }: {
   courses: CourseResponse[];
   loading: boolean;
   sorting?: SortingState;
   onSortingChange?: (sorting: SortingState) => void;
   manualSorting?: boolean;
+  subjectMap?: Record<string, string>;
 } = $props();
 
 let expandedCrn: string | null = $state(null);
@@ -301,12 +304,24 @@ const table = createSvelteTable({
 <!-- Toolbar: View columns button -->
 <div class="flex items-center justify-end pb-2">
   <DropdownMenu.Root>
-    <DropdownMenu.Trigger
-      class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
-    >
-      <Columns3 class="size-3.5" />
-      View
-    </DropdownMenu.Trigger>
+    <Tooltip.Root delayDuration={150} disableHoverableContent>
+      <Tooltip.Trigger>
+        <DropdownMenu.Trigger
+          class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+        >
+          <Columns3 class="size-3.5" />
+          View
+        </DropdownMenu.Trigger>
+      </Tooltip.Trigger>
+      <Tooltip.Content
+        side="bottom"
+        sideOffset={6}
+        class="z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md"
+      >
+        Show or hide table columns
+      </Tooltip.Content>
+    </Tooltip.Root>
+
     <DropdownMenu.Portal>
       <DropdownMenu.Content
         class="z-50 min-w-[160px] rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
@@ -399,20 +414,31 @@ const table = createSvelteTable({
                   {#if colId === "crn"}
                     <td class="py-2 px-2 font-mono text-xs text-muted-foreground/70">{course.crn}</td>
                   {:else if colId === "course_code"}
+                    {@const subjectDesc = subjectMap[course.subject]}
                     <td class="py-2 px-2 whitespace-nowrap">
-                      <span class="font-semibold">{course.subject} {course.courseNumber}</span>{#if course.sequenceNumber}<span class="text-muted-foreground">-{course.sequenceNumber}</span>{/if}
+                      <SimpleTooltip text={subjectDesc ? `${subjectDesc} ${course.courseNumber}` : `${course.subject} ${course.courseNumber}`} delay={200} side="bottom" passthrough>
+                        <span class="font-semibold">{course.subject} {course.courseNumber}</span>{#if course.sequenceNumber}<span class="text-muted-foreground">-{course.sequenceNumber}</span>{/if}
+                      </SimpleTooltip>
                     </td>
                   {:else if colId === "title"}
-                    <td class="py-2 px-2 font-medium max-w-[200px] truncate" title={course.title}>{course.title}</td>
+                    <td class="py-2 px-2 font-medium max-w-[200px] truncate">
+                      <SimpleTooltip text={course.title} delay={200} side="bottom" passthrough>
+                        <span class="block truncate">{course.title}</span>
+                      </SimpleTooltip>
+                    </td>
                   {:else if colId === "instructor"}
+                    {@const primary = getPrimaryInstructor(course.instructors)}
                     <td class="py-2 px-2 whitespace-nowrap">
-                      {primaryInstructorDisplay(course)}
+                      <SimpleTooltip text={primary?.displayName ?? "Staff"} delay={200} side="bottom" passthrough>
+                        <span>{primaryInstructorDisplay(course)}</span>
+                      </SimpleTooltip>
                       {#if primaryRating(course)}
                         {@const r = primaryRating(course)!}
-                        <span
-                          class="ml-1 text-xs font-medium {ratingColor(r.rating)}"
-                          title="{r.rating.toFixed(1)}/5 ({r.count} ratings)"
-                        >{r.rating.toFixed(1)}★</span>
+                        <SimpleTooltip text="{r.rating.toFixed(1)}/5 ({r.count} ratings on RateMyProfessors)" delay={150} side="bottom" passthrough>
+                          <span
+                            class="ml-1 text-xs font-medium {ratingColor(r.rating)}"
+                          >{r.rating.toFixed(1)}★</span>
+                        </SimpleTooltip>
                       {/if}
                     </td>
                   {:else if colId === "time"}
@@ -442,11 +468,13 @@ const table = createSvelteTable({
                     </td>
                   {:else if colId === "seats"}
                     <td class="py-2 px-2 text-right whitespace-nowrap">
-                      <span class="inline-flex items-center gap-1.5">
-                        <span class="size-1.5 rounded-full {seatsDotColor(course)} shrink-0"></span>
-                        <span class="{seatsColor(course)} font-medium tabular-nums">{#if openSeats(course) === 0}Full{:else}{openSeats(course)} open{/if}</span>
-                        <span class="text-muted-foreground/60 tabular-nums">{course.enrollment}/{course.maxEnrollment}{#if course.waitCount > 0} · WL {course.waitCount}/{course.waitCapacity}{/if}</span>
-                      </span>
+                      <SimpleTooltip text="{openSeats(course)} of {course.maxEnrollment} seats open, {course.enrollment} enrolled{course.waitCount > 0 ? `, ${course.waitCount} waitlisted` : ''}" delay={200} side="left" passthrough>
+                        <span class="inline-flex items-center gap-1.5">
+                          <span class="size-1.5 rounded-full {seatsDotColor(course)} shrink-0"></span>
+                          <span class="{seatsColor(course)} font-medium tabular-nums">{#if openSeats(course) === 0}Full{:else}{openSeats(course)} open{/if}</span>
+                          <span class="text-muted-foreground/60 tabular-nums">{course.enrollment}/{course.maxEnrollment}{#if course.waitCount > 0} · WL {course.waitCount}/{course.waitCapacity}{/if}</span>
+                        </span>
+                      </SimpleTooltip>
                     </td>
                   {/if}
                 {/each}

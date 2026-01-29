@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Term, Subject } from "$lib/api";
+import SimpleTooltip from "./SimpleTooltip.svelte";
 
 let {
   terms,
@@ -45,8 +46,10 @@ let {
     class="border border-border bg-card text-foreground rounded-md px-3 py-1.5 text-sm flex-1 min-w-[200px]"
   />
 
-  <label class="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
-    <input type="checkbox" bind:checked={openOnly} />
-    Open only
-  </label>
+  <SimpleTooltip text="Show only courses with available seats" delay={200} passthrough>
+    <label class="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
+      <input type="checkbox" bind:checked={openOnly} />
+      Open only
+    </label>
+  </SimpleTooltip>
 </div>
