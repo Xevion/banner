@@ -3,9 +3,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use ts_rs::TS;
 
 /// Represents a meeting time stored as JSONB in the courses table.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct DbMeetingTime {
     pub begin_time: Option<String>,
     pub end_time: Option<String>,

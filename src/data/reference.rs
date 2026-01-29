@@ -2,6 +2,7 @@
 
 use crate::data::models::ReferenceData;
 use crate::error::Result;
+use html_escape::decode_html_entities;
 use sqlx::PgPool;
 
 /// Batch upsert reference data entries.
@@ -12,7 +13,10 @@ pub async fn batch_upsert(entries: &[ReferenceData], db_pool: &PgPool) -> Result
 
     let categories: Vec<&str> = entries.iter().map(|e| e.category.as_str()).collect();
     let codes: Vec<&str> = entries.iter().map(|e| e.code.as_str()).collect();
-    let descriptions: Vec<&str> = entries.iter().map(|e| e.description.as_str()).collect();
+    let descriptions: Vec<String> = entries
+        .iter()
+        .map(|e| decode_html_entities(&e.description).into_owned())
+        .collect();
 
     sqlx::query(
         r#"

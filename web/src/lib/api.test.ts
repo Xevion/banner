@@ -61,4 +61,101 @@ describe("BannerApiClient", () => {
       "API request failed: 500 Internal Server Error"
     );
   });
+
+  it("should search courses with all params", async () => {
+    const mockResponse = {
+      courses: [],
+      totalCount: 0,
+      offset: 0,
+      limit: 25,
+    };
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    } as Response);
+
+    const result = await apiClient.searchCourses({
+      term: "202420",
+      subject: "CS",
+      q: "data",
+      open_only: true,
+      limit: 25,
+      offset: 50,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/courses/search?term=202420&subject=CS&q=data&open_only=true&limit=25&offset=50"
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("should search courses with minimal params", async () => {
+    const mockResponse = {
+      courses: [],
+      totalCount: 0,
+      offset: 0,
+      limit: 25,
+    };
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    } as Response);
+
+    await apiClient.searchCourses({ term: "202420" });
+
+    expect(fetch).toHaveBeenCalledWith("/api/courses/search?term=202420");
+  });
+
+  it("should fetch terms", async () => {
+    const mockTerms = [
+      { code: "202420", description: "Fall 2024" },
+      { code: "202510", description: "Spring 2025" },
+    ];
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTerms),
+    } as Response);
+
+    const result = await apiClient.getTerms();
+
+    expect(fetch).toHaveBeenCalledWith("/api/terms");
+    expect(result).toEqual(mockTerms);
+  });
+
+  it("should fetch subjects for a term", async () => {
+    const mockSubjects = [
+      { code: "CS", description: "Computer Science" },
+      { code: "MAT", description: "Mathematics" },
+    ];
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockSubjects),
+    } as Response);
+
+    const result = await apiClient.getSubjects("202420");
+
+    expect(fetch).toHaveBeenCalledWith("/api/subjects?term=202420");
+    expect(result).toEqual(mockSubjects);
+  });
+
+  it("should fetch reference data", async () => {
+    const mockRef = [
+      { code: "F", description: "Face to Face" },
+      { code: "OL", description: "Online" },
+    ];
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockRef),
+    } as Response);
+
+    const result = await apiClient.getReference("instructional_methods");
+
+    expect(fetch).toHaveBeenCalledWith("/api/reference/instructional_methods");
+    expect(result).toEqual(mockRef);
+  });
 });

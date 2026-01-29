@@ -12,6 +12,18 @@
     <link rel="apple-touch-icon" href="%sveltekit.assets%/logo192.png" />
     <link rel="manifest" href="%sveltekit.assets%/manifest.json" />
     <title>Banner</title>
+    <script>
+      (function () {
+        var stored = localStorage.getItem("theme");
+        var isDark =
+          stored === "dark" ||
+          (stored !== "light" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (isDark) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

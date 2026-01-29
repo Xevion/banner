@@ -1,22 +1,16 @@
 <script lang="ts">
 import "./layout.css";
+import { onMount } from "svelte";
 import { Tooltip } from "bits-ui";
 import ThemeToggle from "$lib/components/ThemeToggle.svelte";
+import { themeStore } from "$lib/stores/theme.svelte";
 
 let { children } = $props();
-</script>
 
-<svelte:head>
-  {@html `<script>
-    (function() {
-      const stored = localStorage.getItem("theme");
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (stored === "dark" || (!stored && prefersDark) || (stored === "system" && prefersDark)) {
-        document.documentElement.classList.add("dark");
-      }
-    })();
-  </script>`}
-</svelte:head>
+onMount(() => {
+  themeStore.init();
+});
+</script>
 
 <Tooltip.Provider>
   <div class="fixed top-5 right-5 z-50">

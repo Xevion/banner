@@ -18,6 +18,7 @@ use http::header;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, time::Duration};
+use ts_rs::TS;
 
 use crate::state::AppState;
 use crate::status::ServiceStatus;
@@ -227,14 +228,16 @@ async fn health() -> Json<Value> {
     }))
 }
 
-#[derive(Serialize)]
-struct ServiceInfo {
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct ServiceInfo {
     name: String,
     status: ServiceStatus,
 }
 
-#[derive(Serialize)]
-struct StatusResponse {
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct StatusResponse {
     status: ServiceStatus,
     version: String,
     commit: String,
@@ -316,9 +319,10 @@ fn default_limit() -> i32 {
     25
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
-struct CourseResponse {
+#[ts(export)]
+pub struct CourseResponse {
     crn: String,
     subject: String,
     course_number: String,
@@ -340,32 +344,35 @@ struct CourseResponse {
     link_identifier: Option<String>,
     is_section_linked: Option<bool>,
     part_of_term: Option<String>,
-    meeting_times: Value,
-    attributes: Value,
+    meeting_times: Vec<crate::data::models::DbMeetingTime>,
+    attributes: Vec<String>,
     instructors: Vec<InstructorResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
-struct InstructorResponse {
+#[ts(export)]
+pub struct InstructorResponse {
     banner_id: String,
     display_name: String,
     email: Option<String>,
     is_primary: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
-struct SearchResponse {
+#[ts(export)]
+pub struct SearchResponse {
     courses: Vec<CourseResponse>,
-    total_count: i64,
+    total_count: i32,
     offset: i32,
     limit: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
-struct CodeDescription {
+#[ts(export)]
+pub struct CodeDescription {
     code: String,
     description: String,
 }
@@ -411,8 +418,8 @@ async fn build_course_response(
         link_identifier: course.link_identifier.clone(),
         is_section_linked: course.is_section_linked,
         part_of_term: course.part_of_term.clone(),
-        meeting_times: course.meeting_times.clone(),
-        attributes: course.attributes.clone(),
+        meeting_times: serde_json::from_value(course.meeting_times.clone()).unwrap_or_default(),
+        attributes: serde_json::from_value(course.attributes.clone()).unwrap_or_default(),
         instructors,
     }
 }
@@ -454,7 +461,7 @@ async fn search_courses(
 
     Ok(Json(SearchResponse {
         courses: course_responses,
-        total_count,
+        total_count: total_count as i32,
         offset,
         limit,
     }))

@@ -8,16 +8,20 @@ default:
 check:
     cargo fmt --all -- --check
     cargo clippy --all-features -- --deny warnings
-    cargo nextest run
+    cargo nextest run -E 'not test(export_bindings)'
     bun run --cwd web check
     bun run --cwd web test
+
+# Generate TypeScript bindings from Rust types (ts-rs)
+bindings:
+    cargo test export_bindings
 
 # Run all tests (Rust + frontend)
 test: test-rust test-web
 
-# Run only Rust tests
+# Run only Rust tests (excludes ts-rs bindings generation)
 test-rust *ARGS:
-    cargo nextest run {{ARGS}}
+    cargo nextest run -E 'not test(export_bindings)' {{ARGS}}
 
 # Run only frontend tests
 test-web:
@@ -26,7 +30,7 @@ test-web:
 # Quick check: clippy + tests + typecheck (skips formatting)
 check-quick:
     cargo clippy --all-features -- --deny warnings
-    cargo nextest run
+    cargo nextest run -E 'not test(export_bindings)'
     bun run --cwd web check
 
 # Run the Banner API search demo (hits live UTSA API, ~20s)

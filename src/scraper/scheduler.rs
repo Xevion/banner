@@ -206,6 +206,19 @@ impl Scheduler {
 
         let mut all_entries = Vec::new();
 
+        // Terms (fetched via session pool, no active session needed)
+        match banner_api.sessions.get_terms("", 1, 500).await {
+            Ok(terms) => {
+                debug!(count = terms.len(), "Fetched terms");
+                all_entries.extend(terms.into_iter().map(|t| ReferenceData {
+                    category: "term".to_string(),
+                    code: t.code,
+                    description: t.description,
+                }));
+            }
+            Err(e) => warn!(error = ?e, "Failed to fetch terms"),
+        }
+
         // Subjects
         match banner_api.get_subjects("", &term, 1, 500).await {
             Ok(pairs) => {

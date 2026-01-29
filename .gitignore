@@ -1,5 +1,6 @@
 .env
 /target
-/go/
-.cargo/config.toml
-src/scraper/README.md
+
+# ts-rs bindings
+web/src/lib/bindings/*.ts
+!web/src/lib/bindings/index.ts

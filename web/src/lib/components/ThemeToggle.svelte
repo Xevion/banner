@@ -1,53 +1,66 @@
 <script lang="ts">
-import { browser } from "$app/environment";
-import { Monitor, Moon, Sun } from "@lucide/svelte";
+import { tick } from "svelte";
+import { Moon, Sun } from "@lucide/svelte";
+import { themeStore } from "$lib/stores/theme.svelte";
 
-type Theme = "light" | "dark" | "system";
+/**
+ * Theme toggle with View Transitions API circular reveal animation.
+ * The clip-path circle expands from the click point to cover the viewport.
+ */
+async function handleToggle(event: MouseEvent) {
+  const supportsViewTransition =
+    typeof document !== "undefined" &&
+    "startViewTransition" in document &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-let theme = $state<Theme>("system");
-
-if (browser) {
-  theme = (localStorage.getItem("theme") as Theme) ?? "system";
-}
-
-const nextTheme = $derived<Theme>(
-  theme === "light" ? "dark" : theme === "dark" ? "system" : "light"
-);
-
-function applyTheme(t: Theme) {
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const isDark = t === "dark" || (t === "system" && prefersDark);
-  document.documentElement.classList.toggle("dark", isDark);
-}
-
-function toggle() {
-  const next = nextTheme;
-
-  const update = () => {
-    theme = next;
-    localStorage.setItem("theme", next);
-    applyTheme(next);
-  };
-
-  if (document.startViewTransition) {
-    document.startViewTransition(update);
-  } else {
-    update();
+  if (!supportsViewTransition) {
+    themeStore.toggle();
+    return;
   }
+
+  const x = event.clientX;
+  const y = event.clientY;
+  const endRadius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+
+  const transition = document.startViewTransition(async () => {
+    themeStore.toggle();
+    await tick();
+  });
+
+  transition.ready.then(() => {
+    document.documentElement.animate(
+      {
+        clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)`],
+      },
+      {
+        duration: 500,
+        easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+        pseudoElement: "::view-transition-new(root)",
+      }
+    );
+  });
 }
 </script>
 
 <button
-  onclick={toggle}
+  type="button"
+  onclick={(e) => handleToggle(e)}
+  aria-label={themeStore.isDark ? "Switch to light mode" : "Switch to dark mode"}
   class="cursor-pointer border-none rounded-md flex items-center justify-center p-2 scale-125
     text-muted-foreground hover:bg-muted bg-transparent transition-colors"
-  aria-label="Toggle theme"
 >
-  {#if nextTheme === "dark"}
-    <Moon size={18} />
-  {:else if nextTheme === "system"}
-    <Monitor size={18} />
-  {:else}
-    <Sun size={18} />
-  {/if}
+  <div class="relative size-[18px]">
+    <Sun
+      size={18}
+      class="absolute inset-0 transition-all duration-300 {themeStore.isDark
+        ? 'rotate-90 scale-0 opacity-0'
+        : 'rotate-0 scale-100 opacity-100'}"
+    />
+    <Moon
+      size={18}
+      class="absolute inset-0 transition-all duration-300 {themeStore.isDark
+        ? 'rotate-0 scale-100 opacity-100'
+        : '-rotate-90 scale-0 opacity-0'}"
+    />
+  </div>
 </button>

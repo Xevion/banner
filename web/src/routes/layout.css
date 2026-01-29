@@ -69,6 +69,13 @@ body * {
   transition: background-color 300ms, color 300ms, border-color 300ms, fill 300ms;
 }
 
+/* View Transitions API - disable default cross-fade so JS can animate clip-path */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
 @keyframes pulse {
   0%,
   100% {

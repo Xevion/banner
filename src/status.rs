@@ -3,10 +3,12 @@ use std::time::Instant;
 
 use dashmap::DashMap;
 use serde::Serialize;
+use ts_rs::TS;
 
 /// Health status of a service.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum ServiceStatus {
     Starting,
     Active,
