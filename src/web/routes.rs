@@ -500,7 +500,11 @@ async fn search_courses(
     let (courses, total_count) = crate::data::courses::search_courses(
         &state.db_pool,
         &params.term,
-        if params.subject.is_empty() { None } else { Some(&params.subject) },
+        if params.subject.is_empty() {
+            None
+        } else {
+            Some(&params.subject)
+        },
         params.q.as_deref(),
         params.course_number_low,
         params.course_number_high,

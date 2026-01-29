@@ -2,13 +2,16 @@
 import type { CourseResponse } from "$lib/api";
 import {
   abbreviateInstructor,
+  concernAccentColor,
+  formatLocationDisplay,
+  formatLocationTooltip,
   formatMeetingDays,
+  formatMeetingTimesTooltip,
   formatTimeRange,
-  formatLocation,
+  getDeliveryConcern,
   getPrimaryInstructor,
   isMeetingTimeTBA,
   isTimeTBA,
-  formatMeetingTimesTooltip,
 } from "$lib/course";
 import CourseDetail from "./CourseDetail.svelte";
 import { fade, fly, slide } from "svelte/transition";
@@ -208,7 +211,7 @@ const columns: ColumnDef<CourseResponse, unknown>[] = [
   },
   {
     id: "location",
-    accessorFn: (row) => formatLocation(row) ?? "",
+    accessorFn: (row) => formatLocationDisplay(row) ?? "",
     header: "Location",
     enableSorting: false,
   },
@@ -668,19 +671,31 @@ const table = createSvelteTable({
                                             </SimpleTooltip>
                                         </td>
                                     {:else if colId === "location"}
+                                        {@const concern = getDeliveryConcern(course)}
+                                        {@const accentColor = concernAccentColor(concern)}
+                                        {@const locTooltip = formatLocationTooltip(course)}
+                                        {@const locDisplay = formatLocationDisplay(course)}
                                         <td class="py-2 px-2 whitespace-nowrap">
-                                            {#if formatLocation(course)}
-                                                <span
-                                                    class="text-muted-foreground"
-                                                    >{formatLocation(
-                                                        course,
-                                                    )}</span
+                                            {#if locTooltip}
+                                                <SimpleTooltip
+                                                    text={locTooltip}
+                                                    delay={200}
+                                                    passthrough
                                                 >
+                                                    <span
+                                                        class="text-muted-foreground"
+                                                        class:pl-2={accentColor !== null}
+                                                        style:border-left={accentColor ? `2px solid ${accentColor}` : undefined}
+                                                    >
+                                                        {locDisplay ?? "—"}
+                                                    </span>
+                                                </SimpleTooltip>
+                                            {:else if locDisplay}
+                                                <span class="text-muted-foreground">
+                                                    {locDisplay}
+                                                </span>
                                             {:else}
-                                                <span
-                                                    class="text-xs text-muted-foreground/50"
-                                                    >—</span
-                                                >
+                                                <span class="text-xs text-muted-foreground/50">—</span>
                                             {/if}
                                         </td>
                                     {:else if colId === "seats"}

@@ -261,6 +261,86 @@ export function formatMeetingTimesTooltip(meetingTimes: DbMeetingTime[]): string
   return meetingTimes.map(formatMeetingTimeTooltip).join("\n\n");
 }
 
+/**
+ * Delivery concern category for visual accent on location cells.
+ * - "online": fully online with no physical location (OA, OS, OH without INT building)
+ * - "internet": internet campus with INT building code
+ * - "hybrid": mix of online and in-person (HB, H1, H2)
+ * - "off-campus": in-person but not on Main Campus
+ * - null: normal in-person on main campus (no accent)
+ */
+export type DeliveryConcern = "online" | "internet" | "hybrid" | "off-campus" | null;
+
+const ONLINE_METHODS = new Set(["OA", "OS", "OH"]);
+const HYBRID_METHODS = new Set(["HB", "H1", "H2"]);
+const MAIN_CAMPUS = "11";
+const ONLINE_CAMPUSES = new Set(["9", "ONL"]);
+
+export function getDeliveryConcern(course: CourseResponse): DeliveryConcern {
+  const method = course.instructionalMethod;
+  if (method && ONLINE_METHODS.has(method)) {
+    const hasIntBuilding = course.meetingTimes.some((mt: DbMeetingTime) => mt.building === "INT");
+    return hasIntBuilding ? "internet" : "online";
+  }
+  if (method && HYBRID_METHODS.has(method)) return "hybrid";
+  if (course.campus && course.campus !== MAIN_CAMPUS && !ONLINE_CAMPUSES.has(course.campus)) {
+    return "off-campus";
+  }
+  return null;
+}
+
+/** Border accent color for each delivery concern type. */
+export function concernAccentColor(concern: DeliveryConcern): string | null {
+  switch (concern) {
+    case "online":
+      return "#3b82f6"; // blue-500
+    case "internet":
+      return "#06b6d4"; // cyan-500
+    case "hybrid":
+      return "#a855f7"; // purple-500
+    case "off-campus":
+      return "#f59e0b"; // amber-500
+    default:
+      return null;
+  }
+}
+
+/**
+ * Location display text for the table cell.
+ * Falls back to "Online" for online courses instead of showing a dash.
+ */
+export function formatLocationDisplay(course: CourseResponse): string | null {
+  const loc = formatLocation(course);
+  if (loc) return loc;
+  const concern = getDeliveryConcern(course);
+  if (concern === "online") return "Online";
+  return null;
+}
+
+/** Tooltip text for the location column: long-form location + delivery note */
+export function formatLocationTooltip(course: CourseResponse): string | null {
+  const parts: string[] = [];
+
+  for (const mt of course.meetingTimes) {
+    const loc = formatLocationLong(mt);
+    if (loc && !parts.includes(loc)) parts.push(loc);
+  }
+
+  const locationLine = parts.length > 0 ? parts.join(", ") : null;
+
+  const concern = getDeliveryConcern(course);
+  let deliveryNote: string | null = null;
+  if (concern === "online") deliveryNote = "Online";
+  else if (concern === "internet") deliveryNote = "Internet";
+  else if (concern === "hybrid") deliveryNote = "Hybrid";
+  else if (concern === "off-campus") deliveryNote = "Off-campus";
+
+  if (locationLine && deliveryNote) return `${locationLine}\n${deliveryNote}`;
+  if (locationLine) return locationLine;
+  if (deliveryNote) return deliveryNote;
+  return null;
+}
+
 /** Format credit hours display */
 export function formatCreditHours(course: CourseResponse): string {
   if (course.creditHours != null) return String(course.creditHours);

@@ -60,7 +60,7 @@ $effect(() => {
 >
   <div
     class="relative h-9 rounded-md border border-border bg-card
-           flex items-center w-56 cursor-pointer
+           flex items-center w-40 cursor-pointer
            has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background"
     bind:this={containerEl}
     onclick={() => { containerEl?.querySelector('input')?.focus(); }}

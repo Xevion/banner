@@ -69,21 +69,59 @@ $effect(() => {
   });
 });
 
-// Debounced search
-let searchTimeout: ReturnType<typeof setTimeout> | undefined;
-$effect(() => {
-  const term = selectedTerm;
-  const subs = selectedSubjects;
-  const q = query;
-  const open = openOnly;
-  const off = offset;
-  const sort = sorting;
+// Centralized throttle configuration - maps trigger source to throttle delay (ms)
+const THROTTLE_MS = {
+  term: 0, // Immediate
+  subjects: 100, // Short delay for combobox selection
+  query: 300, // Standard input debounce
+  openOnly: 0, // Immediate
+  offset: 0, // Immediate (pagination)
+  sorting: 0, // Immediate (column sort)
+} as const;
 
+let searchTimeout: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleSearch(source: keyof typeof THROTTLE_MS) {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    performSearch(term, subs, q, open, off, sort);
-  }, 300);
+    performSearch(selectedTerm, selectedSubjects, query, openOnly, offset, sorting);
+  }, THROTTLE_MS[source]);
+}
 
+// Separate effects for each trigger source with appropriate throttling
+$effect(() => {
+  selectedTerm;
+  scheduleSearch("term");
+  return () => clearTimeout(searchTimeout);
+});
+
+$effect(() => {
+  selectedSubjects;
+  scheduleSearch("subjects");
+  return () => clearTimeout(searchTimeout);
+});
+
+$effect(() => {
+  query;
+  scheduleSearch("query");
+  return () => clearTimeout(searchTimeout);
+});
+
+$effect(() => {
+  openOnly;
+  scheduleSearch("openOnly");
+  return () => clearTimeout(searchTimeout);
+});
+
+$effect(() => {
+  offset;
+  scheduleSearch("offset");
+  return () => clearTimeout(searchTimeout);
+});
+
+$effect(() => {
+  sorting;
+  scheduleSearch("sorting");
   return () => clearTimeout(searchTimeout);
 });
 
