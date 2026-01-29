@@ -6,7 +6,7 @@ import { Shield, ShieldOff } from "@lucide/svelte";
 
 let users = $state<User[]>([]);
 let error = $state<string | null>(null);
-let updating = $state<string | null>(null);
+let updating = $state<bigint | null>(null);
 
 onMount(async () => {
   try {
@@ -52,14 +52,14 @@ async function toggleAdmin(user: User) {
         {#each users as user}
           <tr class="border-border border-b last:border-b-0">
             <td class="flex items-center gap-2 px-4 py-3">
-              {#if user.avatarHash}
+              {#if user.discordAvatarHash}
                 <img
-                  src="https://cdn.discordapp.com/avatars/{user.discordId}/{user.avatarHash}.png?size=32"
+                  src="https://cdn.discordapp.com/avatars/{user.discordId}/{user.discordAvatarHash}.png?size=32"
                   alt=""
                   class="h-6 w-6 rounded-full"
                 />
               {/if}
-              {user.username}
+              {user.discordUsername}
             </td>
             <td class="text-muted-foreground px-4 py-3 font-mono text-xs">{user.discordId}</td>
             <td class="px-4 py-3">

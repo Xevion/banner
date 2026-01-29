@@ -1,25 +1,25 @@
 <script lang="ts">
-  export interface SearchMeta {
-    totalCount: number;
-    durationMs: number;
-    timestamp: Date;
-  }
+export interface SearchMeta {
+  totalCount: number;
+  durationMs: number;
+  timestamp: Date;
+}
 
-  let { meta }: { meta: SearchMeta | null } = $props();
+let { meta }: { meta: SearchMeta | null } = $props();
 
-  let formattedTime = $derived(
-    meta
-      ? meta.timestamp.toLocaleTimeString(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        })
-      : ""
-  );
+let formattedTime = $derived(
+  meta
+    ? meta.timestamp.toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : ""
+);
 
-  let countLabel = $derived(meta ? meta.totalCount.toLocaleString() : "");
-  let resultNoun = $derived(meta ? (meta.totalCount !== 1 ? "results" : "result") : "");
-  let durationLabel = $derived(meta ? `${Math.round(meta.durationMs)}ms` : "");
+let countLabel = $derived(meta ? meta.totalCount.toLocaleString() : "");
+let resultNoun = $derived(meta ? (meta.totalCount !== 1 ? "results" : "result") : "");
+let durationLabel = $derived(meta ? `${Math.round(meta.durationMs)}ms` : "");
 </script>
 
 {#if meta}

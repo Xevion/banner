@@ -43,7 +43,7 @@ const navItems = [
       <div class="border-border border-b p-4">
         <h2 class="text-lg font-semibold">Admin</h2>
         {#if authStore.user}
-          <p class="text-muted-foreground text-sm">{authStore.user.username}</p>
+          <p class="text-muted-foreground text-sm">{authStore.user.discordUsername}</p>
         {/if}
       </div>
       <nav class="flex-1 space-y-1 p-2">

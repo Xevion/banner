@@ -4,6 +4,8 @@ pub mod admin;
 #[cfg(feature = "embed-assets")]
 pub mod assets;
 pub mod auth;
+#[cfg(feature = "embed-assets")]
+pub mod encoding;
 pub mod extractors;
 pub mod routes;
 pub mod session_cache;

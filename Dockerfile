@@ -7,6 +7,9 @@ FROM oven/bun:1 AS frontend-builder
 
 WORKDIR /app
 
+# Install zstd for pre-compression
+RUN apt-get update && apt-get install -y --no-install-recommends zstd && rm -rf /var/lib/apt/lists/*
+
 # Copy backend Cargo.toml for build-time version retrieval
 COPY ./Cargo.toml ./
 
@@ -19,8 +22,8 @@ RUN bun install --frozen-lockfile
 # Copy frontend source code
 COPY ./web ./
 
-# Build frontend
-RUN bun run build
+# Build frontend, then pre-compress static assets (gzip, brotli, zstd)
+RUN bun run build && bun run scripts/compress-assets.ts
 
 # --- Chef Base Stage ---
 FROM lukemathwalker/cargo-chef:latest-rust-${RUST_VERSION} AS chef
