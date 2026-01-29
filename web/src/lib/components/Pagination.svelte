@@ -1,7 +1,19 @@
 <script lang="ts">
 import { Select } from "bits-ui";
 import { ChevronUp, ChevronDown } from "@lucide/svelte";
-import { fly } from "svelte/transition";
+import type { Action } from "svelte/action";
+
+const slideIn: Action<HTMLElement, number> = (node, direction) => {
+  if (direction !== 0) {
+    node.animate(
+      [
+        { transform: `translateX(${direction * 20}px)`, opacity: 0 },
+        { transform: "translateX(0)", opacity: 1 },
+      ],
+      { duration: 200, easing: "ease-out" }
+    );
+  }
+};
 
 let {
   totalCount,
@@ -21,16 +33,7 @@ const start = $derived(offset + 1);
 const end = $derived(Math.min(offset + limit, totalCount));
 
 // Track direction for slide animation
-let prevPage = $state(1);
 let direction = $state(0);
-
-$effect(() => {
-  const page = currentPage;
-  if (page !== prevPage) {
-    direction = page > prevPage ? 1 : -1;
-    prevPage = page;
-  }
-});
 
 // 5 page slots: current-2, current-1, current, current+1, current+2
 const pageSlots = $derived([-2, -1, 0, 1, 2].map((delta) => currentPage + delta));
@@ -40,6 +43,7 @@ function isSlotVisible(page: number): boolean {
 }
 
 function goToPage(page: number) {
+  direction = page > currentPage ? 1 : -1;
   onPageChange((page - 1) * limit);
 }
 
@@ -86,7 +90,7 @@ const selectValue = $derived(String(currentPage));
                        focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 aria-label="Page {currentPage} of {totalPages}, click to select page"
               >
-                <span in:fly={{ x: direction * 20, duration: 200 }}>{currentPage}</span>
+                <span use:slideIn={direction}>{currentPage}</span>
                 <ChevronUp class="size-3 text-muted-foreground" />
               </Select.Trigger>
               <Select.Portal>
@@ -140,8 +144,8 @@ const selectValue = $derived(String(currentPage));
               aria-hidden={!isSlotVisible(page)}
               tabindex={isSlotVisible(page) ? 0 : -1}
               disabled={!isSlotVisible(page)}
-              in:fly={{ x: direction * 20, duration: 200 }}
-            >
+            use:slideIn={direction}
+          >
               {page}
             </button>
           {/if}

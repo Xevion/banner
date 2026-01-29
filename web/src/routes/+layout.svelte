@@ -1,13 +1,18 @@
 <script lang="ts">
 import "overlayscrollbars/overlayscrollbars.css";
 import "./layout.css";
-import { onMount } from "svelte";
-import { Tooltip } from "bits-ui";
+import { page } from "$app/state";
+import PageTransition from "$lib/components/PageTransition.svelte";
 import ThemeToggle from "$lib/components/ThemeToggle.svelte";
-import { themeStore } from "$lib/stores/theme.svelte";
 import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svelte";
+import { initNavigation } from "$lib/stores/navigation.svelte";
+import { themeStore } from "$lib/stores/theme.svelte";
+import { Tooltip } from "bits-ui";
+import { onMount } from "svelte";
 
 let { children } = $props();
+
+initNavigation();
 
 useOverlayScrollbars(() => document.body, {
   scrollbars: {
@@ -18,10 +23,6 @@ useOverlayScrollbars(() => document.body, {
 
 onMount(() => {
   themeStore.init();
-
-  requestAnimationFrame(() => {
-    document.documentElement.classList.remove("no-transition");
-  });
 });
 </script>
 
@@ -30,5 +31,7 @@ onMount(() => {
     <ThemeToggle />
   </div>
 
-  {@render children()}
+  <PageTransition key={page.url.pathname}>
+    {@render children()}
+  </PageTransition>
 </Tooltip.Provider>

@@ -1,8 +1,10 @@
 <script lang="ts">
-import { onMount } from "svelte";
 import { goto } from "$app/navigation";
+import { page } from "$app/state";
 import { authStore } from "$lib/auth.svelte";
-import { LayoutDashboard, Users, ClipboardList, FileText, LogOut } from "@lucide/svelte";
+import PageTransition from "$lib/components/PageTransition.svelte";
+import { ClipboardList, FileText, LayoutDashboard, LogOut, Users } from "@lucide/svelte";
+import { onMount } from "svelte";
 
 let { children } = $props();
 
@@ -68,7 +70,9 @@ const navItems = [
       </div>
     </aside>
     <main class="flex-1 overflow-auto p-6">
-      {@render children()}
+      <PageTransition key={page.url.pathname}>
+        {@render children()}
+      </PageTransition>
     </main>
   </div>
 {/if}

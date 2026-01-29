@@ -57,11 +57,8 @@
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
-* {
-  border-color: var(--border);
-}
-
 body {
+  border-color: var(--border);
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
@@ -127,11 +124,6 @@ input[type="checkbox"]:checked::before {
   height: 0.5rem;
   background-color: var(--background);
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
-}
-
-html:not(.no-transition) body,
-html:not(.no-transition) body * {
-  transition: background-color 300ms, color 300ms, border-color 300ms, fill 300ms;
 }
 
 /* View Transitions API - disable default cross-fade so JS can animate clip-path */
