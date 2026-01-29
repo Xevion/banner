@@ -379,12 +379,12 @@ const table = createSvelteTable({
                         </tr>
                     </tbody>
                 {:else}
+                    <!-- No out: transition — Svelte outros break table layout (tbody loses positioning and overlaps) -->
                     {#each table.getRowModel().rows as row, i (row.id)}
                         {@const course = row.original}
                         <tbody
                             animate:flip={{ duration: 300 }}
                             in:fade={{ duration: 200, delay: Math.min(i * 20, 400) }}
-                            out:fade={{ duration: 150 }}
                         >
                             <tr
                                 class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn ===
