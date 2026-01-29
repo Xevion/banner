@@ -6,13 +6,13 @@ use crate::services::bot::BotService;
 use crate::services::manager::ServiceManager;
 use crate::services::web::WebService;
 use crate::state::AppState;
+use anyhow::Context;
 use figment::value::UncasedStr;
 use figment::{Figment, providers::Env};
 use sqlx::postgres::PgPoolOptions;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
-use anyhow::Context;
 use tracing::{error, info};
 
 /// Main application struct containing all necessary components
@@ -79,6 +79,11 @@ impl App {
         let banner_api_arc = Arc::new(banner_api);
         let app_state = AppState::new(banner_api_arc.clone(), db_pool.clone());
 
+        // Load reference data cache from DB (may be empty on first run)
+        if let Err(e) = app_state.load_reference_cache().await {
+            info!(error = ?e, "Could not load reference cache on startup (may be empty)");
+        }
+
         Ok(App {
             config,
             db_pool,
@@ -101,6 +106,7 @@ impl App {
             let scraper_service = Box::new(ScraperService::new(
                 self.db_pool.clone(),
                 self.banner_api.clone(),
+                self.app_state.reference_cache.clone(),
                 self.app_state.service_statuses.clone(),
             ));
             self.service_manager

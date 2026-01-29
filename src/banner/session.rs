@@ -452,7 +452,11 @@ impl SessionPool {
         self.select_term(&term.to_string(), &unique_session_id, &cookie_header)
             .await?;
 
-        Ok(BannerSession::new(&unique_session_id, jsessionid, ssb_cookie))
+        Ok(BannerSession::new(
+            &unique_session_id,
+            jsessionid,
+            ssb_cookie,
+        ))
     }
 
     /// Retrieves a list of terms from the Banner API.

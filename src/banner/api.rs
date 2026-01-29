@@ -228,6 +228,29 @@ impl BannerApi {
             .await
     }
 
+    /// Retrieves campus codes and descriptions.
+    pub async fn get_campuses(&self, term: &str) -> Result<Vec<Pair>> {
+        self.get_list_endpoint("get_campus", "", term, 1, 500).await
+    }
+
+    /// Retrieves instructional method codes and descriptions.
+    pub async fn get_instructional_methods(&self, term: &str) -> Result<Vec<Pair>> {
+        self.get_list_endpoint("get_instructionalMethod", "", term, 1, 500)
+            .await
+    }
+
+    /// Retrieves part-of-term codes and descriptions.
+    pub async fn get_parts_of_term(&self, term: &str) -> Result<Vec<Pair>> {
+        self.get_list_endpoint("get_partOfTerm", "", term, 1, 500)
+            .await
+    }
+
+    /// Retrieves section attribute codes and descriptions.
+    pub async fn get_attributes(&self, term: &str) -> Result<Vec<Pair>> {
+        self.get_list_endpoint("get_attribute", "", term, 1, 500)
+            .await
+    }
+
     /// Retrieves meeting time information for a course.
     pub async fn get_course_meeting_time(
         &self,

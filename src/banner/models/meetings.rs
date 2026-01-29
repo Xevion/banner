@@ -1,4 +1,4 @@
-use bitflags::{bitflags, Flags};
+use bitflags::{Flags, bitflags};
 use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc, Weekday};
 use extension_traits::extension;
 use serde::{Deserialize, Deserializer, Serialize};

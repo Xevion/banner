@@ -1,7 +1,30 @@
 //! `sqlx` models for the database schema.
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// Represents a meeting time stored as JSONB in the courses table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbMeetingTime {
+    pub begin_time: Option<String>,
+    pub end_time: Option<String>,
+    pub start_date: String,
+    pub end_date: String,
+    pub monday: bool,
+    pub tuesday: bool,
+    pub wednesday: bool,
+    pub thursday: bool,
+    pub friday: bool,
+    pub saturday: bool,
+    pub sunday: bool,
+    pub building: Option<String>,
+    pub building_description: Option<String>,
+    pub room: Option<String>,
+    pub campus: Option<String>,
+    pub meeting_type: String,
+    pub meeting_schedule_type: String,
+}
 
 #[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -17,6 +40,46 @@ pub struct Course {
     pub wait_count: i32,
     pub wait_capacity: i32,
     pub last_scraped_at: DateTime<Utc>,
+    // New scalar fields
+    pub sequence_number: Option<String>,
+    pub part_of_term: Option<String>,
+    pub instructional_method: Option<String>,
+    pub campus: Option<String>,
+    pub credit_hours: Option<i32>,
+    pub credit_hour_low: Option<i32>,
+    pub credit_hour_high: Option<i32>,
+    pub cross_list: Option<String>,
+    pub cross_list_capacity: Option<i32>,
+    pub cross_list_count: Option<i32>,
+    pub link_identifier: Option<String>,
+    pub is_section_linked: Option<bool>,
+    // JSONB fields
+    pub meeting_times: Value,
+    pub attributes: Value,
+}
+
+#[allow(dead_code)]
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct Instructor {
+    pub banner_id: String,
+    pub display_name: String,
+    pub email: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct CourseInstructor {
+    pub course_id: i32,
+    pub instructor_id: String,
+    pub is_primary: bool,
+}
+
+#[allow(dead_code)]
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct ReferenceData {
+    pub category: String,
+    pub code: String,
+    pub description: String,
 }
 
 #[allow(dead_code)]

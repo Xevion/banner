@@ -23,10 +23,7 @@ impl WebService {
         }
     }
     /// Periodically pings the database and updates the "database" service status.
-    async fn db_health_check_loop(
-        state: AppState,
-        mut shutdown_rx: broadcast::Receiver<()>,
-    ) {
+    async fn db_health_check_loop(state: AppState, mut shutdown_rx: broadcast::Receiver<()>) {
         use std::time::Duration;
         let mut interval = tokio::time::interval(Duration::from_secs(30));
 
@@ -66,7 +63,9 @@ impl Service for WebService {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.port));
 
         let listener = TcpListener::bind(addr).await?;
-        self.app_state.service_statuses.set("web", ServiceStatus::Active);
+        self.app_state
+            .service_statuses
+            .set("web", ServiceStatus::Active);
         info!(
             service = "web",
             address = %addr,

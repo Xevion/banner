@@ -4,10 +4,11 @@ pub mod worker;
 
 use crate::banner::BannerApi;
 use crate::services::Service;
+use crate::state::ReferenceCache;
 use crate::status::{ServiceStatus, ServiceStatusRegistry};
 use sqlx::PgPool;
 use std::sync::Arc;
-use tokio::sync::broadcast;
+use tokio::sync::{RwLock, broadcast};
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
@@ -21,6 +22,7 @@ use self::worker::Worker;
 pub struct ScraperService {
     db_pool: PgPool,
     banner_api: Arc<BannerApi>,
+    reference_cache: Arc<RwLock<ReferenceCache>>,
     service_statuses: ServiceStatusRegistry,
     scheduler_handle: Option<JoinHandle<()>>,
     worker_handles: Vec<JoinHandle<()>>,
@@ -29,10 +31,16 @@ pub struct ScraperService {
 
 impl ScraperService {
     /// Creates a new `ScraperService`.
-    pub fn new(db_pool: PgPool, banner_api: Arc<BannerApi>, service_statuses: ServiceStatusRegistry) -> Self {
+    pub fn new(
+        db_pool: PgPool,
+        banner_api: Arc<BannerApi>,
+        reference_cache: Arc<RwLock<ReferenceCache>>,
+        service_statuses: ServiceStatusRegistry,
+    ) -> Self {
         Self {
             db_pool,
             banner_api,
+            reference_cache,
             service_statuses,
             scheduler_handle: None,
             worker_handles: Vec::new(),
@@ -48,7 +56,11 @@ impl ScraperService {
         let (shutdown_tx, _) = broadcast::channel(1);
         self.shutdown_tx = Some(shutdown_tx.clone());
 
-        let scheduler = Scheduler::new(self.db_pool.clone(), self.banner_api.clone());
+        let scheduler = Scheduler::new(
+            self.db_pool.clone(),
+            self.banner_api.clone(),
+            self.reference_cache.clone(),
+        );
         let shutdown_rx = shutdown_tx.subscribe();
         let scheduler_handle = tokio::spawn(async move {
             scheduler.run(shutdown_rx).await;
@@ -86,7 +98,8 @@ impl Service for ScraperService {
     }
 
     async fn shutdown(&mut self) -> Result<(), anyhow::Error> {
-        self.service_statuses.set("scraper", ServiceStatus::Disabled);
+        self.service_statuses
+            .set("scraper", ServiceStatus::Disabled);
         info!("Shutting down scraper service");
 
         // Send shutdown signal to all tasks

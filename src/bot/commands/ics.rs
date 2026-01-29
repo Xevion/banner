@@ -18,7 +18,9 @@ fn nth_weekday_of_month(year: i32, month: u32, weekday: Weekday, n: u32) -> Opti
 
 /// Compute a consecutive range of dates starting from `start` for `count` days.
 fn date_range(start: NaiveDate, count: i64) -> Vec<NaiveDate> {
-    (0..count).filter_map(|i| start.checked_add_signed(Duration::days(i))).collect()
+    (0..count)
+        .filter_map(|i| start.checked_add_signed(Duration::days(i)))
+        .collect()
 }
 
 /// Compute university holidays for a given year.
