@@ -1,4 +1,4 @@
-use bitflags::{Flags, bitflags};
+use bitflags::{bitflags, Flags};
 use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc, Weekday};
 use extension_traits::extension;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -320,10 +320,11 @@ pub enum MeetingType {
     Unknown(String),
 }
 
-impl MeetingType {
-    /// Parse from the meeting type string
-    pub fn from_string(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for MeetingType {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s {
             "HB" | "H2" | "H1" => MeetingType::HybridBlended,
             "OS" => MeetingType::OnlineSynchronous,
             "OA" => MeetingType::OnlineAsynchronous,
@@ -331,9 +332,11 @@ impl MeetingType {
             "ID" => MeetingType::IndependentStudy,
             "FF" => MeetingType::FaceToFace,
             other => MeetingType::Unknown(other.to_string()),
-        }
+        })
     }
+}
 
+impl MeetingType {
     /// Get description for the meeting type
     pub fn description(&self) -> &'static str {
         match self {
@@ -424,7 +427,7 @@ impl MeetingScheduleInfo {
                         end: now,
                     }
                 });
-        let meeting_type = MeetingType::from_string(&meeting_time.meeting_type);
+        let meeting_type: MeetingType = meeting_time.meeting_type.parse().unwrap();
         let location = MeetingLocation::from_meeting_time(meeting_time);
         let duration_weeks = date_range.weeks_duration();
 

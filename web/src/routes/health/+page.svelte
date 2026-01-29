@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "@lucide/svelte";
 import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
+import Footer from "$lib/components/Footer.svelte";
 import { type ServiceStatus, type ServiceInfo, type StatusResponse, client } from "$lib/api";
 import { relativeTime } from "$lib/time";
 
@@ -61,7 +62,6 @@ let statusState = $state({ mode: "loading" } as StatusState);
 let now = $state(new Date());
 
 const isLoading = $derived(statusState.mode === "loading");
-const hasResponse = $derived(statusState.mode === "response");
 const shouldShowSkeleton = $derived(statusState.mode === "loading" || statusState.mode === "error");
 
 const overallHealth: ServiceStatus | "Unreachable" = $derived(
@@ -304,20 +304,9 @@ onMount(() => {
   </div>
 
   <!-- Footer -->
-  <div class="flex justify-center items-center gap-2 mt-3">
-    {#if __APP_VERSION__}
-      <span class="text-xs text-muted-foreground">v{__APP_VERSION__}</span>
-      <div class="w-px h-3 bg-muted-foreground opacity-30"></div>
-    {/if}
-    <a
-      href={hasResponse && statusState.mode === "response" && statusState.status.commit
-        ? `https://github.com/Xevion/banner/commit/${statusState.status.commit}`
-        : "https://github.com/Xevion/banner"}
-      target="_blank"
-      rel="noopener noreferrer"
-      class="text-xs text-muted-foreground no-underline hover:underline"
-    >
-      GitHub
-    </a>
-  </div>
+  <Footer
+    commitHash={statusState.mode === "response" ? statusState.status.commit : undefined}
+    showStatusLink={false}
+    class="mt-3 pt-0 pb-0"
+  />
 </div>

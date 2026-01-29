@@ -76,6 +76,19 @@ pub struct CourseInstructor {
     pub is_primary: bool,
 }
 
+/// Joined instructor data for a course (from course_instructors + instructors + rmp_professors).
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct CourseInstructorDetail {
+    pub banner_id: String,
+    pub display_name: String,
+    pub email: Option<String>,
+    pub is_primary: bool,
+    pub avg_rating: Option<f32>,
+    pub num_ratings: Option<i32>,
+    /// Present when fetched via batch query; `None` for single-course queries.
+    pub course_id: Option<i32>,
+}
+
 #[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct ReferenceData {

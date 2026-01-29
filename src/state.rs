@@ -13,9 +13,10 @@ use tokio::sync::RwLock;
 /// In-memory cache for reference data (code→description lookups).
 ///
 /// Loaded from the `reference_data` table on startup and refreshed periodically.
+/// Uses a two-level HashMap so lookups take `&str` without allocating.
 pub struct ReferenceCache {
-    /// `(category, code)` → `description`
-    data: HashMap<(String, String), String>,
+    /// category → (code → description)
+    data: HashMap<String, HashMap<String, String>>,
 }
 
 impl Default for ReferenceCache {
@@ -34,27 +35,31 @@ impl ReferenceCache {
 
     /// Build cache from a list of reference data entries.
     pub fn from_entries(entries: Vec<ReferenceData>) -> Self {
-        let data = entries
-            .into_iter()
-            .map(|e| ((e.category, e.code), e.description))
-            .collect();
+        let mut data: HashMap<String, HashMap<String, String>> = HashMap::new();
+        for e in entries {
+            data.entry(e.category)
+                .or_default()
+                .insert(e.code, e.description);
+        }
         Self { data }
     }
 
-    /// Look up a description by category and code.
+    /// Look up a description by category and code. Zero allocations.
     pub fn lookup(&self, category: &str, code: &str) -> Option<&str> {
         self.data
-            .get(&(category.to_string(), code.to_string()))
+            .get(category)
+            .and_then(|codes| codes.get(code))
             .map(|s| s.as_str())
     }
 
     /// Get all `(code, description)` pairs for a category, sorted by description.
     pub fn entries_for_category(&self, category: &str) -> Vec<(&str, &str)> {
-        let mut entries: Vec<(&str, &str)> = self
-            .data
+        let Some(codes) = self.data.get(category) else {
+            return Vec::new();
+        };
+        let mut entries: Vec<(&str, &str)> = codes
             .iter()
-            .filter(|((cat, _), _)| cat == category)
-            .map(|((_, code), desc)| (code.as_str(), desc.as_str()))
+            .map(|(code, desc)| (code.as_str(), desc.as_str()))
             .collect();
         entries.sort_by(|a, b| a.1.cmp(b.1));
         entries

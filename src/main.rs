@@ -19,7 +19,6 @@ mod scraper;
 mod services;
 mod signals;
 mod state;
-#[allow(dead_code)]
 mod status;
 mod web;
 

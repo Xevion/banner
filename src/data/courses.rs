@@ -1,8 +1,74 @@
 //! Database query functions for courses, used by the web API.
 
-use crate::data::models::Course;
+use crate::data::models::{Course, CourseInstructorDetail};
 use crate::error::Result;
 use sqlx::PgPool;
+use std::collections::HashMap;
+
+/// Column to sort search results by.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SortColumn {
+    CourseCode,
+    Title,
+    Instructor,
+    Time,
+    Seats,
+}
+
+/// Sort direction.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
+/// Shared WHERE clause for course search filters.
+///
+/// Parameters $1-$8 match the bind order in `search_courses`.
+const SEARCH_WHERE: &str = r#"
+    WHERE term_code = $1
+      AND ($2::text[] IS NULL OR subject = ANY($2))
+      AND ($3::text IS NULL OR title_search @@ plainto_tsquery('simple', $3) OR title ILIKE '%' || $3 || '%')
+      AND ($4::int IS NULL OR course_number::int >= $4)
+      AND ($5::int IS NULL OR course_number::int <= $5)
+      AND ($6::bool = false OR max_enrollment > enrollment)
+      AND ($7::text IS NULL OR instructional_method = $7)
+      AND ($8::text IS NULL OR campus = $8)
+"#;
+
+/// Build a safe ORDER BY clause from typed sort parameters.
+///
+/// All column names are hardcoded string literals — no caller input is interpolated.
+fn sort_clause(column: Option<SortColumn>, direction: Option<SortDirection>) -> String {
+    let dir = match direction.unwrap_or(SortDirection::Asc) {
+        SortDirection::Asc => "ASC",
+        SortDirection::Desc => "DESC",
+    };
+
+    match column {
+        Some(SortColumn::CourseCode) => {
+            format!("subject {dir}, course_number {dir}, sequence_number {dir}")
+        }
+        Some(SortColumn::Title) => format!("title {dir}"),
+        Some(SortColumn::Instructor) => {
+            format!(
+                "(SELECT i.display_name FROM course_instructors ci \
+                 JOIN instructors i ON i.banner_id = ci.instructor_id \
+                 WHERE ci.course_id = courses.id AND ci.is_primary = true \
+                 LIMIT 1) {dir} NULLS LAST"
+            )
+        }
+        Some(SortColumn::Time) => {
+            format!("(meeting_times->0->>'begin_time') {dir} NULLS LAST")
+        }
+        Some(SortColumn::Seats) => {
+            format!("(max_enrollment - enrollment) {dir}")
+        }
+        None => "subject ASC, course_number ASC, sequence_number ASC".to_string(),
+    }
+}
 
 /// Search courses by term with optional filters.
 ///
@@ -21,32 +87,17 @@ pub async fn search_courses(
     campus: Option<&str>,
     limit: i32,
     offset: i32,
-    order_by: &str,
+    sort_by: Option<SortColumn>,
+    sort_dir: Option<SortDirection>,
 ) -> Result<(Vec<Course>, i64)> {
-    // Build WHERE clauses dynamically via parameter binding + COALESCE trick:
-    // each optional filter uses ($N IS NULL OR column = $N) so NULL means "no filter".
-    //
-    // ORDER BY is interpolated as a string since column names can't be bound as
-    // parameters. The caller must provide a safe, pre-validated clause (see
-    // `sort_clause` in routes.rs).
-    let query = format!(
-        r#"
-        SELECT *
-        FROM courses
-        WHERE term_code = $1
-          AND ($2::text[] IS NULL OR subject = ANY($2))
-          AND ($3::text IS NULL OR title_search @@ plainto_tsquery('simple', $3) OR title ILIKE '%' || $3 || '%')
-          AND ($4::int IS NULL OR course_number::int >= $4)
-          AND ($5::int IS NULL OR course_number::int <= $5)
-          AND ($6::bool = false OR max_enrollment > enrollment)
-          AND ($7::text IS NULL OR instructional_method = $7)
-          AND ($8::text IS NULL OR campus = $8)
-        ORDER BY {order_by}
-        LIMIT $9 OFFSET $10
-        "#
-    );
+    let order_by = sort_clause(sort_by, sort_dir);
 
-    let courses = sqlx::query_as::<_, Course>(&query)
+    let data_query = format!(
+        "SELECT * FROM courses {SEARCH_WHERE} ORDER BY {order_by} LIMIT $9 OFFSET $10"
+    );
+    let count_query = format!("SELECT COUNT(*) FROM courses {SEARCH_WHERE}");
+
+    let courses = sqlx::query_as::<_, Course>(&data_query)
         .bind(term_code)
         .bind(subject)
         .bind(title_query)
@@ -60,30 +111,17 @@ pub async fn search_courses(
         .fetch_all(db_pool)
         .await?;
 
-    let total: (i64,) = sqlx::query_as(
-        r#"
-        SELECT COUNT(*)
-        FROM courses
-        WHERE term_code = $1
-          AND ($2::text[] IS NULL OR subject = ANY($2))
-          AND ($3::text IS NULL OR title_search @@ plainto_tsquery('simple', $3) OR title ILIKE '%' || $3 || '%')
-          AND ($4::int IS NULL OR course_number::int >= $4)
-          AND ($5::int IS NULL OR course_number::int <= $5)
-          AND ($6::bool = false OR max_enrollment > enrollment)
-          AND ($7::text IS NULL OR instructional_method = $7)
-          AND ($8::text IS NULL OR campus = $8)
-        "#,
-    )
-    .bind(term_code)
-    .bind(subject)
-    .bind(title_query)
-    .bind(course_number_low)
-    .bind(course_number_high)
-    .bind(open_only)
-    .bind(instructional_method)
-    .bind(campus)
-    .fetch_one(db_pool)
-    .await?;
+    let total: (i64,) = sqlx::query_as(&count_query)
+        .bind(term_code)
+        .bind(subject)
+        .bind(title_query)
+        .bind(course_number_low)
+        .bind(course_number_high)
+        .bind(open_only)
+        .bind(instructional_method)
+        .bind(campus)
+        .fetch_one(db_pool)
+        .await?;
 
     Ok((courses, total.0))
 }
@@ -103,33 +141,16 @@ pub async fn get_course_by_crn(
     Ok(course)
 }
 
-/// Get instructors for a course by course ID.
-///
-/// Returns `(banner_id, display_name, email, is_primary, rmp_avg_rating, rmp_num_ratings)` tuples.
+/// Get instructors for a single course by course ID.
 pub async fn get_course_instructors(
     db_pool: &PgPool,
     course_id: i32,
-) -> Result<
-    Vec<(
-        String,
-        String,
-        Option<String>,
-        bool,
-        Option<f32>,
-        Option<i32>,
-    )>,
-> {
-    let rows: Vec<(
-        String,
-        String,
-        Option<String>,
-        bool,
-        Option<f32>,
-        Option<i32>,
-    )> = sqlx::query_as(
+) -> Result<Vec<CourseInstructorDetail>> {
+    let rows = sqlx::query_as::<_, CourseInstructorDetail>(
         r#"
         SELECT i.banner_id, i.display_name, i.email, ci.is_primary,
-               rp.avg_rating, rp.num_ratings
+               rp.avg_rating, rp.num_ratings,
+               ci.course_id
         FROM course_instructors ci
         JOIN instructors i ON i.banner_id = ci.instructor_id
         LEFT JOIN rmp_professors rp ON rp.legacy_id = i.rmp_legacy_id
@@ -141,6 +162,42 @@ pub async fn get_course_instructors(
     .fetch_all(db_pool)
     .await?;
     Ok(rows)
+}
+
+/// Batch-fetch instructors for multiple courses in a single query.
+///
+/// Returns a map of `course_id → Vec<CourseInstructorDetail>`.
+pub async fn get_instructors_for_courses(
+    db_pool: &PgPool,
+    course_ids: &[i32],
+) -> Result<HashMap<i32, Vec<CourseInstructorDetail>>> {
+    if course_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let rows = sqlx::query_as::<_, CourseInstructorDetail>(
+        r#"
+        SELECT i.banner_id, i.display_name, i.email, ci.is_primary,
+               rp.avg_rating, rp.num_ratings,
+               ci.course_id
+        FROM course_instructors ci
+        JOIN instructors i ON i.banner_id = ci.instructor_id
+        LEFT JOIN rmp_professors rp ON rp.legacy_id = i.rmp_legacy_id
+        WHERE ci.course_id = ANY($1)
+        ORDER BY ci.course_id, ci.is_primary DESC, i.display_name
+        "#,
+    )
+    .bind(course_ids)
+    .fetch_all(db_pool)
+    .await?;
+
+    let mut map: HashMap<i32, Vec<CourseInstructorDetail>> = HashMap::new();
+    for row in rows {
+        // course_id is always present in the batch query
+        let cid = row.course_id.unwrap_or_default();
+        map.entry(cid).or_default().push(row);
+    }
+    Ok(map)
 }
 
 /// Get subjects for a term, sorted by total enrollment (descending).

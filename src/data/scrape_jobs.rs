@@ -134,7 +134,7 @@ pub async fn find_existing_job_payloads(
     Ok(existing_payloads)
 }
 
-/// Batch insert scrape jobs in a single transaction.
+/// Batch insert scrape jobs using UNNEST for a single round-trip.
 ///
 /// All jobs are inserted with `execute_at` set to the current time.
 ///
@@ -149,22 +149,29 @@ pub async fn batch_insert_jobs(
         return Ok(());
     }
 
-    let now = chrono::Utc::now();
-    let mut tx = db_pool.begin().await?;
+    let mut target_types: Vec<String> = Vec::with_capacity(jobs.len());
+    let mut payloads: Vec<serde_json::Value> = Vec::with_capacity(jobs.len());
+    let mut priorities: Vec<String> = Vec::with_capacity(jobs.len());
 
     for (payload, target_type, priority) in jobs {
-        sqlx::query(
-            "INSERT INTO scrape_jobs (target_type, target_payload, priority, execute_at) VALUES ($1, $2, $3, $4)"
-        )
-        .bind(target_type)
-        .bind(payload)
-        .bind(priority)
-        .bind(now)
-        .execute(&mut *tx)
-        .await?;
+        target_types.push(format!("{target_type:?}"));
+        payloads.push(payload.clone());
+        priorities.push(format!("{priority:?}"));
     }
 
-    tx.commit().await?;
+    sqlx::query(
+        r#"
+        INSERT INTO scrape_jobs (target_type, target_payload, priority, execute_at)
+        SELECT v.target_type::target_type, v.payload, v.priority::scrape_priority, NOW()
+        FROM UNNEST($1::text[], $2::jsonb[], $3::text[])
+            AS v(target_type, payload, priority)
+        "#,
+    )
+    .bind(&target_types)
+    .bind(&payloads)
+    .bind(&priorities)
+    .execute(db_pool)
+    .await?;
 
     Ok(())
 }

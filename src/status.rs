@@ -10,6 +10,7 @@ use ts_rs::TS;
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum ServiceStatus {
+    #[allow(dead_code)]
     Starting,
     Active,
     Connected,
@@ -21,6 +22,7 @@ pub enum ServiceStatus {
 #[derive(Debug, Clone)]
 pub struct StatusEntry {
     pub status: ServiceStatus,
+    #[allow(dead_code)]
     pub updated_at: Instant,
 }
 
@@ -48,6 +50,7 @@ impl ServiceStatusRegistry {
     }
 
     /// Returns the current status of a named service, if present.
+    #[allow(dead_code)]
     pub fn get(&self, name: &str) -> Option<ServiceStatus> {
         self.inner.get(name).map(|entry| entry.status.clone())
     }

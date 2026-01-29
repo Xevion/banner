@@ -11,23 +11,6 @@ describe("BannerApiClient", () => {
     vi.clearAllMocks();
   });
 
-  it("should fetch health data", async () => {
-    const mockHealth = {
-      status: "healthy",
-      timestamp: "2024-01-01T00:00:00Z",
-    };
-
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(mockHealth),
-    } as Response);
-
-    const result = await apiClient.getHealth();
-
-    expect(fetch).toHaveBeenCalledWith("/api/health");
-    expect(result).toEqual(mockHealth);
-  });
-
   it("should fetch status data", async () => {
     const mockStatus = {
       status: "active" as const,
@@ -57,7 +40,7 @@ describe("BannerApiClient", () => {
       statusText: "Internal Server Error",
     } as Response);
 
-    await expect(apiClient.getHealth()).rejects.toThrow(
+    await expect(apiClient.getStatus()).rejects.toThrow(
       "API request failed: 500 Internal Server Error"
     );
   });

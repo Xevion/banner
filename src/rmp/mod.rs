@@ -35,6 +35,12 @@ pub struct RmpClient {
     http: reqwest::Client,
 }
 
+impl Default for RmpClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RmpClient {
     pub fn new() -> Self {
         Self {

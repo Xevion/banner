@@ -323,57 +323,10 @@ struct SearchParams {
     sort_dir: Option<SortDirection>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum SortColumn {
-    CourseCode,
-    Title,
-    Instructor,
-    Time,
-    Seats,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum SortDirection {
-    Asc,
-    Desc,
-}
+use crate::data::courses::{SortColumn, SortDirection};
 
 fn default_limit() -> i32 {
     25
-}
-
-/// Build a safe ORDER BY clause from the validated sort column and direction.
-fn sort_clause(column: Option<SortColumn>, direction: Option<SortDirection>) -> String {
-    let dir = match direction.unwrap_or(SortDirection::Asc) {
-        SortDirection::Asc => "ASC",
-        SortDirection::Desc => "DESC",
-    };
-
-    match column {
-        Some(SortColumn::CourseCode) => {
-            format!("subject {dir}, course_number {dir}, sequence_number {dir}")
-        }
-        Some(SortColumn::Title) => format!("title {dir}"),
-        Some(SortColumn::Instructor) => {
-            // Sort by primary instructor display name via a subquery
-            format!(
-                "(SELECT i.display_name FROM course_instructors ci \
-                 JOIN instructors i ON i.banner_id = ci.instructor_id \
-                 WHERE ci.course_id = courses.id AND ci.is_primary = true \
-                 LIMIT 1) {dir} NULLS LAST"
-            )
-        }
-        Some(SortColumn::Time) => {
-            // Sort by first meeting time's begin_time via JSONB
-            format!("(meeting_times->0->>'begin_time') {dir} NULLS LAST")
-        }
-        Some(SortColumn::Seats) => {
-            format!("(max_enrollment - enrollment) {dir}")
-        }
-        None => "subject ASC, course_number ASC, sequence_number ASC".to_string(),
-    }
 }
 
 #[derive(Serialize, TS)]
@@ -436,27 +389,21 @@ pub struct CodeDescription {
     description: String,
 }
 
-/// Build a `CourseResponse` from a DB course, fetching its instructors.
-async fn build_course_response(
+/// Build a `CourseResponse` from a DB course with pre-fetched instructor details.
+fn build_course_response(
     course: &crate::data::models::Course,
-    db_pool: &sqlx::PgPool,
+    instructors: Vec<crate::data::models::CourseInstructorDetail>,
 ) -> CourseResponse {
-    let instructors = crate::data::courses::get_course_instructors(db_pool, course.id)
-        .await
-        .unwrap_or_default()
+    let instructors = instructors
         .into_iter()
-        .map(
-            |(banner_id, display_name, email, is_primary, rmp_rating, rmp_num_ratings)| {
-                InstructorResponse {
-                    banner_id,
-                    display_name,
-                    email,
-                    is_primary,
-                    rmp_rating,
-                    rmp_num_ratings,
-                }
-            },
-        )
+        .map(|i| InstructorResponse {
+            banner_id: i.banner_id,
+            display_name: i.display_name,
+            email: i.email,
+            is_primary: i.is_primary,
+            rmp_rating: i.avg_rating,
+            rmp_num_ratings: i.num_ratings,
+        })
         .collect();
 
     CourseResponse {
@@ -495,8 +442,6 @@ async fn search_courses(
     let limit = params.limit.clamp(1, 100);
     let offset = params.offset.max(0);
 
-    let order_by = sort_clause(params.sort_by, params.sort_dir);
-
     let (courses, total_count) = crate::data::courses::search_courses(
         &state.db_pool,
         &params.term,
@@ -513,7 +458,8 @@ async fn search_courses(
         params.campus.as_deref(),
         limit,
         offset,
-        &order_by,
+        params.sort_by,
+        params.sort_dir,
     )
     .await
     .map_err(|e| {
@@ -524,10 +470,20 @@ async fn search_courses(
         )
     })?;
 
-    let mut course_responses = Vec::with_capacity(courses.len());
-    for course in &courses {
-        course_responses.push(build_course_response(course, &state.db_pool).await);
-    }
+    // Batch-fetch all instructors in a single query instead of N+1
+    let course_ids: Vec<i32> = courses.iter().map(|c| c.id).collect();
+    let mut instructor_map =
+        crate::data::courses::get_instructors_for_courses(&state.db_pool, &course_ids)
+            .await
+            .unwrap_or_default();
+
+    let course_responses: Vec<CourseResponse> = courses
+        .iter()
+        .map(|course| {
+            let instructors = instructor_map.remove(&course.id).unwrap_or_default();
+            build_course_response(course, instructors)
+        })
+        .collect();
 
     Ok(Json(SearchResponse {
         courses: course_responses,
@@ -553,7 +509,10 @@ async fn get_course(
         })?
         .ok_or_else(|| (AxumStatusCode::NOT_FOUND, "Course not found".to_string()))?;
 
-    Ok(Json(build_course_response(&course, &state.db_pool).await))
+    let instructors = crate::data::courses::get_course_instructors(&state.db_pool, course.id)
+        .await
+        .unwrap_or_default();
+    Ok(Json(build_course_response(&course, instructors)))
 }
 
 /// `GET /api/terms`

@@ -12,13 +12,16 @@ import {
   getPrimaryInstructor,
   isMeetingTimeTBA,
   isTimeTBA,
+  openSeats,
+  seatsColor,
+  seatsDotColor,
+  ratingColor,
 } from "$lib/course";
+import { useClipboard } from "$lib/composables/useClipboard.svelte";
+import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svelte";
 import CourseDetail from "./CourseDetail.svelte";
 import { fade, fly, slide } from "svelte/transition";
 import { flip } from "svelte/animate";
-import { onMount } from "svelte";
-import { OverlayScrollbars } from "overlayscrollbars";
-import { themeStore } from "$lib/stores/theme.svelte";
 import { createSvelteTable, FlexRender } from "$lib/components/ui/data-table/index.js";
 import {
   getCoreRowModel,
@@ -50,8 +53,7 @@ let {
 
 let expandedCrn: string | null = $state(null);
 let tableWrapper: HTMLDivElement = undefined!;
-let copiedCrn: string | null = $state(null);
-let copyTimeoutId: number | undefined;
+const clipboard = useClipboard(1000);
 
 // Collapse expanded row when the dataset changes to avoid stale detail rows
 // and FLIP position calculation glitches from lingering expanded content
@@ -60,30 +62,9 @@ $effect(() => {
   expandedCrn = null;
 });
 
-onMount(() => {
-  const osInstance = OverlayScrollbars(tableWrapper, {
-    overflow: { x: "scroll", y: "hidden" },
-    scrollbars: {
-      autoHide: "never",
-      theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
-    },
-  });
-
-  // React to theme changes
-  const unwatch = $effect.root(() => {
-    $effect(() => {
-      osInstance.options({
-        scrollbars: {
-          theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
-        },
-      });
-    });
-  });
-
-  return () => {
-    unwatch();
-    osInstance.destroy();
-  };
+useOverlayScrollbars(() => tableWrapper, {
+  overflow: { x: "scroll", y: "hidden" },
+  scrollbars: { autoHide: "never" },
 });
 
 // Column visibility state
@@ -104,61 +85,10 @@ function toggleRow(crn: string) {
   expandedCrn = expandedCrn === crn ? null : crn;
 }
 
-async function handleCopyCrn(event: MouseEvent | KeyboardEvent, crn: string) {
-  event.stopPropagation();
-
-  try {
-    await navigator.clipboard.writeText(crn);
-
-    if (copyTimeoutId !== undefined) {
-      clearTimeout(copyTimeoutId);
-    }
-
-    copiedCrn = crn;
-    copyTimeoutId = window.setTimeout(() => {
-      copiedCrn = null;
-      copyTimeoutId = undefined;
-    }, 1000);
-  } catch (err) {
-    console.error("Failed to copy CRN:", err);
-  }
-}
-
-function handleCrnKeydown(event: KeyboardEvent, crn: string) {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    handleCopyCrn(event, crn);
-  }
-}
-
-function openSeats(course: CourseResponse): number {
-  return Math.max(0, course.maxEnrollment - course.enrollment);
-}
-
-function seatsColor(course: CourseResponse): string {
-  const open = openSeats(course);
-  if (open === 0) return "text-status-red";
-  if (open <= 5) return "text-yellow-500";
-  return "text-status-green";
-}
-
-function seatsDotColor(course: CourseResponse): string {
-  const open = openSeats(course);
-  if (open === 0) return "bg-red-500";
-  if (open <= 5) return "bg-yellow-500";
-  return "bg-green-500";
-}
-
 function primaryInstructorDisplay(course: CourseResponse): string {
   const primary = getPrimaryInstructor(course.instructors);
   if (!primary) return "Staff";
   return abbreviateInstructor(primary.displayName);
-}
-
-function ratingColor(rating: number): string {
-  if (rating >= 4.0) return "text-status-green";
-  if (rating >= 3.0) return "text-yellow-500";
-  return "text-status-red";
 }
 
 function primaryRating(course: CourseResponse): { rating: number; count: number } | null {
@@ -470,19 +400,20 @@ const table = createSvelteTable({
                                             <button
                                                 class="relative inline-flex items-center rounded-full px-2 py-0.5 border border-border/50 bg-muted/20 hover:bg-muted/40 hover:border-foreground/30 transition-colors duration-150 cursor-copy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring font-mono text-xs text-muted-foreground/70"
                                                 onclick={(e) =>
-                                                    handleCopyCrn(
-                                                        e,
+                                                    clipboard.copy(
                                                         course.crn,
-                                                    )}
-                                                onkeydown={(e) =>
-                                                    handleCrnKeydown(
                                                         e,
-                                                        course.crn,
                                                     )}
+                                                onkeydown={(e) => {
+                                                    if (e.key === "Enter" || e.key === " ") {
+                                                        e.preventDefault();
+                                                        clipboard.copy(course.crn, e);
+                                                    }
+                                                }}
                                                 aria-label="Copy CRN {course.crn} to clipboard"
                                             >
                                                 {course.crn}
-                                                {#if copiedCrn === course.crn}
+                                                {#if clipboard.copiedValue === course.crn}
                                                     <span
                                                         class="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs px-2 py-1 rounded-md bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-300 pointer-events-none z-10"
                                                         in:fade={{

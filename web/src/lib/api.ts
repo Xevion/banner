@@ -30,19 +30,6 @@ export type ReferenceEntry = CodeDescription;
 // SearchResponse re-exported (aliased to strip the "Generated" suffix)
 export type SearchResponse = SearchResponseGenerated;
 
-// Health/metrics endpoints return ad-hoc JSON — keep manual types
-export interface HealthResponse {
-  status: string;
-  timestamp: string;
-}
-
-export interface MetricsResponse {
-  banner_api: {
-    status: string;
-  };
-  timestamp: string;
-}
-
 // Client-side only — not generated from Rust
 export type SortColumn = "course_code" | "title" | "instructor" | "time" | "seats";
 export type SortDirection = "asc" | "desc";
@@ -77,16 +64,8 @@ export class BannerApiClient {
     return (await response.json()) as T;
   }
 
-  async getHealth(): Promise<HealthResponse> {
-    return this.request<HealthResponse>("/health");
-  }
-
   async getStatus(): Promise<StatusResponse> {
     return this.request<StatusResponse>("/status");
-  }
-
-  async getMetrics(): Promise<MetricsResponse> {
-    return this.request<MetricsResponse>("/metrics");
   }
 
   async searchCourses(params: SearchParams): Promise<SearchResponse> {

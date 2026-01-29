@@ -7,27 +7,17 @@ import {
   formatMeetingDaysLong,
   isMeetingTimeTBA,
   isTimeTBA,
+  ratingColor,
 } from "$lib/course";
+import { useClipboard } from "$lib/composables/useClipboard.svelte";
+import { cn, tooltipContentClass } from "$lib/utils";
 import { Tooltip } from "bits-ui";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 import { Info, Copy, Check } from "@lucide/svelte";
 
 let { course }: { course: CourseResponse } = $props();
 
-let copiedEmail: string | null = $state(null);
-
-async function copyEmail(email: string, event: MouseEvent) {
-  event.stopPropagation();
-  try {
-    await navigator.clipboard.writeText(email);
-    copiedEmail = email;
-    setTimeout(() => {
-      copiedEmail = null;
-    }, 2000);
-  } catch (err) {
-    console.error("Failed to copy email:", err);
-  }
-}
+const clipboard = useClipboard();
 </script>
 
 <div class="bg-muted/60 p-5 text-sm border-b border-border">
@@ -49,14 +39,14 @@ async function copyEmail(email: string, event: MouseEvent) {
                   {#if instructor.rmpRating != null}
                     {@const rating = instructor.rmpRating}
                     <span
-                      class="text-[10px] font-semibold {rating >= 4.0 ? 'text-status-green' : rating >= 3.0 ? 'text-yellow-500' : 'text-status-red'}"
+                      class="text-[10px] font-semibold {ratingColor(rating)}"
                     >{rating.toFixed(1)}★</span>
                   {/if}
                 </span>
               </Tooltip.Trigger>
               <Tooltip.Content
                 sideOffset={6}
-                class="z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-3 py-2 shadow-md max-w-72"
+                class={cn(tooltipContentClass, "px-3 py-2")}
               >
                 <div class="space-y-1.5">
                   <div class="font-medium">{instructor.displayName}</div>
@@ -70,10 +60,10 @@ async function copyEmail(email: string, event: MouseEvent) {
                   {/if}
                   {#if instructor.email}
                     <button
-                      onclick={(e) => copyEmail(instructor.email!, e)}
+                      onclick={(e) => clipboard.copy(instructor.email!, e)}
                       class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                     >
-                      {#if copiedEmail === instructor.email}
+                      {#if clipboard.copiedValue === instructor.email}
                         <Check class="size-3" />
                         <span>Copied!</span>
                       {:else}
@@ -212,7 +202,7 @@ async function copyEmail(email: string, event: MouseEvent) {
           </Tooltip.Trigger>
           <Tooltip.Content
             sideOffset={6}
-            class="z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
+            class={tooltipContentClass}
           >
             Group <span class="font-mono font-medium">{course.crossList}</span>
             {#if course.crossListCount != null && course.crossListCapacity != null}

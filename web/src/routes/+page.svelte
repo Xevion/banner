@@ -12,6 +12,7 @@ import type { SortingState } from "@tanstack/table-core";
 import SearchFilters from "$lib/components/SearchFilters.svelte";
 import CourseTable from "$lib/components/CourseTable.svelte";
 import Pagination from "$lib/components/Pagination.svelte";
+import Footer from "$lib/components/Footer.svelte";
 
 let { data } = $props();
 
@@ -240,23 +241,6 @@ function handlePageChange(newOffset: number) {
     {/if}
 
     <!-- Footer -->
-    <div class="flex justify-center items-center gap-2 mt-auto pt-6 pb-4">
-      {#if __APP_VERSION__}
-        <span class="text-xs text-muted-foreground">v{__APP_VERSION__}</span>
-        <div class="w-px h-3 bg-muted-foreground opacity-30"></div>
-      {/if}
-      <a
-        href="https://github.com/Xevion/banner"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="text-xs text-muted-foreground no-underline hover:underline"
-      >
-        GitHub
-      </a>
-      <div class="w-px h-3 bg-muted-foreground opacity-30"></div>
-      <a href="/health" class="text-xs text-muted-foreground no-underline hover:underline">
-        Status
-      </a>
-    </div>
+    <Footer />
   </div>
 </div>

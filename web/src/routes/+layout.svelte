@@ -2,44 +2,26 @@
 import "overlayscrollbars/overlayscrollbars.css";
 import "./layout.css";
 import { onMount } from "svelte";
-import { OverlayScrollbars } from "overlayscrollbars";
 import { Tooltip } from "bits-ui";
 import ThemeToggle from "$lib/components/ThemeToggle.svelte";
 import { themeStore } from "$lib/stores/theme.svelte";
+import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svelte";
 
 let { children } = $props();
+
+useOverlayScrollbars(() => document.body, {
+  scrollbars: {
+    autoHide: "leave",
+    autoHideDelay: 800,
+  },
+});
 
 onMount(() => {
   themeStore.init();
 
-  // Enable theme transitions now that the page has rendered with the correct theme.
-  // Without this delay, the initial paint would animate from light to dark colors.
   requestAnimationFrame(() => {
     document.documentElement.classList.remove("no-transition");
   });
-
-  const osInstance = OverlayScrollbars(document.body, {
-    scrollbars: {
-      autoHide: "leave",
-      autoHideDelay: 800,
-      theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
-    },
-  });
-
-  const unwatch = $effect.root(() => {
-    $effect(() => {
-      osInstance.options({
-        scrollbars: {
-          theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
-        },
-      });
-    });
-  });
-
-  return () => {
-    unwatch();
-    osInstance.destroy();
-  };
 });
 </script>
 

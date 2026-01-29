@@ -341,6 +341,34 @@ export function formatLocationTooltip(course: CourseResponse): string | null {
   return null;
 }
 
+/** Number of open seats in a course section */
+export function openSeats(course: CourseResponse): number {
+  return Math.max(0, course.maxEnrollment - course.enrollment);
+}
+
+/** Text color class for seat availability: red (full), yellow (low), green (open) */
+export function seatsColor(course: CourseResponse): string {
+  const open = openSeats(course);
+  if (open === 0) return "text-status-red";
+  if (open <= 5) return "text-yellow-500";
+  return "text-status-green";
+}
+
+/** Background dot color class for seat availability */
+export function seatsDotColor(course: CourseResponse): string {
+  const open = openSeats(course);
+  if (open === 0) return "bg-red-500";
+  if (open <= 5) return "bg-yellow-500";
+  return "bg-green-500";
+}
+
+/** Text color class for a RateMyProfessors rating */
+export function ratingColor(rating: number): string {
+  if (rating >= 4.0) return "text-status-green";
+  if (rating >= 3.0) return "text-yellow-500";
+  return "text-status-red";
+}
+
 /** Format credit hours display */
 export function formatCreditHours(course: CourseResponse): string {
   if (course.creditHours != null) return String(course.creditHours);

@@ -10,8 +10,9 @@ pub struct Range {
     pub high: i32,
 }
 
-/// Builder for constructing Banner API search queries
+/// Builder for constructing Banner API search queries.
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct SearchQuery {
     subject: Option<String>,
     title: Option<String>,
@@ -32,6 +33,7 @@ pub struct SearchQuery {
     course_number_range: Option<Range>,
 }
 
+#[allow(dead_code)]
 impl SearchQuery {
     /// Creates a new SearchQuery with default values
     pub fn new() -> Self {
@@ -67,7 +69,6 @@ impl SearchQuery {
     }
 
     /// Adds a keyword to the query
-    #[allow(dead_code)]
     pub fn keyword<S: Into<String>>(mut self, keyword: S) -> Self {
         match &mut self.keywords {
             Some(keywords) => keywords.push(keyword.into()),
@@ -77,63 +78,54 @@ impl SearchQuery {
     }
 
     /// Sets whether to search for open courses only
-    #[allow(dead_code)]
     pub fn open_only(mut self, open_only: bool) -> Self {
         self.open_only = Some(open_only);
         self
     }
 
     /// Sets the term part for the query
-    #[allow(dead_code)]
     pub fn term_part(mut self, term_part: Vec<String>) -> Self {
         self.term_part = Some(term_part);
         self
     }
 
     /// Sets the campuses for the query
-    #[allow(dead_code)]
     pub fn campus(mut self, campus: Vec<String>) -> Self {
         self.campus = Some(campus);
         self
     }
 
     /// Sets the instructional methods for the query
-    #[allow(dead_code)]
     pub fn instructional_method(mut self, instructional_method: Vec<String>) -> Self {
         self.instructional_method = Some(instructional_method);
         self
     }
 
     /// Sets the attributes for the query
-    #[allow(dead_code)]
     pub fn attributes(mut self, attributes: Vec<String>) -> Self {
         self.attributes = Some(attributes);
         self
     }
 
     /// Sets the instructors for the query
-    #[allow(dead_code)]
     pub fn instructor(mut self, instructor: Vec<u64>) -> Self {
         self.instructor = Some(instructor);
         self
     }
 
     /// Sets the start time for the query
-    #[allow(dead_code)]
     pub fn start_time(mut self, start_time: Duration) -> Self {
         self.start_time = Some(start_time);
         self
     }
 
     /// Sets the end time for the query
-    #[allow(dead_code)]
     pub fn end_time(mut self, end_time: Duration) -> Self {
         self.end_time = Some(end_time);
         self
     }
 
     /// Sets the credit range for the query
-    #[allow(dead_code)]
     pub fn credits(mut self, low: i32, high: i32) -> Self {
         self.min_credits = Some(low);
         self.max_credits = Some(high);
@@ -141,14 +133,12 @@ impl SearchQuery {
     }
 
     /// Sets the minimum credits for the query
-    #[allow(dead_code)]
     pub fn min_credits(mut self, value: i32) -> Self {
         self.min_credits = Some(value);
         self
     }
 
     /// Sets the maximum credits for the query
-    #[allow(dead_code)]
     pub fn max_credits(mut self, value: i32) -> Self {
         self.max_credits = Some(value);
         self
@@ -161,7 +151,6 @@ impl SearchQuery {
     }
 
     /// Sets the offset for pagination
-    #[allow(dead_code)]
     pub fn offset(mut self, offset: i32) -> Self {
         self.offset = offset;
         self
