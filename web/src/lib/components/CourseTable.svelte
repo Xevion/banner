@@ -15,8 +15,11 @@ import {
   openSeats,
   seatsColor,
   seatsDotColor,
-  ratingColor,
+  ratingStyle,
+  rmpUrl,
+  RMP_CONFIDENCE_THRESHOLD,
 } from "$lib/course";
+import { themeStore } from "$lib/stores/theme.svelte";
 import { useClipboard } from "$lib/composables/useClipboard.svelte";
 import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svelte";
 import CourseDetail from "./CourseDetail.svelte";
@@ -31,8 +34,19 @@ import {
   type VisibilityState,
   type Updater,
 } from "@tanstack/table-core";
-import { ArrowUp, ArrowDown, ArrowUpDown, Columns3, Check, RotateCcw } from "@lucide/svelte";
-import { DropdownMenu, ContextMenu } from "bits-ui";
+import {
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Columns3,
+  Check,
+  RotateCcw,
+  Star,
+  Triangle,
+  ExternalLink,
+} from "@lucide/svelte";
+import { DropdownMenu, ContextMenu, Tooltip } from "bits-ui";
+import { cn, tooltipContentClass } from "$lib/utils";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 
 let {
@@ -91,10 +105,16 @@ function primaryInstructorDisplay(course: CourseResponse): string {
   return abbreviateInstructor(primary.displayName);
 }
 
-function primaryRating(course: CourseResponse): { rating: number; count: number } | null {
+function primaryRating(
+  course: CourseResponse
+): { rating: number; count: number; legacyId: number | null } | null {
   const primary = getPrimaryInstructor(course.instructors);
   if (!primary?.rmpRating) return null;
-  return { rating: primary.rmpRating, count: primary.rmpNumRatings ?? 0 };
+  return {
+    rating: primary.rmpRating,
+    count: primary.rmpNumRatings ?? 0,
+    legacyId: primary.rmpLegacyId ?? null,
+  };
 }
 
 function timeIsTBA(course: CourseResponse): boolean {
@@ -207,8 +227,7 @@ const table = createSvelteTable({
         </GroupHeading>
         {#each columns as col}
             {@const id = col.id!}
-            {@const label =
-                typeof col.header === "string" ? col.header : id}
+            {@const label = typeof col.header === "string" ? col.header : id}
             <CheckboxItem
                 checked={columnVisibility[id] !== false}
                 closeOnSelect={false}
@@ -269,12 +288,12 @@ const table = createSvelteTable({
                                 transition:fly={{ duration: 150, y: -10 }}
                             >
                                 {@render columnVisibilityGroup(
-                    DropdownMenu.Group,
-                    DropdownMenu.GroupHeading,
-                    DropdownMenu.CheckboxItem,
-                    DropdownMenu.Separator,
-                    DropdownMenu.Item,
-                )}
+                                    DropdownMenu.Group,
+                                    DropdownMenu.GroupHeading,
+                                    DropdownMenu.CheckboxItem,
+                                    DropdownMenu.Separator,
+                                    DropdownMenu.Item,
+                                )}
                             </div>
                         </div>
                     {/if}
@@ -384,7 +403,10 @@ const table = createSvelteTable({
                         {@const course = row.original}
                         <tbody
                             animate:flip={{ duration: 300 }}
-                            in:fade={{ duration: 200, delay: Math.min(i * 20, 400) }}
+                            in:fade={{
+                                duration: 200,
+                                delay: Math.min(i * 20, 400),
+                            }}
                         >
                             <tr
                                 class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn ===
@@ -405,9 +427,15 @@ const table = createSvelteTable({
                                                         e,
                                                     )}
                                                 onkeydown={(e) => {
-                                                    if (e.key === "Enter" || e.key === " ") {
+                                                    if (
+                                                        e.key === "Enter" ||
+                                                        e.key === " "
+                                                    ) {
                                                         e.preventDefault();
-                                                        clipboard.copy(course.crn, e);
+                                                        clipboard.copy(
+                                                            course.crn,
+                                                            e,
+                                                        );
                                                     }
                                                 }}
                                                 aria-label="Copy CRN {course.crn} to clipboard"
@@ -468,9 +496,12 @@ const table = createSvelteTable({
                                         {@const primary = getPrimaryInstructor(
                                             course.instructors,
                                         )}
-                                        {@const display = primaryInstructorDisplay(course)}
-                                        {@const commaIdx = display.indexOf(", ")}
-                                        {@const ratingData = primaryRating(course)}
+                                        {@const display =
+                                            primaryInstructorDisplay(course)}
+                                        {@const commaIdx =
+                                            display.indexOf(", ")}
+                                        {@const ratingData =
+                                            primaryRating(course)}
                                         <td class="py-2 px-2 whitespace-nowrap">
                                             {#if display === "Staff"}
                                                 <span
@@ -486,38 +517,98 @@ const table = createSvelteTable({
                                                     passthrough
                                                 >
                                                     {#if commaIdx !== -1}
-                                                        <span>{display.slice(0, commaIdx)},
-                                                            <span class="text-muted-foreground">{display.slice(commaIdx + 1)}</span
-                                                        ></span>
+                                                        <span
+                                                            >{display.slice(
+                                                                0,
+                                                                commaIdx,
+                                                            )},
+                                                            <span
+                                                                class="text-muted-foreground"
+                                                                >{display.slice(
+                                                                    commaIdx +
+                                                                        1,
+                                                                )}</span
+                                                            ></span
+                                                        >
                                                     {:else}
                                                         <span>{display}</span>
                                                     {/if}
                                                 </SimpleTooltip>
                                             {/if}
                                             {#if ratingData}
-                                                <SimpleTooltip
-                                                    text="{ratingData.rating.toFixed(
-                                                        1,
-                                                    )}/5 ({ratingData.count} ratings on RateMyProfessors)"
-                                                    delay={150}
-                                                    side="bottom"
-                                                    passthrough
+                                                {@const lowConfidence =
+                                                    ratingData.count <
+                                                    RMP_CONFIDENCE_THRESHOLD}
+                                                <Tooltip.Root
+                                                    delayDuration={150}
                                                 >
-                                                    <span
-                                                        class="ml-1 text-xs font-medium {ratingColor(
-                                                            ratingData.rating,
-                                                        )}"
-                                                        >{ratingData.rating.toFixed(
-                                                            1,
-                                                        )}★</span
+                                                    <Tooltip.Trigger>
+                                                        <span
+                                                            class="ml-1 text-xs font-medium inline-flex items-center gap-0.5"
+                                                            style={ratingStyle(
+                                                                ratingData.rating,
+                                                                themeStore.isDark,
+                                                            )}
+                                                        >
+                                                            {ratingData.rating.toFixed(
+                                                                1,
+                                                            )}
+                                                            {#if lowConfidence}
+                                                                <Triangle
+                                                                    class="size-2 fill-current"
+                                                                />
+                                                            {:else}
+                                                                <Star
+                                                                    class="size-2.5 fill-current"
+                                                                />
+                                                            {/if}
+                                                        </span>
+                                                    </Tooltip.Trigger>
+                                                    <Tooltip.Content
+                                                        side="bottom"
+                                                        sideOffset={6}
+                                                        class={cn(
+                                                            tooltipContentClass,
+                                                            "px-2.5 py-1.5",
+                                                        )}
                                                     >
-                                                </SimpleTooltip>
+                                                        <span
+                                                            class="inline-flex items-center gap-1.5 text-xs"
+                                                        >
+                                                            {ratingData.rating.toFixed(
+                                                                1,
+                                                            )}/5 · {ratingData.count}
+                                                            ratings
+                                                            {#if (ratingData.count ?? 0) < RMP_CONFIDENCE_THRESHOLD}
+                                                                (low)
+                                                            {/if}
+                                                            {#if ratingData.legacyId != null}
+                                                                ·
+                                                                <a
+                                                                    href={rmpUrl(
+                                                                        ratingData.legacyId,
+                                                                    )}
+                                                                    target="_blank"
+                                                                    rel="noopener"
+                                                                    class="inline-flex items-center gap-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                                                                >
+                                                                    RMP
+                                                                    <ExternalLink
+                                                                        class="size-3"
+                                                                    />
+                                                                </a>
+                                                            {/if}
+                                                        </span>
+                                                    </Tooltip.Content>
+                                                </Tooltip.Root>
                                             {/if}
                                         </td>
                                     {:else if colId === "time"}
                                         <td class="py-2 px-2 whitespace-nowrap">
                                             <SimpleTooltip
-                                                text={formatMeetingTimesTooltip(course.meetingTimes)}
+                                                text={formatMeetingTimesTooltip(
+                                                    course.meetingTimes,
+                                                )}
                                                 passthrough
                                             >
                                                 {#if timeIsTBA(course)}
@@ -566,10 +657,14 @@ const table = createSvelteTable({
                                             </SimpleTooltip>
                                         </td>
                                     {:else if colId === "location"}
-                                        {@const concern = getDeliveryConcern(course)}
-                                        {@const accentColor = concernAccentColor(concern)}
-                                        {@const locTooltip = formatLocationTooltip(course)}
-                                        {@const locDisplay = formatLocationDisplay(course)}
+                                        {@const concern =
+                                            getDeliveryConcern(course)}
+                                        {@const accentColor =
+                                            concernAccentColor(concern)}
+                                        {@const locTooltip =
+                                            formatLocationTooltip(course)}
+                                        {@const locDisplay =
+                                            formatLocationDisplay(course)}
                                         <td class="py-2 px-2 whitespace-nowrap">
                                             {#if locTooltip}
                                                 <SimpleTooltip
@@ -579,18 +674,26 @@ const table = createSvelteTable({
                                                 >
                                                     <span
                                                         class="text-muted-foreground"
-                                                        class:pl-2={accentColor !== null}
-                                                        style:border-left={accentColor ? `2px solid ${accentColor}` : undefined}
+                                                        class:pl-2={accentColor !==
+                                                            null}
+                                                        style:border-left={accentColor
+                                                            ? `2px solid ${accentColor}`
+                                                            : undefined}
                                                     >
                                                         {locDisplay ?? "—"}
                                                     </span>
                                                 </SimpleTooltip>
                                             {:else if locDisplay}
-                                                <span class="text-muted-foreground">
+                                                <span
+                                                    class="text-muted-foreground"
+                                                >
                                                     {locDisplay}
                                                 </span>
                                             {:else}
-                                                <span class="text-xs text-muted-foreground/50">—</span>
+                                                <span
+                                                    class="text-xs text-muted-foreground/50"
+                                                    >—</span
+                                                >
                                             {/if}
                                         </td>
                                     {:else if colId === "seats"}
@@ -668,12 +771,12 @@ const table = createSvelteTable({
                                 out:fade={{ duration: 100 }}
                             >
                                 {@render columnVisibilityGroup(
-                    ContextMenu.Group,
-                    ContextMenu.GroupHeading,
-                    ContextMenu.CheckboxItem,
-                    ContextMenu.Separator,
-                    ContextMenu.Item,
-                )}
+                                    ContextMenu.Group,
+                                    ContextMenu.GroupHeading,
+                                    ContextMenu.CheckboxItem,
+                                    ContextMenu.Separator,
+                                    ContextMenu.Item,
+                                )}
                             </div>
                         </div>
                     {/if}

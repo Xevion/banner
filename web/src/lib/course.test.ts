@@ -193,6 +193,7 @@ describe("getPrimaryInstructor", () => {
         isPrimary: false,
         rmpRating: null,
         rmpNumRatings: null,
+        rmpLegacyId: null,
       },
       {
         bannerId: "2",
@@ -201,6 +202,7 @@ describe("getPrimaryInstructor", () => {
         isPrimary: true,
         rmpRating: null,
         rmpNumRatings: null,
+        rmpLegacyId: null,
       },
     ];
     expect(getPrimaryInstructor(instructors)?.displayName).toBe("B");
@@ -214,6 +216,7 @@ describe("getPrimaryInstructor", () => {
         isPrimary: false,
         rmpRating: null,
         rmpNumRatings: null,
+        rmpLegacyId: null,
       },
     ];
     expect(getPrimaryInstructor(instructors)?.displayName).toBe("A");

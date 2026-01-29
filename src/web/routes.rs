@@ -439,6 +439,7 @@ pub struct InstructorResponse {
     is_primary: bool,
     rmp_rating: Option<f32>,
     rmp_num_ratings: Option<i32>,
+    rmp_legacy_id: Option<i32>,
 }
 
 #[derive(Serialize, TS)]
@@ -473,6 +474,7 @@ fn build_course_response(
             is_primary: i.is_primary,
             rmp_rating: i.avg_rating,
             rmp_num_ratings: i.num_ratings,
+            rmp_legacy_id: i.rmp_legacy_id,
         })
         .collect();
 

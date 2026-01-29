@@ -148,7 +148,7 @@ pub async fn get_course_instructors(
     let rows = sqlx::query_as::<_, CourseInstructorDetail>(
         r#"
         SELECT i.banner_id, i.display_name, i.email, ci.is_primary,
-               rp.avg_rating, rp.num_ratings,
+               rp.avg_rating, rp.num_ratings, i.rmp_legacy_id,
                ci.course_id
         FROM course_instructors ci
         JOIN instructors i ON i.banner_id = ci.instructor_id
@@ -177,7 +177,7 @@ pub async fn get_instructors_for_courses(
     let rows = sqlx::query_as::<_, CourseInstructorDetail>(
         r#"
         SELECT i.banner_id, i.display_name, i.email, ci.is_primary,
-               rp.avg_rating, rp.num_ratings,
+               rp.avg_rating, rp.num_ratings, i.rmp_legacy_id,
                ci.course_id
         FROM course_instructors ci
         JOIN instructors i ON i.banner_id = ci.instructor_id

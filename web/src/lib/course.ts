@@ -362,11 +362,49 @@ export function seatsDotColor(course: CourseResponse): string {
   return "bg-green-500";
 }
 
-/** Text color class for a RateMyProfessors rating */
-export function ratingColor(rating: number): string {
-  if (rating >= 4.0) return "text-status-green";
-  if (rating >= 3.0) return "text-yellow-500";
-  return "text-status-red";
+/** Minimum number of ratings needed to consider RMP data reliable */
+export const RMP_CONFIDENCE_THRESHOLD = 7;
+
+/** RMP professor page URL from legacy ID */
+export function rmpUrl(legacyId: number): string {
+  return `https://www.ratemyprofessors.com/professor/${legacyId}`;
+}
+
+/**
+ * Smooth OKLCH color + text-shadow for a RateMyProfessors rating.
+ *
+ * Three-stop gradient interpolated in OKLCH:
+ *   1.0 → red, 3.0 → amber, 5.0 → green
+ * with separate light/dark mode tuning.
+ */
+export function ratingStyle(rating: number, isDark: boolean): string {
+  const clamped = Math.max(1, Math.min(5, rating));
+
+  // OKLCH stops: [lightness, chroma, hue]
+  const stops: { light: [number, number, number]; dark: [number, number, number] }[] = [
+    { light: [0.63, 0.2, 25], dark: [0.7, 0.19, 25] }, // 1.0 – red
+    { light: [0.7, 0.16, 85], dark: [0.78, 0.15, 85] }, // 3.0 – amber
+    { light: [0.65, 0.2, 145], dark: [0.72, 0.19, 145] }, // 5.0 – green
+  ];
+
+  let t: number;
+  let fromIdx: number;
+  if (clamped <= 3) {
+    t = (clamped - 1) / 2;
+    fromIdx = 0;
+  } else {
+    t = (clamped - 3) / 2;
+    fromIdx = 1;
+  }
+
+  const from = isDark ? stops[fromIdx].dark : stops[fromIdx].light;
+  const to = isDark ? stops[fromIdx + 1].dark : stops[fromIdx + 1].light;
+
+  const l = from[0] + (to[0] - from[0]) * t;
+  const c = from[1] + (to[1] - from[1]) * t;
+  const h = from[2] + (to[2] - from[2]) * t;
+
+  return `color: oklch(${l.toFixed(3)} ${c.toFixed(3)} ${h.toFixed(1)}); text-shadow: 0 0 4px oklch(${l.toFixed(3)} ${c.toFixed(3)} ${h.toFixed(1)} / 0.3);`;
 }
 
 /** Format credit hours display */
