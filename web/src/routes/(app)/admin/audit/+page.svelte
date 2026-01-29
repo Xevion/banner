@@ -5,6 +5,7 @@ import { FlexRender, createSvelteTable } from "$lib/components/ui/data-table/ind
 import { formatAbsoluteDate } from "$lib/date";
 import { type DiffEntry, formatDiffPath, jsonDiff, tryParseJson } from "$lib/diff";
 import { relativeTime } from "$lib/time";
+import { formatNumber } from "$lib/utils";
 import {
   AlertCircle,
   ArrowDown,
@@ -139,9 +140,7 @@ function analyzeChange(entry: AuditLogEntry): ChangeAnalysis {
   return { kind: "scalar", oldRaw: entry.oldValue, newRaw: entry.newValue, diffs: [], delta };
 }
 
-function formatDelta(delta: number): string {
-  return delta >= 0 ? `+${delta}` : `${delta}`;
-}
+
 
 function stringify(val: unknown): string {
   if (val === undefined) return "∅";
@@ -351,7 +350,7 @@ const columnCount = columns.length;
                     {#if change.kind === "scalar"}
                       <span class="inline-flex items-center gap-1.5 text-sm">
                         {#if change.delta !== null}
-                          <span class="text-foreground">{formatDelta(change.delta)}<span class="text-muted-foreground/60">,</span></span>
+                          <span class="text-foreground">{formatNumber(change.delta, { sign: true })}<span class="text-muted-foreground/60">,</span></span>
                         {/if}
                         <span class="text-red-400">{change.oldRaw}</span>
                         <span class="text-muted-foreground/60">→</span>
@@ -378,7 +377,7 @@ const columnCount = columns.length;
                           <ChevronRight class="size-3.5 shrink-0" />
                         {/if}
                         <span class="underline decoration-dotted underline-offset-2">
-                          {change.diffs.length} fields changed
+                          {formatNumber(change.diffs.length)} fields changed
                         </span>
                       </span>
                     {/if}

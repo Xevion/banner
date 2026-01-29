@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { client, type AdminStatus } from "$lib/api";
+import { formatNumber } from "$lib/utils";
 
 let status = $state<AdminStatus | null>(null);
 let error = $state<string | null>(null);
@@ -24,19 +25,19 @@ onMount(async () => {
   <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
     <div class="bg-card border-border rounded-lg border p-4">
       <p class="text-muted-foreground text-sm">Users</p>
-      <p class="text-3xl font-bold">{status.userCount}</p>
+      <p class="text-3xl font-bold">{formatNumber(status.userCount)}</p>
     </div>
     <div class="bg-card border-border rounded-lg border p-4">
       <p class="text-muted-foreground text-sm">Active Sessions</p>
-      <p class="text-3xl font-bold">{status.sessionCount}</p>
+      <p class="text-3xl font-bold">{formatNumber(status.sessionCount)}</p>
     </div>
     <div class="bg-card border-border rounded-lg border p-4">
       <p class="text-muted-foreground text-sm">Courses</p>
-      <p class="text-3xl font-bold">{status.courseCount}</p>
+      <p class="text-3xl font-bold">{formatNumber(status.courseCount)}</p>
     </div>
     <div class="bg-card border-border rounded-lg border p-4">
       <p class="text-muted-foreground text-sm">Scrape Jobs</p>
-      <p class="text-3xl font-bold">{status.scrapeJobCount}</p>
+      <p class="text-3xl font-bold">{formatNumber(status.scrapeJobCount)}</p>
     </div>
   </div>
 

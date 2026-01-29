@@ -2,6 +2,7 @@
 import { onMount } from "svelte";
 import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import { relativeTime } from "$lib/time";
+import { formatNumber } from "$lib/utils";
 
 export interface SearchMeta {
   totalCount: number;
@@ -26,7 +27,7 @@ let formattedTime = $derived(
 let relativeTimeResult = $derived(meta ? relativeTime(meta.timestamp, now) : null);
 let relativeTimeText = $derived(relativeTimeResult?.text ?? "");
 
-let countLabel = $derived(meta ? meta.totalCount.toLocaleString() : "");
+let countLabel = $derived(meta ? formatNumber(meta.totalCount) : "");
 let resultNoun = $derived(meta ? (meta.totalCount !== 1 ? "results" : "result") : "");
 let durationLabel = $derived(meta ? `${Math.round(meta.durationMs)}ms` : "");
 

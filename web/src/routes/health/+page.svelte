@@ -16,6 +16,7 @@ import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import Footer from "$lib/components/Footer.svelte";
 import { type ServiceStatus, type ServiceInfo, type StatusResponse, client } from "$lib/api";
 import { relativeTime } from "$lib/time";
+import { formatNumber } from "$lib/utils";
 
 const REFRESH_INTERVAL = import.meta.env.DEV ? 3000 : 30000;
 const REQUEST_TIMEOUT = 10000;
@@ -104,10 +105,6 @@ const lastFetch = $derived(
 
 const relativeLastFetchResult = $derived(lastFetch ? relativeTime(lastFetch, now) : null);
 const relativeLastFetch = $derived(relativeLastFetchResult?.text ?? "");
-
-function formatNumber(num: number): string {
-  return num.toLocaleString();
-}
 
 onMount(() => {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;

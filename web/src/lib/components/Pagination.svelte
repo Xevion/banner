@@ -2,6 +2,7 @@
 import { Select } from "bits-ui";
 import { ChevronUp, ChevronDown } from "@lucide/svelte";
 import type { Action } from "svelte/action";
+import { formatNumber } from "$lib/utils";
 
 const slideIn: Action<HTMLElement, number> = (node, direction) => {
   if (direction !== 0) {
@@ -59,11 +60,11 @@ const selectValue = $derived(String(currentPage));
 </script>
 
 {#if totalCount > 0 && totalPages > 1}
-  <div class="flex items-center text-sm">
+  <div class="flex items-start text-xs -mt-3 pl-2">
     <!-- Left zone: result count -->
     <div class="flex-1">
       <span class="text-muted-foreground">
-        Showing {start}&ndash;{end} of {totalCount} courses
+        Showing {formatNumber(start)}&ndash;{formatNumber(end)} of {formatNumber(totalCount)} courses
       </span>
     </div>
 
@@ -158,9 +159,9 @@ const selectValue = $derived(String(currentPage));
   </div>
 {:else if totalCount > 0}
   <!-- Single page: just show the count, no pagination controls -->
-  <div class="flex items-center text-sm">
+  <div class="flex items-start text-xs -mt-3 pl-2">
     <span class="text-muted-foreground">
-      Showing {start}&ndash;{end} of {totalCount} courses
+      Showing {formatNumber(start)}&ndash;{formatNumber(end)} of {formatNumber(totalCount)} courses
     </span>
   </div>
 {/if}

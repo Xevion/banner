@@ -46,7 +46,7 @@ import {
   ExternalLink,
 } from "@lucide/svelte";
 import { DropdownMenu, ContextMenu, Tooltip } from "bits-ui";
-import { cn, tooltipContentClass } from "$lib/utils";
+import { cn, tooltipContentClass, formatNumber } from "$lib/utils";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 
 let {
@@ -577,7 +577,7 @@ const table = createSvelteTable({
                                                         >
                                                             {ratingData.rating.toFixed(
                                                                 1,
-                                                            )}/5 · {ratingData.count}
+                                                            )}/5 · {formatNumber(ratingData.count)}
                                                             ratings
                                                             {#if (ratingData.count ?? 0) < RMP_CONFIDENCE_THRESHOLD}
                                                                 (low)
@@ -701,11 +701,11 @@ const table = createSvelteTable({
                                             class="py-2 px-2 text-right whitespace-nowrap"
                                         >
                                             <SimpleTooltip
-                                                text="{openSeats(
+                                                text="{formatNumber(openSeats(
                                                     course,
-                                                )} of {course.maxEnrollment} seats open, {course.enrollment} enrolled{course.waitCount >
+                                                ))} of {formatNumber(course.maxEnrollment)} seats open, {formatNumber(course.enrollment)} enrolled{course.waitCount >
                                                 0
-                                                    ? `, ${course.waitCount} waitlisted`
+                                                    ? `, ${formatNumber(course.waitCount)} waitlisted`
                                                     : ''}"
                                                 delay={200}
                                                 side="left"
@@ -729,8 +729,8 @@ const table = createSvelteTable({
                                                     >
                                                     <span
                                                         class="text-muted-foreground/60 tabular-nums"
-                                                        >{course.enrollment}/{course.maxEnrollment}{#if course.waitCount > 0}
-                                                            · WL {course.waitCount}/{course.waitCapacity}{/if}</span
+                                                        >{formatNumber(course.enrollment)}/{formatNumber(course.maxEnrollment)}{#if course.waitCount > 0}
+                                                            · WL {formatNumber(course.waitCount)}/{formatNumber(course.waitCapacity)}{/if}</span
                                                     >
                                                 </span>
                                             </SimpleTooltip>

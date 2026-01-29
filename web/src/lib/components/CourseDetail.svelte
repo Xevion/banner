@@ -13,7 +13,7 @@ import {
 } from "$lib/course";
 import { themeStore } from "$lib/stores/theme.svelte";
 import { useClipboard } from "$lib/composables/useClipboard.svelte";
-import { cn, tooltipContentClass } from "$lib/utils";
+import { cn, tooltipContentClass, formatNumber } from "$lib/utils";
 import { Tooltip } from "bits-ui";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 import { Info, Copy, Check, Star, Triangle, ExternalLink } from "@lucide/svelte";
@@ -275,7 +275,7 @@ const clipboard = useClipboard();
                             </span>
                             {#if course.crossListCount != null && course.crossListCapacity != null}
                                 <span class="text-muted-foreground text-xs">
-                                    {course.crossListCount}/{course.crossListCapacity}
+                                    {formatNumber(course.crossListCount)}/{formatNumber(course.crossListCapacity)}
                                 </span>
                             {/if}
                         </span>
@@ -285,7 +285,7 @@ const clipboard = useClipboard();
                             >{course.crossList}</span
                         >
                         {#if course.crossListCount != null && course.crossListCapacity != null}
-                            — {course.crossListCount} enrolled across {course.crossListCapacity}
+                            — {formatNumber(course.crossListCount)} enrolled across {formatNumber(course.crossListCapacity)}
                             shared seats
                         {/if}
                     </Tooltip.Content>
@@ -298,7 +298,7 @@ const clipboard = useClipboard();
             <div>
                 <h4 class="text-sm text-foreground mb-2">Waitlist</h4>
                 <span class="text-2foreground"
-                    >{course.waitCount} / {course.waitCapacity}</span
+                    >{formatNumber(course.waitCount)} / {formatNumber(course.waitCapacity)}</span
                 >
             </div>
         {/if}

@@ -3,6 +3,7 @@ import { Combobox } from "bits-ui";
 import { Check, ChevronsUpDown } from "@lucide/svelte";
 import { fly } from "svelte/transition";
 import type { Subject } from "$lib/api";
+import { formatNumber } from "$lib/utils";
 
 let {
   subjects,
@@ -92,7 +93,7 @@ $effect(() => {
         </span>
       {/each}
       {#if !open && overflowCount > 0}
-        <span class="text-xs text-muted-foreground shrink-0">+{overflowCount}</span>
+        <span class="text-xs text-muted-foreground shrink-0">+{formatNumber(overflowCount)}</span>
       {/if}
     {/if}
     <Combobox.Input
