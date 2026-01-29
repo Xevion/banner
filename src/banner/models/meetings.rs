@@ -1,8 +1,8 @@
-use bitflags::{Flags, bitflags};
+use bitflags::{bitflags, Flags};
 use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc, Weekday};
 use extension_traits::extension;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{cmp::Ordering, fmt::Display, str::FromStr};
+use std::{cmp::Ordering, str::FromStr};
 
 use super::terms::Term;
 
@@ -390,26 +390,6 @@ impl MeetingLocation {
             }
         } else {
             MeetingLocation::Online
-        }
-    }
-}
-
-impl Display for MeetingLocation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MeetingLocation::Online => write!(f, "Online"),
-            MeetingLocation::InPerson {
-                campus,
-                building,
-                building_description,
-                room,
-                ..
-            } => write!(
-                f,
-                "{campus} | {building_name} | {building_code} {room}",
-                building_name = building_description,
-                building_code = building,
-            ),
         }
     }
 }

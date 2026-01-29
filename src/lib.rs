@@ -11,5 +11,6 @@ pub mod scraper;
 pub mod services;
 pub mod signals;
 pub mod state;
+pub mod status;
 pub mod utils;
 pub mod web;

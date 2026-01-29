@@ -2,6 +2,7 @@
 
 use crate::banner::BannerApi;
 use crate::banner::Course;
+use crate::status::ServiceStatusRegistry;
 use anyhow::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use std::sync::Arc;
 pub struct AppState {
     pub banner_api: Arc<BannerApi>,
     pub db_pool: PgPool,
+    pub service_statuses: ServiceStatusRegistry,
 }
 
 impl AppState {
@@ -17,6 +19,7 @@ impl AppState {
         Self {
             banner_api,
             db_pool,
+            service_statuses: ServiceStatusRegistry::new(),
         }
     }
 

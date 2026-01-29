@@ -195,3 +195,6 @@ test-smoke port="18080":
 alias b := bun
 bun *ARGS:
 	cd web && bun {{ ARGS }}
+
+sql *ARGS:
+	lazysql ${DATABASE_URL}

@@ -2,116 +2,78 @@
 
 use crate::banner::{Course, MeetingDays, MeetingScheduleInfo, WeekdayExt};
 use crate::bot::{Context, Error, utils};
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{Datelike, Duration, NaiveDate, Utc, Weekday};
 use serenity::all::CreateAttachment;
 use tracing::info;
 
-/// Represents a holiday or special day that should be excluded from class schedules
-#[derive(Debug, Clone)]
-enum Holiday {
-    /// A single-day holiday
-    Single { month: u32, day: u32 },
-    /// A multi-day holiday range
-    Range {
-        month: u32,
-        start_day: u32,
-        end_day: u32,
-    },
+/// Find the nth occurrence of a weekday in a given month/year (1-based).
+fn nth_weekday_of_month(year: i32, month: u32, weekday: Weekday, n: u32) -> Option<NaiveDate> {
+    let first = NaiveDate::from_ymd_opt(year, month, 1)?;
+    let days_ahead = (weekday.num_days_from_monday() as i64
+        - first.weekday().num_days_from_monday() as i64)
+        .rem_euclid(7) as u32;
+    let day = 1 + days_ahead + 7 * (n - 1);
+    NaiveDate::from_ymd_opt(year, month, day)
 }
 
-impl Holiday {
-    /// Check if a specific date falls within this holiday
-    fn contains_date(&self, date: NaiveDate) -> bool {
-        match self {
-            Holiday::Single { month, day, .. } => date.month() == *month && date.day() == *day,
-            Holiday::Range {
-                month,
-                start_day,
-                end_day,
-                ..
-            } => date.month() == *month && date.day() >= *start_day && date.day() <= *end_day,
-        }
-    }
-
-    /// Get all dates in this holiday for a given year
-    fn get_dates_for_year(&self, year: i32) -> Vec<NaiveDate> {
-        match self {
-            Holiday::Single { month, day, .. } => {
-                if let Some(date) = NaiveDate::from_ymd_opt(year, *month, *day) {
-                    vec![date]
-                } else {
-                    Vec::new()
-                }
-            }
-            Holiday::Range {
-                month,
-                start_day,
-                end_day,
-                ..
-            } => {
-                let mut dates = Vec::new();
-                for day in *start_day..=*end_day {
-                    if let Some(date) = NaiveDate::from_ymd_opt(year, *month, day) {
-                        dates.push(date);
-                    }
-                }
-                dates
-            }
-        }
-    }
+/// Compute a consecutive range of dates starting from `start` for `count` days.
+fn date_range(start: NaiveDate, count: i64) -> Vec<NaiveDate> {
+    (0..count).filter_map(|i| start.checked_add_signed(Duration::days(i))).collect()
 }
 
-/// University holidays excluded from class schedules.
+/// Compute university holidays for a given year.
 ///
-/// WARNING: These dates are specific to the UTSA 2024-2025 academic calendar and must be
-/// updated each academic year. Many of these holidays fall on different dates annually
-/// (e.g., Labor Day is the first Monday of September, Thanksgiving is the fourth Thursday
-/// of November). Ideally these would be loaded from a configuration file or computed
-/// dynamically from federal/university calendar rules.
-// TODO: Load holiday dates from configuration or compute dynamically per academic year.
-const UNIVERSITY_HOLIDAYS: &[(&str, Holiday)] = &[
-    ("Labor Day", Holiday::Single { month: 9, day: 1 }),
-    (
-        "Fall Break",
-        Holiday::Range {
-            month: 10,
-            start_day: 13,
-            end_day: 14,
-        },
-    ),
-    (
-        "Unspecified Holiday",
-        Holiday::Single { month: 11, day: 26 },
-    ),
-    (
-        "Thanksgiving",
-        Holiday::Range {
-            month: 11,
-            start_day: 28,
-            end_day: 29,
-        },
-    ),
-    ("Student Study Day", Holiday::Single { month: 12, day: 5 }),
-    (
-        "Winter Holiday",
-        Holiday::Range {
-            month: 12,
-            start_day: 23,
-            end_day: 31,
-        },
-    ),
-    ("New Year's Day", Holiday::Single { month: 1, day: 1 }),
-    ("MLK Day", Holiday::Single { month: 1, day: 20 }),
-    (
-        "Spring Break",
-        Holiday::Range {
-            month: 3,
-            start_day: 10,
-            end_day: 15,
-        },
-    ),
-    ("Student Study Day", Holiday::Single { month: 5, day: 9 }),
-];
+/// Federal holidays use weekday-of-month rules so they're correct for any year.
+/// University-specific breaks (Fall Break, Spring Break, Winter Holiday) are derived
+/// from anchoring federal holidays or using UTSA's typical scheduling patterns.
+fn compute_holidays_for_year(year: i32) -> Vec<(&'static str, Vec<NaiveDate>)> {
+    let mut holidays = Vec::new();
+
+    // Labor Day: 1st Monday of September
+    if let Some(d) = nth_weekday_of_month(year, 9, Weekday::Mon, 1) {
+        holidays.push(("Labor Day", vec![d]));
+    }
+
+    // Fall Break: Mon-Tue of Columbus Day week (2nd Monday of October + Tuesday)
+    if let Some(mon) = nth_weekday_of_month(year, 10, Weekday::Mon, 2) {
+        holidays.push(("Fall Break", date_range(mon, 2)));
+    }
+
+    // Day before Thanksgiving: Wednesday before 4th Thursday of November
+    if let Some(thu) = nth_weekday_of_month(year, 11, Weekday::Thu, 4)
+        && let Some(wed) = thu.checked_sub_signed(Duration::days(1))
+    {
+        holidays.push(("Day Before Thanksgiving", vec![wed]));
+    }
+
+    // Thanksgiving: 4th Thursday of November + Friday
+    if let Some(thu) = nth_weekday_of_month(year, 11, Weekday::Thu, 4) {
+        holidays.push(("Thanksgiving", date_range(thu, 2)));
+    }
+
+    // Winter Holiday: Dec 23-31
+    if let Some(start) = NaiveDate::from_ymd_opt(year, 12, 23) {
+        holidays.push(("Winter Holiday", date_range(start, 9)));
+    }
+
+    // New Year's Day: January 1
+    if let Some(d) = NaiveDate::from_ymd_opt(year, 1, 1) {
+        holidays.push(("New Year's Day", vec![d]));
+    }
+
+    // MLK Day: 3rd Monday of January
+    if let Some(d) = nth_weekday_of_month(year, 1, Weekday::Mon, 3) {
+        holidays.push(("MLK Day", vec![d]));
+    }
+
+    // Spring Break: full week (Mon-Sat) starting the 2nd or 3rd Monday of March
+    // UTSA typically uses the 2nd full week of March
+    if let Some(mon) = nth_weekday_of_month(year, 3, Weekday::Mon, 2) {
+        holidays.push(("Spring Break", date_range(mon, 6)));
+    }
+
+    holidays
+}
 
 /// Generate an ICS file for a course
 #[poise::command(slash_command, prefix_command)]
@@ -329,10 +291,16 @@ fn generate_event_content(
             }
 
             // Collect holiday names for reporting
+            let start_year = meeting_time.date_range.start.year();
+            let end_year = meeting_time.date_range.end.year();
+            let all_holidays: Vec<_> = (start_year..=end_year)
+                .flat_map(compute_holidays_for_year)
+                .collect();
+
             let mut holiday_names = Vec::new();
-            for (holiday_name, holiday) in UNIVERSITY_HOLIDAYS {
+            for (holiday_name, holiday_dates) in &all_holidays {
                 for &exception_date in &holiday_exceptions {
-                    if holiday.contains_date(exception_date) {
+                    if holiday_dates.contains(&exception_date) {
                         holiday_names.push(format!(
                             "{} ({})",
                             holiday_name,
@@ -344,6 +312,7 @@ fn generate_event_content(
             holiday_names.sort();
             holiday_names.dedup();
 
+            event_content.push_str("END:VEVENT\r\n");
             return Ok((event_content, holiday_names));
         }
     }
@@ -362,32 +331,18 @@ fn class_meets_on_date(meeting_time: &MeetingScheduleInfo, date: NaiveDate) -> b
 
 /// Get holiday dates that fall within the course date range and would conflict with class meetings
 fn get_holiday_exceptions(meeting_time: &MeetingScheduleInfo) -> Vec<NaiveDate> {
-    let mut exceptions = Vec::new();
-
-    // Get the year range from the course date range
     let start_year = meeting_time.date_range.start.year();
     let end_year = meeting_time.date_range.end.year();
 
-    for (_, holiday) in UNIVERSITY_HOLIDAYS {
-        // Check for the holiday in each year of the course
-        for year in start_year..=end_year {
-            let holiday_dates = holiday.get_dates_for_year(year);
-
-            for holiday_date in holiday_dates {
-                // Check if the holiday falls within the course date range
-                if holiday_date >= meeting_time.date_range.start
-                    && holiday_date <= meeting_time.date_range.end
-                {
-                    // Check if the class would actually meet on this day
-                    if class_meets_on_date(meeting_time, holiday_date) {
-                        exceptions.push(holiday_date);
-                    }
-                }
-            }
-        }
-    }
-
-    exceptions
+    (start_year..=end_year)
+        .flat_map(compute_holidays_for_year)
+        .flat_map(|(_, dates)| dates)
+        .filter(|&date| {
+            date >= meeting_time.date_range.start
+                && date <= meeting_time.date_range.end
+                && class_meets_on_date(meeting_time, date)
+        })
+        .collect()
 }
 
 /// Generate EXDATE property for holiday exceptions

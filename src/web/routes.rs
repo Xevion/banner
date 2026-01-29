@@ -3,7 +3,7 @@
 use axum::{
     Router,
     body::Body,
-    extract::Request,
+    extract::{Request, State},
     response::{Json, Response},
     routing::get,
 };
@@ -17,6 +17,9 @@ use http::header;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, time::Duration};
+
+use crate::state::AppState;
+use crate::status::ServiceStatus;
 #[cfg(not(feature = "embed-assets"))]
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::{classify::ServerErrorsFailureClass, timeout::TimeoutLayer, trace::TraceLayer};
@@ -63,11 +66,12 @@ fn set_caching_headers(response: &mut Response, path: &str, etag: &str) {
 }
 
 /// Creates the web server router
-pub fn create_router() -> Router {
+pub fn create_router(app_state: AppState) -> Router {
     let api_router = Router::new()
         .route("/health", get(health))
         .route("/status", get(status))
-        .route("/metrics", get(metrics));
+        .route("/metrics", get(metrics))
+        .with_state(app_state);
 
     let mut router = Router::new().nest("/api", api_router);
 
@@ -155,7 +159,7 @@ async fn handle_spa_fallback_with_headers(uri: Uri, request_headers: HeaderMap) 
 
         // Check if client has a matching ETag (conditional request)
         if let Some(etag) = request_headers.get(header::IF_NONE_MATCH)
-            && metadata.etag_matches(etag.to_str().unwrap())
+            && etag.to_str().is_ok_and(|s| metadata.etag_matches(s))
         {
             return StatusCode::NOT_MODIFIED.into_response();
         }
@@ -191,7 +195,7 @@ async fn handle_spa_fallback_with_headers(uri: Uri, request_headers: HeaderMap) 
 
             // Check if client has a matching ETag for index.html
             if let Some(etag) = request_headers.get(header::IF_NONE_MATCH)
-                && metadata.etag_matches(etag.to_str().unwrap())
+                && etag.to_str().is_ok_and(|s| metadata.etag_matches(s))
             {
                 return StatusCode::NOT_MODIFIED.into_response();
             }
@@ -218,69 +222,45 @@ async fn health() -> Json<Value> {
 }
 
 #[derive(Serialize)]
-enum Status {
-    Disabled,
-    Connected,
-    Active,
-    Healthy,
-    Error,
-}
-
-#[derive(Serialize)]
 struct ServiceInfo {
     name: String,
-    status: Status,
+    status: ServiceStatus,
 }
 
 #[derive(Serialize)]
 struct StatusResponse {
-    status: Status,
+    status: ServiceStatus,
     version: String,
     commit: String,
     services: BTreeMap<String, ServiceInfo>,
 }
 
 /// Status endpoint showing bot and system status
-async fn status() -> Json<StatusResponse> {
+async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     let mut services = BTreeMap::new();
 
-    // Bot service status - hardcoded as disabled for now
-    services.insert(
-        "bot".to_string(),
-        ServiceInfo {
-            name: "Bot".to_string(),
-            status: Status::Disabled,
-        },
-    );
+    for (name, svc_status) in state.service_statuses.all() {
+        services.insert(
+            name.clone(),
+            ServiceInfo {
+                name,
+                status: svc_status,
+            },
+        );
+    }
 
-    // Banner API status - always connected for now
-    services.insert(
-        "banner".to_string(),
-        ServiceInfo {
-            name: "Banner".to_string(),
-            status: Status::Connected,
-        },
-    );
-
-    // Discord status - hardcoded as disabled for now
-    services.insert(
-        "discord".to_string(),
-        ServiceInfo {
-            name: "Discord".to_string(),
-            status: Status::Disabled,
-        },
-    );
-
-    let overall_status = if services.values().any(|s| matches!(s.status, Status::Error)) {
-        Status::Error
-    } else if services
-        .values()
-        .all(|s| matches!(s.status, Status::Active | Status::Connected))
+    let overall_status = if services.values().any(|s| matches!(s.status, ServiceStatus::Error)) {
+        ServiceStatus::Error
+    } else if !services.is_empty()
+        && services
+            .values()
+            .all(|s| matches!(s.status, ServiceStatus::Active | ServiceStatus::Connected))
     {
-        Status::Active
+        ServiceStatus::Active
+    } else if services.is_empty() {
+        ServiceStatus::Disabled
     } else {
-        // If we have any Disabled services but no errors, show as Healthy
-        Status::Healthy
+        ServiceStatus::Active
     };
 
     Json(StatusResponse {

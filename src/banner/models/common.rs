@@ -11,6 +11,7 @@ pub struct Pair {
 pub type BannerTerm = Pair;
 
 /// Represents an instructor in the Banner system
+#[allow(dead_code)]
 pub type Instructor = Pair;
 
 impl BannerTerm {

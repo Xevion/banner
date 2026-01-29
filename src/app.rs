@@ -12,6 +12,7 @@ use sqlx::postgres::PgPoolOptions;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
+use anyhow::Context;
 use tracing::{error, info};
 
 /// Main application struct containing all necessary components
@@ -36,7 +37,7 @@ impl App {
                 }
             }))
             .extract()
-            .expect("Failed to load config");
+            .context("Failed to load config")?;
 
         // Check if the database URL is via private networking
         let is_private = config.database_url.contains("railway.internal");
@@ -52,7 +53,7 @@ impl App {
             .max_lifetime(Duration::from_secs(60 * 30))
             .connect(&config.database_url)
             .await
-            .expect("Failed to create database pool");
+            .context("Failed to create database pool")?;
 
         info!(
             is_private = is_private,
@@ -65,7 +66,7 @@ impl App {
         sqlx::migrate!("./migrations")
             .run(&db_pool)
             .await
-            .expect("Failed to run database migrations");
+            .context("Failed to run database migrations")?;
         info!("Database migrations completed successfully");
 
         // Create BannerApi and AppState
@@ -73,7 +74,7 @@ impl App {
             config.banner_base_url.clone(),
             config.rate_limiting.clone(),
         )
-        .expect("Failed to create BannerApi");
+        .context("Failed to create BannerApi")?;
 
         let banner_api_arc = Arc::new(banner_api);
         let app_state = AppState::new(banner_api_arc.clone(), db_pool.clone());
@@ -91,7 +92,7 @@ impl App {
     pub fn setup_services(&mut self, services: &[ServiceName]) -> Result<(), anyhow::Error> {
         // Register enabled services with the manager
         if services.contains(&ServiceName::Web) {
-            let web_service = Box::new(WebService::new(self.config.port));
+            let web_service = Box::new(WebService::new(self.config.port, self.app_state.clone()));
             self.service_manager
                 .register_service(ServiceName::Web.as_str(), web_service);
         }
@@ -100,6 +101,7 @@ impl App {
             let scraper_service = Box::new(ScraperService::new(
                 self.db_pool.clone(),
                 self.banner_api.clone(),
+                self.app_state.service_statuses.clone(),
             ));
             self.service_manager
                 .register_service(ServiceName::Scraper.as_str(), scraper_service);
@@ -130,12 +132,13 @@ impl App {
             status_shutdown_rx,
         )
         .await
-        .expect("Failed to create Discord client");
+        .context("Failed to create Discord client")?;
 
         let bot_service = Box::new(BotService::new(
             client,
             status_task_handle,
             status_shutdown_tx,
+            self.app_state.service_statuses.clone(),
         ));
 
         self.service_manager

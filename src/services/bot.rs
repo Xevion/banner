@@ -2,6 +2,7 @@ use super::Service;
 use crate::bot::{Data, get_commands};
 use crate::config::Config;
 use crate::state::AppState;
+use crate::status::{ServiceStatus, ServiceStatusRegistry};
 use num_format::{Locale, ToFormattedString};
 use serenity::Client;
 use serenity::all::{ActivityData, ClientBuilder, GatewayIntents};
@@ -17,6 +18,7 @@ pub struct BotService {
     shard_manager: Arc<serenity::gateway::ShardManager>,
     status_task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     status_shutdown_tx: Option<broadcast::Sender<()>>,
+    service_statuses: ServiceStatusRegistry,
 }
 
 impl BotService {
@@ -97,6 +99,8 @@ impl BotService {
                         status_shutdown_rx,
                     );
                     *status_task_handle.lock().await = Some(handle);
+
+                    app_state.service_statuses.set("bot", ServiceStatus::Active);
 
                     Ok(Data { app_state })
                 })
@@ -186,6 +190,7 @@ impl BotService {
         client: Client,
         status_task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
         status_shutdown_tx: broadcast::Sender<()>,
+        service_statuses: ServiceStatusRegistry,
     ) -> Self {
         let shard_manager = client.shard_manager.clone();
 
@@ -194,6 +199,7 @@ impl BotService {
             shard_manager,
             status_task_handle,
             status_shutdown_tx: Some(status_shutdown_tx),
+            service_statuses,
         }
     }
 }
@@ -218,6 +224,7 @@ impl Service for BotService {
     }
 
     async fn shutdown(&mut self) -> Result<(), anyhow::Error> {
+        self.service_statuses.set("bot", ServiceStatus::Disabled);
         // Signal status update task to stop
         if let Some(status_shutdown_tx) = self.status_shutdown_tx.take() {
             let _ = status_shutdown_tx.send(());

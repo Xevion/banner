@@ -31,11 +31,13 @@ describe("BannerApiClient", () => {
 
   it("should fetch status data", async () => {
     const mockStatus = {
-      status: "operational",
-      bot: { status: "running", uptime: "1h" },
-      cache: { status: "connected", courses: "100", subjects: "50" },
-      banner_api: { status: "connected" },
-      timestamp: "2024-01-01T00:00:00Z",
+      status: "active",
+      version: "0.3.4",
+      commit: "abc1234",
+      services: {
+        web: { name: "web", status: "active" },
+        database: { name: "database", status: "connected" },
+      },
     };
 
     vi.mocked(fetch).mockResolvedValueOnce({

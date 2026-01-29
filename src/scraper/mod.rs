@@ -4,6 +4,7 @@ pub mod worker;
 
 use crate::banner::BannerApi;
 use crate::services::Service;
+use crate::status::{ServiceStatus, ServiceStatusRegistry};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -20,6 +21,7 @@ use self::worker::Worker;
 pub struct ScraperService {
     db_pool: PgPool,
     banner_api: Arc<BannerApi>,
+    service_statuses: ServiceStatusRegistry,
     scheduler_handle: Option<JoinHandle<()>>,
     worker_handles: Vec<JoinHandle<()>>,
     shutdown_tx: Option<broadcast::Sender<()>>,
@@ -27,10 +29,11 @@ pub struct ScraperService {
 
 impl ScraperService {
     /// Creates a new `ScraperService`.
-    pub fn new(db_pool: PgPool, banner_api: Arc<BannerApi>) -> Self {
+    pub fn new(db_pool: PgPool, banner_api: Arc<BannerApi>, service_statuses: ServiceStatusRegistry) -> Self {
         Self {
             db_pool,
             banner_api,
+            service_statuses,
             scheduler_handle: None,
             worker_handles: Vec::new(),
             shutdown_tx: None,
@@ -66,6 +69,7 @@ impl ScraperService {
             worker_count = self.worker_handles.len(),
             "Spawned worker tasks"
         );
+        self.service_statuses.set("scraper", ServiceStatus::Active);
     }
 }
 
@@ -82,6 +86,7 @@ impl Service for ScraperService {
     }
 
     async fn shutdown(&mut self) -> Result<(), anyhow::Error> {
+        self.service_statuses.set("scraper", ServiceStatus::Disabled);
         info!("Shutting down scraper service");
 
         // Send shutdown signal to all tasks

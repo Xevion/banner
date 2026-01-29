@@ -24,8 +24,8 @@ pub async fn search(
     // Defer the response since this might take a while
     ctx.defer().await?;
 
-    // Build the search query
-    let mut query = SearchQuery::new().credits(3, 6);
+    // Build the search query — no default credit filter so all courses are visible
+    let mut query = SearchQuery::new();
 
     if let Some(title) = title {
         query = query.title(title);

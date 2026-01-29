@@ -1,4 +1,6 @@
 use super::Service;
+use crate::state::AppState;
+use crate::status::ServiceStatus;
 use crate::web::create_router;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
@@ -8,14 +10,45 @@ use tracing::{info, trace, warn};
 /// Web server service implementation
 pub struct WebService {
     port: u16,
+    app_state: AppState,
     shutdown_tx: Option<broadcast::Sender<()>>,
 }
 
 impl WebService {
-    pub fn new(port: u16) -> Self {
+    pub fn new(port: u16, app_state: AppState) -> Self {
         Self {
             port,
+            app_state,
             shutdown_tx: None,
+        }
+    }
+    /// Periodically pings the database and updates the "database" service status.
+    async fn db_health_check_loop(
+        state: AppState,
+        mut shutdown_rx: broadcast::Receiver<()>,
+    ) {
+        use std::time::Duration;
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    let status = match sqlx::query_scalar::<_, i32>("SELECT 1")
+                        .fetch_one(&state.db_pool)
+                        .await
+                    {
+                        Ok(_) => ServiceStatus::Connected,
+                        Err(e) => {
+                            warn!(error = %e, "DB health check failed");
+                            ServiceStatus::Error
+                        }
+                    };
+                    state.service_statuses.set("database", status);
+                }
+                _ = shutdown_rx.recv() => {
+                    break;
+                }
+            }
         }
     }
 }
@@ -28,11 +61,12 @@ impl Service for WebService {
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
         // Create the main router with Banner API routes
-        let app = create_router();
+        let app = create_router(self.app_state.clone());
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.port));
 
         let listener = TcpListener::bind(addr).await?;
+        self.app_state.service_statuses.set("web", ServiceStatus::Active);
         info!(
             service = "web",
             address = %addr,
@@ -42,7 +76,14 @@ impl Service for WebService {
 
         // Create internal shutdown channel for axum graceful shutdown
         let (shutdown_tx, mut shutdown_rx) = broadcast::channel(1);
-        self.shutdown_tx = Some(shutdown_tx);
+        self.shutdown_tx = Some(shutdown_tx.clone());
+
+        // Spawn background DB health check
+        let health_state = self.app_state.clone();
+        let health_shutdown_rx = shutdown_tx.subscribe();
+        tokio::spawn(async move {
+            Self::db_health_check_loop(health_state, health_shutdown_rx).await;
+        });
 
         // Use axum's graceful shutdown with the internal shutdown signal
         axum::serve(listener, app)

@@ -21,9 +21,9 @@ pub struct BannerApi {
     base_url: String,
 }
 
-#[allow(dead_code)]
 impl BannerApi {
     /// Creates a new Banner API client.
+    #[allow(dead_code)]
     pub fn new(base_url: String) -> Result<Self> {
         Self::new_with_config(base_url, RateLimitingConfig::default())
     }
@@ -228,30 +228,6 @@ impl BannerApi {
         max_results: i32,
     ) -> Result<Vec<Pair>> {
         self.get_list_endpoint("get_subject", search, term, offset, max_results)
-            .await
-    }
-
-    /// Retrieves a list of instructors from the Banner API.
-    pub async fn get_instructors(
-        &self,
-        search: &str,
-        term: &str,
-        offset: i32,
-        max_results: i32,
-    ) -> Result<Vec<Instructor>> {
-        self.get_list_endpoint("get_instructor", search, term, offset, max_results)
-            .await
-    }
-
-    /// Retrieves a list of campuses from the Banner API.
-    pub async fn get_campuses(
-        &self,
-        search: &str,
-        term: &str,
-        offset: i32,
-        max_results: i32,
-    ) -> Result<Vec<Pair>> {
-        self.get_list_endpoint("get_campus", search, term, offset, max_results)
             .await
     }
 

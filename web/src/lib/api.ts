@@ -6,7 +6,7 @@ export interface HealthResponse {
   timestamp: string;
 }
 
-export type Status = "Disabled" | "Connected" | "Active" | "Healthy" | "Error";
+export type Status = "starting" | "active" | "connected" | "disabled" | "error";
 
 export interface ServiceInfo {
   name: string;

@@ -37,6 +37,9 @@ const SERVICE_ICONS: Record<string, typeof Bot> = {
   bot: Bot,
   banner: Globe,
   discord: MessageCircle,
+  database: Activity,
+  web: Globe,
+  scraper: Clock,
 };
 
 interface ResponseTiming {
@@ -80,11 +83,11 @@ const formatNumber = (num: number): string => {
 
 const getStatusIcon = (status: Status | "Unreachable"): StatusIcon => {
   const statusMap: Record<Status | "Unreachable", StatusIcon> = {
-    Active: { icon: CheckCircle, color: "green" },
-    Connected: { icon: CheckCircle, color: "green" },
-    Healthy: { icon: CheckCircle, color: "green" },
-    Disabled: { icon: Circle, color: "gray" },
-    Error: { icon: XCircle, color: "red" },
+    active: { icon: CheckCircle, color: "green" },
+    connected: { icon: CheckCircle, color: "green" },
+    starting: { icon: Hourglass, color: "orange" },
+    disabled: { icon: Circle, color: "gray" },
+    error: { icon: XCircle, color: "red" },
     Unreachable: { icon: WifiOff, color: "red" },
   };
 
@@ -93,9 +96,9 @@ const getStatusIcon = (status: Status | "Unreachable"): StatusIcon => {
 
 const getOverallHealth = (state: StatusState): Status | "Unreachable" => {
   if (state.mode === "timeout") return "Unreachable";
-  if (state.mode === "error") return "Error";
+  if (state.mode === "error") return "error";
   if (state.mode === "response") return state.status.status;
-  return "Error";
+  return "error";
 };
 
 const getServices = (state: StatusState): Service[] => {
@@ -116,8 +119,8 @@ const StatusDisplay = ({ status }: { status: Status | "Unreachable" }) => {
       <Text
         size="2"
         style={{
-          color: status === "Disabled" ? "var(--gray-11)" : undefined,
-          opacity: status === "Disabled" ? 0.7 : undefined,
+          color: status === "disabled" ? "var(--gray-11)" : undefined,
+          opacity: status === "disabled" ? 0.7 : undefined,
         }}
       >
         {status}

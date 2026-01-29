@@ -90,7 +90,7 @@ pub async fn unlock_and_increment_retry(
         "UPDATE scrape_jobs
          SET locked_at = NULL, retry_count = retry_count + 1
          WHERE id = $1
-         RETURNING CASE WHEN retry_count + 1 < $2 THEN retry_count + 1 ELSE NULL END",
+         RETURNING CASE WHEN retry_count < $2 THEN retry_count ELSE NULL END",
     )
     .bind(job_id)
     .bind(max_retries)

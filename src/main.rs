@@ -18,6 +18,8 @@ mod scraper;
 mod services;
 mod signals;
 mod state;
+#[allow(dead_code)]
+mod status;
 mod web;
 
 #[tokio::main]
@@ -31,16 +33,16 @@ async fn main() -> ExitCode {
     let enabled_services: Vec<ServiceName> =
         determine_enabled_services(&args).expect("Failed to determine enabled services");
 
+    // Create and initialize the application
+    let mut app = App::new().await.expect("Failed to initialize application");
+
+    // Setup logging — must happen before any info!() calls to avoid silently dropped logs
+    setup_logging(app.config(), args.tracing);
+
     info!(
         enabled_services = ?enabled_services,
         "services configuration loaded"
     );
-
-    // Create and initialize the application
-    let mut app = App::new().await.expect("Failed to initialize application");
-
-    // Setup logging
-    setup_logging(app.config(), args.tracing);
 
     // Log application startup context
     info!(
