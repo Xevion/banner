@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::cli::{Args, ServiceName, determine_enabled_services};
+use crate::cli::{Args, ServiceName};
 use crate::logging::setup_logging;
 use clap::Parser;
 use std::process::ExitCode;
@@ -29,9 +29,8 @@ async fn main() -> ExitCode {
     // Parse CLI arguments
     let args = Args::parse();
 
-    // Determine which services should be enabled
-    let enabled_services: Vec<ServiceName> =
-        determine_enabled_services(&args).expect("Failed to determine enabled services");
+    // Always run all services
+    let enabled_services = ServiceName::all();
 
     // Create and initialize the application
     let mut app = App::new().await.expect("Failed to initialize application");

@@ -1,51 +1,280 @@
 set dotenv-load
-default_services := "bot,web,scraper"
 
 default:
     just --list
 
-# Run all checks (format, clippy, tests, lint)
-check:
-    cargo fmt --all -- --check
-    cargo clippy --all-features -- --deny warnings
-    cargo nextest run -E 'not test(export_bindings)'
-    bun run --cwd web check
-    bun run --cwd web test
+# Run all checks in parallel. Pass -f/--fix to auto-format and fix first.
+[script("bun")]
+check *flags:
+    const args = "{{flags}}".split(/\s+/).filter(Boolean);
+    let fix = false;
+    for (const arg of args) {
+      if (arg === "-f" || arg === "--fix") fix = true;
+      else { console.error(`Unknown flag: ${arg}`); process.exit(1); }
+    }
 
-# Generate TypeScript bindings from Rust types (ts-rs)
-bindings:
-    cargo test export_bindings
+    const run = (cmd) => {
+      const proc = Bun.spawnSync(cmd, { stdio: ["inherit", "inherit", "inherit"] });
+      if (proc.exitCode !== 0) process.exit(proc.exitCode);
+    };
 
-# Run all tests (Rust + frontend)
-test: test-rust test-web
+    if (fix) {
+      console.log("\x1b[1;36m→ Fixing...\x1b[0m");
+      run(["cargo", "fmt", "--all"]);
+      run(["bun", "run", "--cwd", "web", "format"]);
+      run(["cargo", "clippy", "--all-features", "--fix", "--allow-dirty", "--allow-staged",
+           "--", "--deny", "warnings"]);
+      console.log("\x1b[1;36m→ Verifying...\x1b[0m");
+    }
 
-# Run only Rust tests (excludes ts-rs bindings generation)
-test-rust *ARGS:
-    cargo nextest run -E 'not test(export_bindings)' {{ARGS}}
+    const checks = [
+      { name: "rustfmt",      cmd: ["cargo", "fmt", "--all", "--", "--check"] },
+      { name: "clippy",       cmd: ["cargo", "clippy", "--all-features", "--", "--deny", "warnings"] },
+      { name: "rust-test",    cmd: ["cargo", "nextest", "run", "-E", "not test(export_bindings)"] },
+      { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
+      { name: "biome",        cmd: ["bun", "run", "--cwd", "web", "format:check"] },
+      { name: "web-test",     cmd: ["bun", "run", "--cwd", "web", "test"] },
+      // { name: "sqlx-prepare", cmd: ["cargo", "sqlx", "prepare", "--check"] },
+    ];
 
-# Run only frontend tests
-test-web:
-    bun run --cwd web test
+    const isTTY = process.stderr.isTTY;
+    const start = Date.now();
+    const remaining = new Set(checks.map(c => c.name));
 
-# Quick check: clippy + tests + typecheck (skips formatting)
-check-quick:
-    cargo clippy --all-features -- --deny warnings
-    cargo nextest run -E 'not test(export_bindings)'
-    bun run --cwd web check
+    const promises = checks.map(async (check) => {
+      const proc = Bun.spawn(check.cmd, {
+        env: { ...process.env, FORCE_COLOR: "1" },
+        stdout: "pipe", stderr: "pipe",
+      });
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      await proc.exited;
+      return { ...check, stdout, stderr, exitCode: proc.exitCode,
+               elapsed: ((Date.now() - start) / 1000).toFixed(1) };
+    });
 
-# Run the Banner API search demo (hits live UTSA API, ~20s)
-search *ARGS:
-    cargo run -q --bin search -- {{ARGS}}
+    const interval = isTTY ? setInterval(() => {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      process.stderr.write(`\r\x1b[K${elapsed}s [${Array.from(remaining).join(", ")}]`);
+    }, 100) : null;
+
+    let anyFailed = false;
+    for (const promise of promises) {
+      const r = await promise;
+      remaining.delete(r.name);
+      if (isTTY) process.stderr.write(`\r\x1b[K`);
+      if (r.exitCode !== 0) {
+        anyFailed = true;
+        process.stdout.write(`\x1b[31m✗ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
+        if (r.stdout) process.stdout.write(r.stdout);
+        if (r.stderr) process.stderr.write(r.stderr);
+      } else {
+        process.stdout.write(`\x1b[32m✓ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
+      }
+    }
+
+    if (interval) clearInterval(interval);
+    if (isTTY) process.stderr.write(`\r\x1b[K`);
+    process.exit(anyFailed ? 1 : 0);
 
 # Format all Rust and TypeScript code
 format:
     cargo fmt --all
     bun run --cwd web format
 
-# Check formatting without modifying (CI-friendly)
-format-check:
-    cargo fmt --all -- --check
-    bun run --cwd web format:check
+# Run tests. Usage: just test [rust|web|<nextest filter args>]
+[script("bun")]
+test *args:
+    const input = "{{args}}".trim();
+    const run = (cmd) => {
+      const proc = Bun.spawnSync(cmd, { stdio: ["inherit", "inherit", "inherit"] });
+      if (proc.exitCode !== 0) process.exit(proc.exitCode);
+    };
+    if (input === "web") {
+      run(["bun", "run", "--cwd", "web", "test"]);
+    } else if (input === "rust") {
+      run(["cargo", "nextest", "run", "-E", "not test(export_bindings)"]);
+    } else if (input === "") {
+      run(["cargo", "nextest", "run", "-E", "not test(export_bindings)"]);
+      run(["bun", "run", "--cwd", "web", "test"]);
+    } else {
+      run(["cargo", "nextest", "run", ...input.split(/\s+/)]);
+    }
+
+# Generate TypeScript bindings from Rust types (ts-rs)
+bindings:
+    cargo test export_bindings
+
+# Run the Banner API search demo (hits live UTSA API, ~20s)
+search *ARGS:
+    cargo run -q --bin search -- {{ARGS}}
+
+# Pass args to binary after --: just dev -n -- --some-flag
+# Dev server. Flags: -f(rontend) -b(ackend) -W(no-watch) -n(o-build) -r(elease) -e(mbed) --tracing <fmt>
+[script("bun")]
+dev *flags:
+    const argv = "{{flags}}".split(/\s+/).filter(Boolean);
+
+    let frontendOnly = false, backendOnly = false;
+    let noWatch = false, noBuild = false, release = false, embed = false;
+    let tracing = "pretty";
+    const passthrough = [];
+
+    let i = 0;
+    let seenDashDash = false;
+    while (i < argv.length) {
+      const arg = argv[i];
+      if (seenDashDash) { passthrough.push(arg); i++; continue; }
+      if (arg === "--") { seenDashDash = true; i++; continue; }
+      if (arg.startsWith("--")) {
+        if (arg === "--frontend-only") frontendOnly = true;
+        else if (arg === "--backend-only") backendOnly = true;
+        else if (arg === "--no-watch") noWatch = true;
+        else if (arg === "--no-build") noBuild = true;
+        else if (arg === "--release") release = true;
+        else if (arg === "--embed") embed = true;
+        else if (arg === "--tracing") { tracing = argv[++i] || "pretty"; }
+        else { console.error(`Unknown flag: ${arg}`); process.exit(1); }
+      } else if (arg.startsWith("-") && arg.length > 1) {
+        for (const c of arg.slice(1)) {
+          if (c === "f") frontendOnly = true;
+          else if (c === "b") backendOnly = true;
+          else if (c === "W") noWatch = true;
+          else if (c === "n") noBuild = true;
+          else if (c === "r") release = true;
+          else if (c === "e") embed = true;
+          else { console.error(`Unknown flag: -${c}`); process.exit(1); }
+        }
+      } else { console.error(`Unknown argument: ${arg}`); process.exit(1); }
+      i++;
+    }
+
+    // -e implies -b (no point running Vite if assets are embedded)
+    if (embed) backendOnly = true;
+    // -n implies -W (no build means no watch)
+    if (noBuild) noWatch = true;
+
+    // Validate conflicting flags
+    if (frontendOnly && backendOnly) {
+      console.error("Cannot use -f and -b together (or -e implies -b)");
+      process.exit(1);
+    }
+
+    const runFrontend = !backendOnly;
+    const runBackend = !frontendOnly;
+    const profile = release ? "release" : "dev";
+    const profileDir = release ? "release" : "debug";
+
+    const procs = [];
+    const cleanup = () => { for (const p of procs) p.kill(); };
+    process.on("SIGINT", () => { cleanup(); process.exit(130); });
+    process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+
+    // Frontend: Vite dev server
+    if (runFrontend) {
+      const proc = Bun.spawn(["bun", "run", "--cwd", "web", "dev"], {
+        stdio: ["inherit", "inherit", "inherit"],
+      });
+      procs.push(proc);
+    }
+
+    // Backend
+    if (runBackend) {
+      const backendArgs = [`--tracing`, tracing, ...passthrough];
+      const bin = `target/${profileDir}/banner`;
+
+      if (noWatch) {
+        // Build first unless -n (skip build)
+        if (!noBuild) {
+          console.log(`\x1b[1;36m→ Building backend (${profile})...\x1b[0m`);
+          const cargoArgs = ["cargo", "build", "--bin", "banner"];
+          if (!embed) cargoArgs.push("--no-default-features");
+          if (release) cargoArgs.push("--release");
+          const build = Bun.spawnSync(cargoArgs, { stdio: ["inherit", "inherit", "inherit"] });
+          if (build.exitCode !== 0) { cleanup(); process.exit(build.exitCode); }
+        }
+
+        // Run the binary directly (no watch)
+        const { existsSync } = await import("fs");
+        if (!existsSync(bin)) {
+          console.error(`Binary not found: ${bin}`);
+          console.error(`Run 'just build${release ? "" : " -d"}' first, or remove -n to use bacon.`);
+          cleanup();
+          process.exit(1);
+        }
+        console.log(`\x1b[1;36m→ Running ${bin} (no watch)\x1b[0m`);
+        const proc = Bun.spawn([bin, ...backendArgs], {
+          stdio: ["inherit", "inherit", "inherit"],
+        });
+        procs.push(proc);
+      } else {
+        // Bacon watch mode
+        const baconArgs = ["bacon", "--headless", "run", "--"];
+        if (!embed) baconArgs.push("--no-default-features");
+        if (release) baconArgs.push("--profile", "release");
+        baconArgs.push("--", ...backendArgs);
+        const proc = Bun.spawn(baconArgs, {
+          stdio: ["inherit", "inherit", "inherit"],
+        });
+        procs.push(proc);
+      }
+    }
+
+    // Wait for any process to exit, then kill the rest
+    const results = procs.map((p, i) => p.exited.then(code => ({ i, code })));
+    const first = await Promise.race(results);
+    cleanup();
+    process.exit(first.code);
+
+# Production build. Flags: -d(ebug) -f(rontend-only) -b(ackend-only)
+[script("bun")]
+build *flags:
+    const argv = "{{flags}}".split(/\s+/).filter(Boolean);
+
+    let debug = false, frontendOnly = false, backendOnly = false;
+    for (const arg of argv) {
+      if (arg.startsWith("--")) {
+        if (arg === "--debug") debug = true;
+        else if (arg === "--frontend-only") frontendOnly = true;
+        else if (arg === "--backend-only") backendOnly = true;
+        else { console.error(`Unknown flag: ${arg}`); process.exit(1); }
+      } else if (arg.startsWith("-") && arg.length > 1) {
+        for (const c of arg.slice(1)) {
+          if (c === "d") debug = true;
+          else if (c === "f") frontendOnly = true;
+          else if (c === "b") backendOnly = true;
+          else { console.error(`Unknown flag: -${c}`); process.exit(1); }
+        }
+      } else { console.error(`Unknown argument: ${arg}`); process.exit(1); }
+    }
+
+    if (frontendOnly && backendOnly) {
+      console.error("Cannot use -f and -b together");
+      process.exit(1);
+    }
+
+    const run = (cmd) => {
+      const proc = Bun.spawnSync(cmd, { stdio: ["inherit", "inherit", "inherit"] });
+      if (proc.exitCode !== 0) process.exit(proc.exitCode);
+    };
+
+    const buildFrontend = !backendOnly;
+    const buildBackend = !frontendOnly;
+    const profile = debug ? "debug" : "release";
+
+    if (buildFrontend) {
+      console.log("\x1b[1;36m→ Building frontend...\x1b[0m");
+      run(["bun", "run", "--cwd", "web", "build"]);
+    }
+
+    if (buildBackend) {
+      console.log(`\x1b[1;36m→ Building backend (${profile})...\x1b[0m`);
+      const cmd = ["cargo", "build", "--bin", "banner"];
+      if (!debug) cmd.push("--release");
+      run(cmd);
+    }
 
 # Start PostgreSQL in Docker and update .env with connection string
 # Commands: start (default), reset, rm
@@ -114,86 +343,6 @@ db cmd="start":
       }
       await updateEnv();
     }
-
-# Auto-reloading frontend server
-frontend:
-    bun run --cwd web dev
-
-# Production build of frontend
-build-frontend:
-    bun run --cwd web build
-
-# Auto-reloading backend server (with embedded assets)
-backend *ARGS:
-    bacon --headless run -- -- {{ARGS}}
-
-# Auto-reloading backend server (no embedded assets, for dev proxy mode)
-backend-dev *ARGS:
-    bacon --headless run -- --no-default-features -- {{ARGS}}
-
-# Production build
-build:
-    bun run --cwd web build
-    cargo build --release --bin banner
-
-# Run auto-reloading development build with release characteristics
-dev-build *ARGS='--services web --tracing pretty': build-frontend
-    bacon --headless run -- --profile dev-release -- {{ARGS}}
-
-# Auto-reloading development build: Vite frontend + backend (no embedded assets, proxies to Vite)
-[parallel]
-dev *ARGS='--services web,bot': frontend (backend-dev ARGS)
-
-# Smoke test: start web server, hit API endpoints, verify responses
-[script("bash")]
-test-smoke port="18080":
-    set -euo pipefail
-    PORT={{port}}
-
-    cleanup() { kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null; }
-
-    # Start server in background
-    PORT=$PORT cargo run -q --no-default-features -- --services web --tracing json &
-    SERVER_PID=$!
-    trap cleanup EXIT
-
-    # Wait for server to be ready (up to 15s)
-    for i in $(seq 1 30); do
-        if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then break; fi
-        if ! kill -0 "$SERVER_PID" 2>/dev/null; then echo "FAIL: server exited early"; exit 1; fi
-        sleep 0.5
-    done
-
-    PASS=0; FAIL=0
-    check() {
-        local label="$1" url="$2" expected="$3"
-        body=$(curl -sf "$url") || { echo "FAIL: $label - request failed"; FAIL=$((FAIL+1)); return; }
-        if echo "$body" | grep -q "$expected"; then
-            echo "PASS: $label"
-            PASS=$((PASS+1))
-        else
-            echo "FAIL: $label - expected '$expected' in: $body"
-            FAIL=$((FAIL+1))
-        fi
-    }
-
-    check "GET /api/health" "http://localhost:$PORT/api/health" '"status":"healthy"'
-    check "GET /api/status" "http://localhost:$PORT/api/status" '"version"'
-    check "GET /api/metrics" "http://localhost:$PORT/api/metrics" '"banner_api"'
-
-    # Test 404
-    STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/nonexistent")
-    if [ "$STATUS" = "404" ]; then
-        echo "PASS: 404 on unknown route"
-        PASS=$((PASS+1))
-    else
-        echo "FAIL: expected 404, got $STATUS"
-        FAIL=$((FAIL+1))
-    fi
-
-    echo ""
-    echo "Results: $PASS passed, $FAIL failed"
-    [ "$FAIL" -eq 0 ]
 
 alias b := bun
 bun *ARGS:

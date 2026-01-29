@@ -115,5 +115,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 ENV HOSTS=0.0.0.0,[::]
 
 # Implicitly uses PORT environment variable
-# temporary: running without 'scraper' service
-CMD ["sh", "-c", "exec ./banner --services web,bot"]
+# Runs all services: web, bot, and scraper
+CMD ["sh", "-c", "exec ./banner"]
