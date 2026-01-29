@@ -24,7 +24,7 @@ let {
   <Tooltip.Content
     {side}
     sideOffset={6}
-    class="z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md max-w-72"
+    class="z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-md whitespace-pre-line max-w-max"
   >
     {text}
   </Tooltip.Content>

@@ -2,15 +2,17 @@
 import type { CourseResponse } from "$lib/api";
 import {
   abbreviateInstructor,
-  formatTime,
   formatMeetingDays,
+  formatTimeRange,
   formatLocation,
   getPrimaryInstructor,
   isMeetingTimeTBA,
   isTimeTBA,
+  formatMeetingTimesTooltip,
 } from "$lib/course";
 import CourseDetail from "./CourseDetail.svelte";
 import { fade, fly, slide } from "svelte/transition";
+import { flip } from "svelte/animate";
 import { onMount } from "svelte";
 import { OverlayScrollbars } from "overlayscrollbars";
 import { themeStore } from "$lib/stores/theme.svelte";
@@ -47,6 +49,13 @@ let expandedCrn: string | null = $state(null);
 let tableWrapper: HTMLDivElement = undefined!;
 let copiedCrn: string | null = $state(null);
 let copyTimeoutId: number | undefined;
+
+// Collapse expanded row when the dataset changes to avoid stale detail rows
+// and FLIP position calculation glitches from lingering expanded content
+$effect(() => {
+  courses; // track dependency
+  expandedCrn = null;
+});
 
 onMount(() => {
   const osInstance = OverlayScrollbars(tableWrapper, {
@@ -192,7 +201,7 @@ const columns: ColumnDef<CourseResponse, unknown>[] = [
     accessorFn: (row) => {
       if (row.meetingTimes.length === 0) return "";
       const mt = row.meetingTimes[0];
-      return `${formatMeetingDays(mt)} ${formatTime(mt.begin_time)}`;
+      return `${formatMeetingDays(mt)} ${formatTimeRange(mt.begin_time, mt.end_time)}`;
     },
     header: "Time",
     enableSorting: true,
@@ -227,6 +236,7 @@ const table = createSvelteTable({
   get data() {
     return courses;
   },
+  getRowId: (row) => String(row.crn),
   columns,
   state: {
     get sorting() {
@@ -438,8 +448,8 @@ const table = createSvelteTable({
                         </tr>
                     {/each}
                 </thead>
-                <tbody>
-                    {#if loading && courses.length === 0}
+                {#if loading && courses.length === 0}
+                    <tbody>
                         {#each Array(5) as _}
                             <tr class="border-b border-border">
                                 {#each table.getVisibleLeafColumns() as col}
@@ -458,7 +468,9 @@ const table = createSvelteTable({
                                 {/each}
                             </tr>
                         {/each}
-                    {:else if courses.length === 0}
+                    </tbody>
+                {:else if courses.length === 0}
+                    <tbody>
                         <tr>
                             <td
                                 colspan={visibleColumnIds.length}
@@ -467,9 +479,15 @@ const table = createSvelteTable({
                                 No courses found. Try adjusting your filters.
                             </td>
                         </tr>
-                    {:else}
-                        {#each table.getRowModel().rows as row (row.id)}
-                            {@const course = row.original}
+                    </tbody>
+                {:else}
+                    {#each table.getRowModel().rows as row, i (row.id)}
+                        {@const course = row.original}
+                        <tbody
+                            animate:flip={{ duration: 300 }}
+                            in:fade={{ duration: 200, delay: Math.min(i * 20, 400) }}
+                            out:fade={{ duration: 150 }}
+                        >
                             <tr
                                 class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn ===
                                 course.crn
@@ -600,39 +618,54 @@ const table = createSvelteTable({
                                         </td>
                                     {:else if colId === "time"}
                                         <td class="py-2 px-2 whitespace-nowrap">
-                                            {#if timeIsTBA(course)}
-                                                <span
-                                                    class="text-xs text-muted-foreground/60"
-                                                    >TBA</span
-                                                >
-                                            {:else}
-                                                {@const mt =
-                                                    course.meetingTimes[0]}
-                                                {#if !isMeetingTimeTBA(mt)}
-                                                    <span
-                                                        class="font-mono font-medium"
-                                                        >{formatMeetingDays(
-                                                            mt,
-                                                        )}</span
-                                                    >
-                                                    {" "}
-                                                {/if}
-                                                {#if !isTimeTBA(mt)}
-                                                    <span
-                                                        class="text-muted-foreground"
-                                                        >{formatTime(
-                                                            mt.begin_time,
-                                                        )}&ndash;{formatTime(
-                                                            mt.end_time,
-                                                        )}</span
-                                                    >
-                                                {:else}
+                                            <SimpleTooltip
+                                                text={formatMeetingTimesTooltip(course.meetingTimes)}
+                                                passthrough
+                                            >
+                                                {#if timeIsTBA(course)}
                                                     <span
                                                         class="text-xs text-muted-foreground/60"
                                                         >TBA</span
                                                     >
+                                                {:else}
+                                                    {@const mt =
+                                                        course.meetingTimes[0]}
+                                                    <span>
+                                                        {#if !isMeetingTimeTBA(mt)}
+                                                            <span
+                                                                class="font-mono font-medium"
+                                                                >{formatMeetingDays(
+                                                                    mt,
+                                                                )}</span
+                                                            >
+                                                            {" "}
+                                                        {/if}
+                                                        {#if !isTimeTBA(mt)}
+                                                            <span
+                                                                class="text-muted-foreground"
+                                                                >{formatTimeRange(
+                                                                    mt.begin_time,
+                                                                    mt.end_time,
+                                                                )}</span
+                                                            >
+                                                        {:else}
+                                                            <span
+                                                                class="text-xs text-muted-foreground/60"
+                                                                >TBA</span
+                                                            >
+                                                        {/if}
+                                                        {#if course.meetingTimes.length > 1}
+                                                            <span
+                                                                class="ml-1 text-xs text-muted-foreground/70 font-medium"
+                                                                >+{course
+                                                                    .meetingTimes
+                                                                    .length -
+                                                                    1}</span
+                                                            >
+                                                        {/if}
+                                                    </span>
                                                 {/if}
-                                            {/if}
+                                            </SimpleTooltip>
                                         </td>
                                     {:else if colId === "location"}
                                         <td class="py-2 px-2 whitespace-nowrap">
@@ -706,9 +739,9 @@ const table = createSvelteTable({
                                     </td>
                                 </tr>
                             {/if}
-                        {/each}
-                    {/if}
-                </tbody>
+                        </tbody>
+                    {/each}
+                {/if}
             </table>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>

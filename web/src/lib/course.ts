@@ -10,21 +10,29 @@ export function formatTime(time: string | null): string {
   return `${display}:${minutes} ${period}`;
 }
 
-/** Get day abbreviation string like "MWF" from a meeting time */
+/**
+ * Compact day abbreviation for table cells.
+ *
+ * Single day → 3-letter: "Mon", "Thu"
+ * Multi-day  → concatenated codes: "MWF", "TTh", "MTWTh", "TSa"
+ *
+ * Codes use single letters where unambiguous (M/T/W/F) and
+ * two letters where needed (Th/Sa/Su).
+ */
 export function formatMeetingDays(mt: DbMeetingTime): string {
-  const days: [boolean, string][] = [
-    [mt.monday, "M"],
-    [mt.tuesday, "T"],
-    [mt.wednesday, "W"],
-    [mt.thursday, "R"],
-    [mt.friday, "F"],
-    [mt.saturday, "S"],
-    [mt.sunday, "U"],
+  const dayDefs: [boolean, string, string][] = [
+    [mt.monday, "M", "Mon"],
+    [mt.tuesday, "T", "Tue"],
+    [mt.wednesday, "W", "Wed"],
+    [mt.thursday, "Th", "Thu"],
+    [mt.friday, "F", "Fri"],
+    [mt.saturday, "Sa", "Sat"],
+    [mt.sunday, "Su", "Sun"],
   ];
-  return days
-    .filter(([active]) => active)
-    .map(([, abbr]) => abbr)
-    .join("");
+  const active = dayDefs.filter(([a]) => a);
+  if (active.length === 0) return "";
+  if (active.length === 1) return active[0][2];
+  return active.map(([, code]) => code).join("");
 }
 
 /** Longer day names for detail view: single day → "Thursdays", multiple → "Mon, Wed, Fri" */
@@ -44,14 +52,38 @@ export function formatMeetingDaysLong(mt: DbMeetingTime): string {
   return active.map(([, short]) => short).join(", ");
 }
 
-/** Condensed meeting time: "MWF 9:00 AM–9:50 AM" */
+/**
+ * Format a time range with smart AM/PM elision.
+ *
+ * Same period:  "9:00–9:50 AM"
+ * Cross-period: "11:30 AM–12:20 PM"
+ * Missing:      "TBA"
+ */
+export function formatTimeRange(begin: string | null, end: string | null): string {
+  if (!begin || begin.length !== 4 || !end || end.length !== 4) return "TBA";
+
+  const bHours = parseInt(begin.slice(0, 2), 10);
+  const eHours = parseInt(end.slice(0, 2), 10);
+  const bPeriod = bHours >= 12 ? "PM" : "AM";
+  const ePeriod = eHours >= 12 ? "PM" : "AM";
+
+  const bDisplay = bHours > 12 ? bHours - 12 : bHours === 0 ? 12 : bHours;
+  const eDisplay = eHours > 12 ? eHours - 12 : eHours === 0 ? 12 : eHours;
+
+  const endStr = `${eDisplay}:${end.slice(2)} ${ePeriod}`;
+  if (bPeriod === ePeriod) {
+    return `${bDisplay}:${begin.slice(2)}–${endStr}`;
+  }
+  return `${bDisplay}:${begin.slice(2)} ${bPeriod}–${endStr}`;
+}
+
+/** Condensed meeting time: "MWF 9:00–9:50 AM" */
 export function formatMeetingTime(mt: DbMeetingTime): string {
   const days = formatMeetingDays(mt);
   if (!days) return "TBA";
-  const begin = formatTime(mt.begin_time);
-  const end = formatTime(mt.end_time);
-  if (begin === "TBA") return `${days} TBA`;
-  return `${days} ${begin}–${end}`;
+  const range = formatTimeRange(mt.begin_time, mt.end_time);
+  if (range === "TBA") return `${days} TBA`;
+  return `${days} ${range}`;
 }
 
 /**
@@ -149,6 +181,84 @@ export function formatLocationLong(mt: DbMeetingTime): string | null {
   const name = mt.building_description ?? mt.building;
   if (!name) return null;
   return mt.room ? `${name} ${mt.room}` : name;
+}
+
+/** Format a date as "Aug 26, 2024". Accepts YYYY-MM-DD or MM/DD/YYYY. */
+export function formatDateShort(dateStr: string): string {
+  let year: number, month: number, day: number;
+  if (dateStr.includes("-")) {
+    [year, month, day] = dateStr.split("-").map(Number);
+  } else if (dateStr.includes("/")) {
+    [month, day, year] = dateStr.split("/").map(Number);
+  } else {
+    return dateStr;
+  }
+  if (!year || !month || !day) return dateStr;
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+/**
+ * Verbose day names for tooltips: "Tuesdays & Thursdays", "Mondays, Wednesdays & Fridays".
+ * Single day → plural: "Thursdays".
+ */
+export function formatMeetingDaysVerbose(mt: DbMeetingTime): string {
+  const dayDefs: [boolean, string][] = [
+    [mt.monday, "Mondays"],
+    [mt.tuesday, "Tuesdays"],
+    [mt.wednesday, "Wednesdays"],
+    [mt.thursday, "Thursdays"],
+    [mt.friday, "Fridays"],
+    [mt.saturday, "Saturdays"],
+    [mt.sunday, "Sundays"],
+  ];
+  const active = dayDefs.filter(([a]) => a).map(([, name]) => name);
+  if (active.length === 0) return "";
+  if (active.length === 1) return active[0];
+  return active.slice(0, -1).join(", ") + " & " + active[active.length - 1];
+}
+
+/**
+ * Full verbose tooltip for a single meeting time:
+ * "Tuesdays & Thursdays, 4:15–5:30 PM\nMain Hall 2.206 · Aug 26 – Dec 12, 2024"
+ */
+export function formatMeetingTimeTooltip(mt: DbMeetingTime): string {
+  const days = formatMeetingDaysVerbose(mt);
+  const range = formatTimeRange(mt.begin_time, mt.end_time);
+  let line1: string;
+  if (!days && range === "TBA") {
+    line1 = "TBA";
+  } else if (!days) {
+    line1 = range;
+  } else if (range === "TBA") {
+    line1 = `${days}, TBA`;
+  } else {
+    line1 = `${days}, ${range}`;
+  }
+
+  const parts = [line1];
+
+  const loc = formatLocationLong(mt);
+  const dateRange =
+    mt.start_date && mt.end_date
+      ? `${formatDateShort(mt.start_date)} – ${formatDateShort(mt.end_date)}`
+      : null;
+
+  if (loc && dateRange) {
+    parts.push(`${loc}, ${dateRange}`);
+  } else if (loc) {
+    parts.push(loc);
+  } else if (dateRange) {
+    parts.push(dateRange);
+  }
+
+  return parts.join("\n");
+}
+
+/** Full verbose tooltip for all meeting times on a course, newline-separated. */
+export function formatMeetingTimesTooltip(meetingTimes: DbMeetingTime[]): string {
+  if (meetingTimes.length === 0) return "TBA";
+  return meetingTimes.map(formatMeetingTimeTooltip).join("\n\n");
 }
 
 /** Format credit hours display */
