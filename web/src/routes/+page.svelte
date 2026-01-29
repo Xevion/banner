@@ -201,11 +201,7 @@ function handlePageChange(newOffset: number) {
 </script>
 
 <div class="min-h-screen flex flex-col items-center p-5">
-  <div class="w-full max-w-6xl flex flex-col gap-6">
-    <!-- Title -->
-    <div class="text-center pt-8 pb-2">
-      <h1 class="text-2xl font-semibold text-foreground">UTSA Course Search</h1>
-    </div>
+  <div class="w-full max-w-6xl flex flex-col gap-6 pt-2">
 
     <!-- Search status + Filters -->
     <div class="flex flex-col gap-1.5">

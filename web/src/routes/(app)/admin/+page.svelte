@@ -14,7 +14,7 @@ onMount(async () => {
 });
 </script>
 
-<h1 class="mb-6 text-2xl font-bold">Dashboard</h1>
+<h1 class="mb-4 text-lg font-semibold text-foreground">Dashboard</h1>
 
 {#if error}
   <p class="text-destructive">{error}</p>
@@ -40,7 +40,7 @@ onMount(async () => {
     </div>
   </div>
 
-  <h2 class="mt-8 mb-4 text-lg font-semibold">Services</h2>
+  <h2 class="mt-6 mb-3 text-sm font-semibold text-foreground">Services</h2>
   <div class="bg-card border-border rounded-lg border">
     {#each status.services as service}
       <div class="border-border flex items-center justify-between border-b px-4 py-3 last:border-b-0">

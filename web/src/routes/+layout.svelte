@@ -3,7 +3,7 @@ import "overlayscrollbars/overlayscrollbars.css";
 import "./layout.css";
 import { page } from "$app/state";
 import PageTransition from "$lib/components/PageTransition.svelte";
-import ThemeToggle from "$lib/components/ThemeToggle.svelte";
+import NavBar from "$lib/components/NavBar.svelte";
 import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svelte";
 import { initNavigation } from "$lib/stores/navigation.svelte";
 import { themeStore } from "$lib/stores/theme.svelte";
@@ -11,6 +11,16 @@ import { Tooltip } from "bits-ui";
 import { onMount } from "svelte";
 
 let { children } = $props();
+
+const APP_PREFIXES = ["/profile", "/settings", "/admin"];
+
+/**
+ * Coarsened key so sub-route navigation within the (app) layout group
+ * doesn't re-trigger the root page transition — the shared layout handles its own.
+ */
+let transitionKey = $derived(
+  APP_PREFIXES.some((p) => page.url.pathname.startsWith(p)) ? "/app" : page.url.pathname
+);
 
 initNavigation();
 
@@ -27,11 +37,9 @@ onMount(() => {
 </script>
 
 <Tooltip.Provider>
-  <div class="fixed top-5 right-5 z-50">
-    <ThemeToggle />
-  </div>
+  <NavBar />
 
-  <PageTransition key={page.url.pathname}>
+  <PageTransition key={transitionKey}>
     {@render children()}
   </PageTransition>
 </Tooltip.Provider>

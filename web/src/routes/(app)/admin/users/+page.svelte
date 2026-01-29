@@ -29,7 +29,7 @@ async function toggleAdmin(user: User) {
 }
 </script>
 
-<h1 class="mb-6 text-2xl font-bold">Users</h1>
+<h1 class="mb-4 text-lg font-semibold text-foreground">Users</h1>
 
 {#if error}
   <p class="text-destructive mb-4">{error}</p>

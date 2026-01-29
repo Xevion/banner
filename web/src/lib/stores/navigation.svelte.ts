@@ -2,15 +2,22 @@ import { beforeNavigate } from "$app/navigation";
 
 export type NavDirection = "left" | "right" | "fade";
 
-/** Admin sidebar order — indexes determine slide direction for same-depth siblings */
-const ADMIN_NAV_ORDER = ["/admin", "/admin/scrape-jobs", "/admin/audit-log", "/admin/users"];
+/** Sidebar nav order — indexes determine slide direction for same-depth siblings */
+const SIDEBAR_NAV_ORDER = [
+  "/profile",
+  "/settings",
+  "/admin",
+  "/admin/jobs",
+  "/admin/audit",
+  "/admin/users",
+];
 
 function getDepth(path: string): number {
   return path.replace(/\/$/, "").split("/").filter(Boolean).length;
 }
 
-function getAdminIndex(path: string): number {
-  return ADMIN_NAV_ORDER.indexOf(path);
+function getSidebarIndex(path: string): number {
+  return SIDEBAR_NAV_ORDER.indexOf(path);
 }
 
 function computeDirection(from: string, to: string): NavDirection {
@@ -20,9 +27,9 @@ function computeDirection(from: string, to: string): NavDirection {
   if (toDepth > fromDepth) return "right";
   if (toDepth < fromDepth) return "left";
 
-  // Same depth — use admin sidebar ordering if both are admin routes
-  const fromIdx = getAdminIndex(from);
-  const toIdx = getAdminIndex(to);
+  // Same depth — use sidebar ordering if both are sidebar routes
+  const fromIdx = getSidebarIndex(from);
+  const toIdx = getSidebarIndex(to);
   if (fromIdx >= 0 && toIdx >= 0) {
     return toIdx > fromIdx ? "right" : "left";
   }

@@ -14,7 +14,7 @@ onMount(async () => {
 });
 </script>
 
-<h1 class="mb-6 text-2xl font-bold">Audit Log</h1>
+<h1 class="mb-4 text-lg font-semibold text-foreground">Audit Log</h1>
 
 {#if error}
   <p class="text-destructive">{error}</p>
