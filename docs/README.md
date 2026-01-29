@@ -4,7 +4,8 @@ This folder contains detailed documentation for the Banner project. This file ac
 
 ## Files
 
-- [`FEATURES.md`](FEATURES.md) - Current features, implemented functionality, and future roadmap
+- [`CHANGELOG.md`](CHANGELOG.md) - Notable changes by version
+- [`ROADMAP.md`](ROADMAP.md) - Planned features and priorities
 - [`BANNER.md`](BANNER.md) - General API documentation on the Banner system
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) - Technical implementation details, system design, and analysis
 

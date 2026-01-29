@@ -4,10 +4,33 @@
 
 The Banner project is built as a multi-service application with the following components:
 
-- **Discord Bot Service**: Handles Discord interactions and commands
-- **Web Service**: Serves the React frontend and provides API endpoints
-- **Scraper Service**: Background data collection and synchronization
-- **Database Layer**: PostgreSQL for persistent storage
+- **Discord Bot Service**: Handles Discord interactions and commands (Serenity/Poise)
+- **Web Service**: Axum HTTP server serving the SvelteKit frontend and REST API endpoints
+- **Scraper Service**: Background data collection and synchronization with job queue
+- **Database Layer**: PostgreSQL 17 for persistent storage (SQLx with compile-time verification)
+- **RateMyProfessors Client**: GraphQL-based bulk sync of professor ratings
+
+### Frontend Stack
+
+- **SvelteKit** with Svelte 5 runes (`$state`, `$derived`, `$effect`)
+- **Tailwind CSS v4** via `@tailwindcss/vite`
+- **bits-ui** for headless UI primitives (comboboxes, tooltips, dropdowns)
+- **TanStack Table** for interactive data tables with sorting and column control
+- **OverlayScrollbars** for styled, theme-aware scrollable areas
+- **ts-rs** generates TypeScript type bindings from Rust structs
+
+### API Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/health` | Health check |
+| `GET /api/status` | Service status, version, and commit hash |
+| `GET /api/metrics` | Basic metrics |
+| `GET /api/courses/search` | Paginated course search with filters (term, subject, query, open-only, sort) |
+| `GET /api/courses/:term/:crn` | Single course detail with instructors and RMP ratings |
+| `GET /api/terms` | Available terms from reference cache |
+| `GET /api/subjects?term=` | Subjects for a term, ordered by enrollment |
+| `GET /api/reference/:category` | Reference data lookups (campuses, instructional methods, etc.) |
 
 ## Technical Analysis
 

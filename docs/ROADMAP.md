@@ -3,12 +3,9 @@
 ## Now
 
 - **Notification and subscription system** - Subscribe to courses and get alerts on seat availability, waitlist movement, and detail changes (time, location, professor, seats). DB schema exists.
-- **RateMyProfessor integration** - Show professor ratings inline with search results and course details.
 - **Professor name search filter** - Filter search results by instructor. Backend code exists but is commented out.
-- **Subject/major search filter** - Search by department code (e.g. CS, MAT). Also partially implemented.
 - **Autocomplete for search fields** - Typeahead for course titles, course numbers, professors, and terms.
-- **Test coverage expansion** - Broaden coverage with pure function tests (term parsing, search parsing, job types), session/rate-limiter tests, and more DB integration tests.
-- **Web course search UI** - Add a browser-based course search interface to the dashboard, supplementing the Discord bot.
+- **Test coverage expansion** - Broaden coverage with session/rate-limiter tests and more DB integration tests.
 
 ## Soon
 
@@ -29,3 +26,10 @@
 - **CRN direct lookup** - Look up a course by its CRN without going through search.
 - **Metrics dashboard** - Surface scraper and service metrics visually on the web dashboard.
 - **Privileged error feedback** - Detailed error information surfaced to bot admins when commands fail.
+
+## Done
+
+- **Web course search UI** - Browser-based course search with interactive data table, sorting, pagination, and column controls. *(0.4.0)*
+- **RateMyProfessor integration** - Bulk professor sync via GraphQL with inline ratings in search results. *(0.4.0)*
+- **Subject/major search filter** - Multi-select subject filtering with searchable comboboxes. *(0.5.0)*
+- **Test coverage expansion** - Unit tests for course formatting, API client, query builder, CLI args, and config parsing. *(0.3.4–0.4.0)*
