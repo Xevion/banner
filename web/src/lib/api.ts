@@ -1,4 +1,3 @@
-// API client for Banner backend
 const API_BASE_URL = "/api";
 
 export interface HealthResponse {
@@ -57,5 +56,4 @@ export class BannerApiClient {
   }
 }
 
-// Export a default instance
 export const client = new BannerApiClient();

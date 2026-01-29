@@ -9,9 +9,8 @@ check:
     cargo fmt --all -- --check
     cargo clippy --all-features -- --deny warnings
     cargo nextest run
-    bun run --cwd web typecheck
-    bun run --cwd web lint
-    bun run --cwd web test --run
+    bun run --cwd web check
+    bun run --cwd web test
 
 # Run all tests (Rust + frontend)
 test: test-rust test-web
@@ -22,13 +21,13 @@ test-rust *ARGS:
 
 # Run only frontend tests
 test-web:
-    bun run --cwd web test --run
+    bun run --cwd web test
 
-# Quick check: clippy + tests only (skips formatting)
+# Quick check: clippy + tests + typecheck (skips formatting)
 check-quick:
     cargo clippy --all-features -- --deny warnings
     cargo nextest run
-    bun run --cwd web typecheck
+    bun run --cwd web check
 
 # Run the Banner API search demo (hits live UTSA API, ~20s)
 search *ARGS:

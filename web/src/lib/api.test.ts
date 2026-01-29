@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BannerApiClient } from "./api";
 
-// Mock fetch
 global.fetch = vi.fn();
 
 describe("BannerApiClient", () => {
