@@ -1,5 +1,16 @@
+<script module lang="ts">
+import type { AuditLogResponse } from "$lib/api";
+
+// Persisted across navigation so returning to the page shows cached data
+// instead of a skeleton loader. Timers are instance-scoped and restart on mount.
+let data = $state<AuditLogResponse | null>(null);
+let error = $state<string | null>(null);
+let refreshError = $state(false);
+let refreshInterval = 5_000;
+</script>
+
 <script lang="ts">
-import { type AuditLogEntry, type AuditLogResponse, client } from "$lib/api";
+import { type AuditLogEntry, client } from "$lib/api";
 import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import { FlexRender, createSvelteTable } from "$lib/components/ui/data-table/index.js";
 import { formatAbsoluteDate } from "$lib/date";
@@ -25,8 +36,6 @@ import {
 import { onDestroy, onMount } from "svelte";
 import { fade, slide } from "svelte/transition";
 
-let data = $state<AuditLogResponse | null>(null);
-let error = $state<string | null>(null);
 let expandedId: number | null = $state(null);
 
 // --- Live-updating clock for relative timestamps ---
@@ -44,9 +53,7 @@ function scheduleTick() {
 // Backoff increases on errors AND on 304 (no change). Resets to min on new data.
 const MIN_INTERVAL = 5_000;
 const MAX_INTERVAL = 60_000;
-let refreshInterval = MIN_INTERVAL;
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-let refreshError = $state(false);
 
 // Spinner stays visible for at least MIN_SPIN_MS so the animation isn't jarring.
 const MIN_SPIN_MS = 700;
