@@ -210,3 +210,116 @@ async fn test_batch_upsert_unique_constraint_crn_term(pool: PgPool) {
     assert_eq!(rows[1].0, "202520");
     assert_eq!(rows[1].1, 10);
 }
+
+#[sqlx::test]
+async fn test_batch_upsert_creates_audit_and_metric_entries(pool: PgPool) {
+    // Insert initial data — should NOT create audits/metrics (it's a fresh insert)
+    let initial = vec![helpers::make_course(
+        "50001",
+        "202510",
+        "CS",
+        "3443",
+        "App Programming",
+        10,
+        35,
+        0,
+        5,
+    )];
+    batch_upsert_courses(&initial, &pool).await.unwrap();
+
+    let (audit_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM course_audits")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        audit_count, 0,
+        "initial insert should not create audit entries"
+    );
+
+    let (metric_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM course_metrics")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        metric_count, 0,
+        "initial insert should not create metric entries"
+    );
+
+    // Update enrollment and wait_count
+    let updated = vec![helpers::make_course(
+        "50001",
+        "202510",
+        "CS",
+        "3443",
+        "App Programming",
+        20,
+        35,
+        2,
+        5,
+    )];
+    batch_upsert_courses(&updated, &pool).await.unwrap();
+
+    // Should have audit entries for enrollment and wait_count changes
+    let (audit_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM course_audits")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(
+        audit_count >= 2,
+        "should have audit entries for enrollment and wait_count changes, got {audit_count}"
+    );
+
+    // Should have exactly 1 metric entry
+    let (metric_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM course_metrics")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(metric_count, 1, "should have 1 metric snapshot");
+
+    // Verify metric values
+    let (enrollment, wait_count, seats): (i32, i32, i32) = sqlx::query_as(
+        "SELECT enrollment, wait_count, seats_available FROM course_metrics LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(enrollment, 20);
+    assert_eq!(wait_count, 2);
+    assert_eq!(seats, 15); // 35 - 20
+}
+
+#[sqlx::test]
+async fn test_batch_upsert_no_change_no_audit(pool: PgPool) {
+    // Insert then re-insert identical data — should produce zero audits/metrics
+    let course = vec![helpers::make_course(
+        "60001",
+        "202510",
+        "CS",
+        "1083",
+        "Intro to CS",
+        25,
+        30,
+        0,
+        5,
+    )];
+    batch_upsert_courses(&course, &pool).await.unwrap();
+    batch_upsert_courses(&course, &pool).await.unwrap();
+
+    let (audit_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM course_audits")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        audit_count, 0,
+        "identical re-upsert should not create audit entries"
+    );
+
+    let (metric_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM course_metrics")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        metric_count, 0,
+        "identical re-upsert should not create metric entries"
+    );
+}

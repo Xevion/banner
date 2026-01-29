@@ -72,6 +72,29 @@ export interface AuditLogResponse {
   entries: AuditLogEntry[];
 }
 
+export interface MetricEntry {
+  id: number;
+  courseId: number;
+  timestamp: string;
+  enrollment: number;
+  waitCount: number;
+  seatsAvailable: number;
+}
+
+export interface MetricsResponse {
+  metrics: MetricEntry[];
+  count: number;
+  timestamp: string;
+}
+
+export interface MetricsParams {
+  course_id?: number;
+  term?: string;
+  crn?: string;
+  range?: "1h" | "6h" | "24h" | "7d" | "30d";
+  limit?: number;
+}
+
 export interface SearchParams {
   term: string;
   subjects?: string[];
@@ -160,6 +183,17 @@ export class BannerApiClient {
 
   async getAdminAuditLog(): Promise<AuditLogResponse> {
     return this.request<AuditLogResponse>("/admin/audit-log");
+  }
+
+  async getMetrics(params?: MetricsParams): Promise<MetricsResponse> {
+    const query = new URLSearchParams();
+    if (params?.course_id !== undefined) query.set("course_id", String(params.course_id));
+    if (params?.term) query.set("term", params.term);
+    if (params?.crn) query.set("crn", params.crn);
+    if (params?.range) query.set("range", params.range);
+    if (params?.limit !== undefined) query.set("limit", String(params.limit));
+    const qs = query.toString();
+    return this.request<MetricsResponse>(`/metrics${qs ? `?${qs}` : ""}`);
   }
 }
 

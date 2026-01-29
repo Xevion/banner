@@ -244,19 +244,129 @@ async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
 }
 
 /// Metrics endpoint for monitoring
-async fn metrics() -> Json<Value> {
-    // For now, return basic metrics structure
-    Json(json!({
-        "banner_api": {
-            "status": "connected"
-        },
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    }))
+async fn metrics(
+    State(state): State<AppState>,
+    Query(params): Query<MetricsParams>,
+) -> Result<Json<Value>, (AxumStatusCode, String)> {
+    let limit = params.limit.clamp(1, 5000);
+
+    // Parse range shorthand, defaulting to 24h
+    let range_str = params.range.as_deref().unwrap_or("24h");
+    let duration = match range_str {
+        "1h" => chrono::Duration::hours(1),
+        "6h" => chrono::Duration::hours(6),
+        "24h" => chrono::Duration::hours(24),
+        "7d" => chrono::Duration::days(7),
+        "30d" => chrono::Duration::days(30),
+        _ => {
+            return Err((
+                AxumStatusCode::BAD_REQUEST,
+                format!("Invalid range '{range_str}'. Valid: 1h, 6h, 24h, 7d, 30d"),
+            ));
+        }
+    };
+    let since = chrono::Utc::now() - duration;
+
+    // Resolve course_id: explicit param takes priority, then term+crn lookup
+    let course_id = if let Some(id) = params.course_id {
+        Some(id)
+    } else if let (Some(term), Some(crn)) = (params.term.as_deref(), params.crn.as_deref()) {
+        let row: Option<(i32,)> =
+            sqlx::query_as("SELECT id FROM courses WHERE term_code = $1 AND crn = $2")
+                .bind(term)
+                .bind(crn)
+                .fetch_optional(&state.db_pool)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "Course lookup for metrics failed");
+                    (
+                        AxumStatusCode::INTERNAL_SERVER_ERROR,
+                        "Course lookup failed".to_string(),
+                    )
+                })?;
+        row.map(|(id,)| id)
+    } else {
+        None
+    };
+
+    // Build query dynamically based on filters
+    let metrics: Vec<(i32, i32, chrono::DateTime<chrono::Utc>, i32, i32, i32)> =
+        if let Some(cid) = course_id {
+            sqlx::query_as(
+                "SELECT id, course_id, timestamp, enrollment, wait_count, seats_available \
+             FROM course_metrics \
+             WHERE course_id = $1 AND timestamp >= $2 \
+             ORDER BY timestamp DESC \
+             LIMIT $3",
+            )
+            .bind(cid)
+            .bind(since)
+            .bind(limit)
+            .fetch_all(&state.db_pool)
+            .await
+        } else {
+            sqlx::query_as(
+                "SELECT id, course_id, timestamp, enrollment, wait_count, seats_available \
+             FROM course_metrics \
+             WHERE timestamp >= $1 \
+             ORDER BY timestamp DESC \
+             LIMIT $2",
+            )
+            .bind(since)
+            .bind(limit)
+            .fetch_all(&state.db_pool)
+            .await
+        }
+        .map_err(|e| {
+            tracing::error!(error = %e, "Metrics query failed");
+            (
+                AxumStatusCode::INTERNAL_SERVER_ERROR,
+                "Metrics query failed".to_string(),
+            )
+        })?;
+
+    let count = metrics.len();
+    let metrics_json: Vec<Value> = metrics
+        .into_iter()
+        .map(
+            |(id, course_id, timestamp, enrollment, wait_count, seats_available)| {
+                json!({
+                    "id": id,
+                    "courseId": course_id,
+                    "timestamp": timestamp.to_rfc3339(),
+                    "enrollment": enrollment,
+                    "waitCount": wait_count,
+                    "seatsAvailable": seats_available,
+                })
+            },
+        )
+        .collect();
+
+    Ok(Json(json!({
+        "metrics": metrics_json,
+        "count": count,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    })))
 }
 
 // ============================================================
 // Course search & detail API
 // ============================================================
+
+#[derive(Deserialize)]
+struct MetricsParams {
+    course_id: Option<i32>,
+    term: Option<String>,
+    crn: Option<String>,
+    /// Shorthand durations: "1h", "6h", "24h", "7d", "30d"
+    range: Option<String>,
+    #[serde(default = "default_metrics_limit")]
+    limit: i32,
+}
+
+fn default_metrics_limit() -> i32 {
+    500
+}
 
 #[derive(Deserialize)]
 struct SubjectsParams {
