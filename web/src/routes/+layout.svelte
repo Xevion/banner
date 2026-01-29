@@ -12,6 +12,12 @@ let { children } = $props();
 onMount(() => {
   themeStore.init();
 
+  // Enable theme transitions now that the page has rendered with the correct theme.
+  // Without this delay, the initial paint would animate from light to dark colors.
+  requestAnimationFrame(() => {
+    document.documentElement.classList.remove("no-transition");
+  });
+
   const osInstance = OverlayScrollbars(document.body, {
     scrollbars: {
       autoHide: "leave",

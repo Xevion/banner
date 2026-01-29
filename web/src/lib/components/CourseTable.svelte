@@ -10,6 +10,10 @@ import {
   isTimeTBA,
 } from "$lib/course";
 import CourseDetail from "./CourseDetail.svelte";
+import { slide } from "svelte/transition";
+import { onMount } from "svelte";
+import { OverlayScrollbars } from "overlayscrollbars";
+import { themeStore } from "$lib/stores/theme.svelte";
 import { createSvelteTable, FlexRender } from "$lib/components/ui/data-table/index.js";
 import {
   getCoreRowModel,
@@ -38,6 +42,33 @@ let {
 } = $props();
 
 let expandedCrn: string | null = $state(null);
+let tableWrapper: HTMLDivElement = undefined!;
+
+onMount(() => {
+  const osInstance = OverlayScrollbars(tableWrapper, {
+    overflow: { x: "scroll", y: "hidden" },
+    scrollbars: {
+      autoHide: "never",
+      theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
+    },
+  });
+
+  // React to theme changes
+  const unwatch = $effect.root(() => {
+    $effect(() => {
+      osInstance.options({
+        scrollbars: {
+          theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
+        },
+      });
+    });
+  });
+
+  return () => {
+    unwatch();
+    osInstance.destroy();
+  };
+});
 
 // Column visibility state
 let columnVisibility: VisibilityState = $state({});
@@ -298,10 +329,10 @@ const table = createSvelteTable({
 </div>
 
 <!-- Table with context menu on header -->
-<div class="overflow-x-auto">
+<div bind:this={tableWrapper} class="overflow-x-auto">
   <ContextMenu.Root>
     <ContextMenu.Trigger class="contents">
-      <table class="w-full border-collapse text-sm">
+      <table class="w-full min-w-[640px] border-collapse text-sm">
         <thead>
           {#each table.getHeaderGroups() as headerGroup}
             <tr class="border-b border-border text-left text-muted-foreground">
@@ -372,7 +403,7 @@ const table = createSvelteTable({
                       <span class="font-semibold">{course.subject} {course.courseNumber}</span>{#if course.sequenceNumber}<span class="text-muted-foreground">-{course.sequenceNumber}</span>{/if}
                     </td>
                   {:else if colId === "title"}
-                    <td class="py-2 px-2 font-medium">{course.title}</td>
+                    <td class="py-2 px-2 font-medium max-w-[200px] truncate" title={course.title}>{course.title}</td>
                   {:else if colId === "instructor"}
                     <td class="py-2 px-2 whitespace-nowrap">
                       {primaryInstructorDisplay(course)}
@@ -423,7 +454,9 @@ const table = createSvelteTable({
               {#if expandedCrn === course.crn}
                 <tr>
                   <td colspan={visibleColumnIds.length} class="p-0">
-                    <CourseDetail {course} />
+                    <div transition:slide={{ duration: 200 }}>
+                      <CourseDetail {course} />
+                    </div>
                   </td>
                 </tr>
               {/if}
