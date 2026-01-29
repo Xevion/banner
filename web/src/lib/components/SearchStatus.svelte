@@ -1,61 +1,53 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
-    import { relativeTime } from "$lib/time";
+import { onMount } from "svelte";
+import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
+import { relativeTime } from "$lib/time";
 
-    export interface SearchMeta {
-        totalCount: number;
-        durationMs: number;
-        timestamp: Date;
-    }
+export interface SearchMeta {
+  totalCount: number;
+  durationMs: number;
+  timestamp: Date;
+}
 
-    let { meta }: { meta: SearchMeta | null } = $props();
+let { meta }: { meta: SearchMeta | null } = $props();
 
-    let now = $state(new Date());
+let now = $state(new Date());
 
-    let formattedTime = $derived(
-        meta
-            ? meta.timestamp.toLocaleTimeString(undefined, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-              })
-            : "",
-    );
+let formattedTime = $derived(
+  meta
+    ? meta.timestamp.toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : ""
+);
 
-    let relativeTimeResult = $derived(
-        meta ? relativeTime(meta.timestamp, now) : null,
-    );
-    let relativeTimeText = $derived(relativeTimeResult?.text ?? "");
+let relativeTimeResult = $derived(meta ? relativeTime(meta.timestamp, now) : null);
+let relativeTimeText = $derived(relativeTimeResult?.text ?? "");
 
-    let countLabel = $derived(meta ? meta.totalCount.toLocaleString() : "");
-    let resultNoun = $derived(
-        meta ? (meta.totalCount !== 1 ? "results" : "result") : "",
-    );
-    let durationLabel = $derived(
-        meta ? `${Math.round(meta.durationMs)}ms` : "",
-    );
+let countLabel = $derived(meta ? meta.totalCount.toLocaleString() : "");
+let resultNoun = $derived(meta ? (meta.totalCount !== 1 ? "results" : "result") : "");
+let durationLabel = $derived(meta ? `${Math.round(meta.durationMs)}ms` : "");
 
-    let tooltipText = $derived(
-        meta ? `${relativeTimeText} · ${formattedTime}` : "",
-    );
+let tooltipText = $derived(meta ? `${relativeTimeText} · ${formattedTime}` : "");
 
-    onMount(() => {
-        let nowTimeoutId: ReturnType<typeof setTimeout> | null = null;
+onMount(() => {
+  let nowTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-        function scheduleNowTick() {
-            const delay = relativeTimeResult?.nextUpdateMs ?? 1000;
-            nowTimeoutId = setTimeout(() => {
-                now = new Date();
-                scheduleNowTick();
-            }, delay);
-        }
-        scheduleNowTick();
+  function scheduleNowTick() {
+    const delay = relativeTimeResult?.nextUpdateMs ?? 1000;
+    nowTimeoutId = setTimeout(() => {
+      now = new Date();
+      scheduleNowTick();
+    }, delay);
+  }
+  scheduleNowTick();
 
-        return () => {
-            if (nowTimeoutId) clearTimeout(nowTimeoutId);
-        };
-    });
+  return () => {
+    if (nowTimeoutId) clearTimeout(nowTimeoutId);
+  };
+});
 </script>
 
 <SimpleTooltip

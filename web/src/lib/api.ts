@@ -66,6 +66,10 @@ export interface AuditLogEntry {
   fieldChanged: string;
   oldValue: string;
   newValue: string;
+  subject: string | null;
+  courseNumber: string | null;
+  crn: string | null;
+  courseTitle: string | null;
 }
 
 export interface AuditLogResponse {
@@ -181,9 +185,38 @@ export class BannerApiClient {
     return this.request<ScrapeJobsResponse>("/admin/scrape-jobs");
   }
 
-  async getAdminAuditLog(): Promise<AuditLogResponse> {
-    return this.request<AuditLogResponse>("/admin/audit-log");
+  /**
+   * Fetch the audit log with conditional request support.
+   *
+   * Returns `null` when the server responds 304 (data unchanged).
+   * Stores and sends `Last-Modified` / `If-Modified-Since` automatically.
+   */
+  async getAdminAuditLog(): Promise<AuditLogResponse | null> {
+    const headers: Record<string, string> = {};
+    if (this._auditLastModified) {
+      headers["If-Modified-Since"] = this._auditLastModified;
+    }
+
+    const response = await this.fetchFn(`${this.baseUrl}/admin/audit-log`, { headers });
+
+    if (response.status === 304) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const lastMod = response.headers.get("Last-Modified");
+    if (lastMod) {
+      this._auditLastModified = lastMod;
+    }
+
+    return (await response.json()) as AuditLogResponse;
   }
+
+  /** Stored `Last-Modified` value for audit log conditional requests. */
+  private _auditLastModified: string | null = null;
 
   async getMetrics(params?: MetricsParams): Promise<MetricsResponse> {
     const query = new URLSearchParams();

@@ -1,69 +1,69 @@
 /**
  * Relative time formatting with adaptive refresh intervals.
  *
- * The key insight: a timestamp showing "3 seconds ago" needs to update every second,
- * but "2 hours ago" only needs to update every minute. This module provides both
+ * The key insight: a timestamp showing "3s" needs to update every second,
+ * but "2h 15m" only needs to update every minute. This module provides both
  * the formatted string and the optimal interval until the next meaningful change.
  */
 
 interface RelativeTimeResult {
-  /** The human-readable relative time string (e.g. "3 seconds ago") */
+  /** Compact relative time string (e.g. "9m 35s", "1h 23m", "3d") */
   text: string;
   /** Milliseconds until the displayed text would change */
   nextUpdateMs: number;
 }
 
 /**
- * Compute a relative time string and the interval until it next changes.
+ * Compute a compact relative time string and the interval until it next changes.
  *
- * Granularity tiers:
- * - < 60s: per-second ("1 second ago", "45 seconds ago")
- * - < 60m: per-minute ("1 minute ago", "12 minutes ago")
- * - < 24h: per-hour ("1 hour ago", "5 hours ago")
- * - >= 24h: per-day ("1 day ago", "3 days ago")
+ * Format tiers:
+ * - < 60s: seconds only ("45s")
+ * - < 1h: minutes + seconds ("9m 35s")
+ * - < 24h: hours + minutes ("1h 23m")
+ * - >= 24h: days only ("3d")
  */
 export function relativeTime(date: Date, ref: Date): RelativeTimeResult {
   const diffMs = ref.getTime() - date.getTime();
-  const seconds = Math.round(diffMs / 1000);
+  const totalSeconds = Math.floor(diffMs / 1000);
 
-  if (seconds < 1) {
-    return { text: "just now", nextUpdateMs: 1000 - (diffMs % 1000) || 1000 };
+  if (totalSeconds < 1) {
+    return { text: "now", nextUpdateMs: 1000 - (diffMs % 1000) || 1000 };
   }
 
-  if (seconds < 60) {
+  if (totalSeconds < 60) {
     const remainder = 1000 - (diffMs % 1000);
     return {
-      text: seconds === 1 ? "1 second ago" : `${seconds} seconds ago`,
+      text: `${totalSeconds}s`,
       nextUpdateMs: remainder || 1000,
     };
   }
 
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) {
-    // Update when the next minute boundary is crossed
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    const secs = totalSeconds % 60;
+    const remainder = 1000 - (diffMs % 1000);
+    return {
+      text: `${totalMinutes}m ${secs}s`,
+      nextUpdateMs: remainder || 1000,
+    };
+  }
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const mins = totalMinutes % 60;
     const msIntoCurrentMinute = diffMs % 60_000;
     const msUntilNextMinute = 60_000 - msIntoCurrentMinute;
     return {
-      text: minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`,
+      text: `${totalHours}h ${mins}m`,
       nextUpdateMs: msUntilNextMinute || 60_000,
     };
   }
 
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    const msIntoCurrentHour = diffMs % 3_600_000;
-    const msUntilNextHour = 3_600_000 - msIntoCurrentHour;
-    return {
-      text: hours === 1 ? "1 hour ago" : `${hours} hours ago`,
-      nextUpdateMs: msUntilNextHour || 3_600_000,
-    };
-  }
-
-  const days = Math.floor(hours / 24);
+  const days = Math.floor(totalHours / 24);
   const msIntoCurrentDay = diffMs % 86_400_000;
   const msUntilNextDay = 86_400_000 - msIntoCurrentDay;
   return {
-    text: days === 1 ? "1 day ago" : `${days} days ago`,
+    text: `${days}d`,
     nextUpdateMs: msUntilNextDay || 86_400_000,
   };
 }

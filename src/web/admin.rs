@@ -3,8 +3,9 @@
 //! All endpoints require the `AdminUser` extractor, returning 401/403 as needed.
 
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::Json;
+use axum::http::{HeaderMap, StatusCode, header};
+use axum::response::{IntoResponse, Json, Response};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -169,13 +170,49 @@ pub async fn list_scrape_jobs(
     Ok(Json(json!({ "jobs": jobs })))
 }
 
+/// Row returned by the audit-log query (audit + joined course fields).
+#[derive(sqlx::FromRow, Debug)]
+struct AuditRow {
+    id: i32,
+    course_id: i32,
+    timestamp: chrono::DateTime<chrono::Utc>,
+    field_changed: String,
+    old_value: String,
+    new_value: String,
+    // Joined from courses table (nullable in case the course was deleted)
+    subject: Option<String>,
+    course_number: Option<String>,
+    crn: Option<String>,
+    title: Option<String>,
+}
+
+/// Format a `DateTime<Utc>` as an HTTP-date (RFC 2822) for Last-Modified headers.
+fn to_http_date(dt: &DateTime<Utc>) -> String {
+    dt.format("%a, %d %b %Y %H:%M:%S GMT").to_string()
+}
+
+/// Parse an `If-Modified-Since` header value into a `DateTime<Utc>`.
+fn parse_if_modified_since(headers: &HeaderMap) -> Option<DateTime<Utc>> {
+    let val = headers.get(header::IF_MODIFIED_SINCE)?.to_str().ok()?;
+    DateTime::parse_from_rfc2822(val)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
 /// `GET /api/admin/audit-log` — List recent audit entries.
+///
+/// Supports `If-Modified-Since`: returns 304 when the newest entry hasn't changed.
 pub async fn list_audit_log(
     AdminUser(_user): AdminUser,
+    headers: HeaderMap,
     State(state): State<AppState>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let rows = sqlx::query_as::<_, crate::data::models::CourseAudit>(
-        "SELECT * FROM course_audits ORDER BY timestamp DESC LIMIT 200",
+) -> Result<Response, (StatusCode, Json<Value>)> {
+    let rows = sqlx::query_as::<_, AuditRow>(
+        "SELECT a.id, a.course_id, a.timestamp, a.field_changed, a.old_value, a.new_value, \
+                c.subject, c.course_number, c.crn, c.title \
+         FROM course_audits a \
+         LEFT JOIN courses c ON c.id = a.course_id \
+         ORDER BY a.timestamp DESC LIMIT 200",
     )
     .fetch_all(&state.db_pool)
     .await
@@ -187,6 +224,21 @@ pub async fn list_audit_log(
         )
     })?;
 
+    // Determine the latest timestamp across all rows (query is DESC so first row is newest)
+    let latest = rows.first().map(|r| r.timestamp);
+
+    // If the client sent If-Modified-Since and our data hasn't changed, return 304
+    if let (Some(since), Some(latest_ts)) = (parse_if_modified_since(&headers), latest) {
+        // Truncate to seconds for comparison (HTTP dates have second precision)
+        if latest_ts.timestamp() <= since.timestamp() {
+            let mut resp = StatusCode::NOT_MODIFIED.into_response();
+            if let Ok(val) = to_http_date(&latest_ts).parse() {
+                resp.headers_mut().insert(header::LAST_MODIFIED, val);
+            }
+            return Ok(resp);
+        }
+    }
+
     let entries: Vec<Value> = rows
         .iter()
         .map(|a| {
@@ -197,9 +249,19 @@ pub async fn list_audit_log(
                 "fieldChanged": a.field_changed,
                 "oldValue": a.old_value,
                 "newValue": a.new_value,
+                "subject": a.subject,
+                "courseNumber": a.course_number,
+                "crn": a.crn,
+                "courseTitle": a.title,
             })
         })
         .collect();
 
-    Ok(Json(json!({ "entries": entries })))
+    let mut resp = Json(json!({ "entries": entries })).into_response();
+    if let Some(latest_ts) = latest
+        && let Ok(val) = to_http_date(&latest_ts).parse()
+    {
+        resp.headers_mut().insert(header::LAST_MODIFIED, val);
+    }
+    Ok(resp)
 }
