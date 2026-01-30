@@ -7,6 +7,9 @@ use sqlx::PgPool;
 use super::models::UserSession;
 use crate::error::Result;
 
+/// Session lifetime: 7 days (in seconds).
+pub const SESSION_DURATION_SECS: u64 = 7 * 24 * 3600;
+
 /// Generate a cryptographically random 32-byte hex token.
 fn generate_token() -> String {
     let bytes: [u8; 32] = rand::rng().random();
@@ -48,13 +51,21 @@ pub async fn get_session(pool: &PgPool, token: &str) -> Result<Option<UserSessio
     .context("failed to get session")
 }
 
-/// Update the last-active timestamp for a session.
+/// Update the last-active timestamp and extend session expiry (sliding window).
 pub async fn touch_session(pool: &PgPool, token: &str) -> Result<()> {
-    sqlx::query("UPDATE user_sessions SET last_active_at = now() WHERE id = $1")
-        .bind(token)
-        .execute(pool)
-        .await
-        .context("failed to touch session")?;
+    sqlx::query(
+        r#"
+        UPDATE user_sessions
+        SET last_active_at = now(),
+            expires_at = now() + make_interval(secs => $2::double precision)
+        WHERE id = $1
+        "#,
+    )
+    .bind(token)
+    .bind(SESSION_DURATION_SECS as f64)
+    .execute(pool)
+    .await
+    .context("failed to touch session")?;
     Ok(())
 }
 
@@ -80,7 +91,6 @@ pub async fn delete_user_sessions(pool: &PgPool, user_id: i64) -> Result<u64> {
 }
 
 /// Delete all expired sessions. Returns the number of sessions cleaned up.
-#[allow(dead_code)] // Called by SessionCache::cleanup_expired (not yet wired to periodic task)
 pub async fn cleanup_expired(pool: &PgPool) -> Result<u64> {
     let result = sqlx::query("DELETE FROM user_sessions WHERE expires_at <= now()")
         .execute(pool)

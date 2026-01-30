@@ -1,3 +1,4 @@
+import { authStore } from "$lib/auth.svelte";
 import type {
   CandidateResponse,
   CodeDescription,
@@ -212,6 +213,10 @@ export class BannerApiClient {
 
     const response = await this.fetchFn(...args);
 
+    if (response.status === 401) {
+      authStore.handleUnauthorized();
+    }
+
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
@@ -228,6 +233,10 @@ export class BannerApiClient {
     if (init) args.push(init);
 
     const response = await this.fetchFn(...args);
+
+    if (response.status === 401) {
+      authStore.handleUnauthorized();
+    }
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);

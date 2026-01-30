@@ -51,6 +51,33 @@ impl WebService {
             }
         }
     }
+
+    /// Periodically cleans up expired sessions from the database and in-memory cache.
+    async fn session_cleanup_loop(state: AppState, mut shutdown_rx: broadcast::Receiver<()>) {
+        use std::time::Duration;
+        // Run every hour
+        let mut interval = tokio::time::interval(Duration::from_secs(3600));
+
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    match state.session_cache.cleanup_expired().await {
+                        Ok(deleted) => {
+                            if deleted > 0 {
+                                info!(deleted, "cleaned up expired sessions");
+                            }
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "session cleanup failed");
+                        }
+                    }
+                }
+                _ = shutdown_rx.recv() => {
+                    break;
+                }
+            }
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -85,6 +112,13 @@ impl Service for WebService {
         let health_shutdown_rx = shutdown_tx.subscribe();
         tokio::spawn(async move {
             Self::db_health_check_loop(health_state, health_shutdown_rx).await;
+        });
+
+        // Spawn session cleanup task
+        let cleanup_state = self.app_state.clone();
+        let cleanup_shutdown_rx = shutdown_tx.subscribe();
+        tokio::spawn(async move {
+            Self::session_cleanup_loop(cleanup_state, cleanup_shutdown_rx).await;
         });
 
         // Use axum's graceful shutdown with the internal shutdown signal

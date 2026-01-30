@@ -233,9 +233,8 @@ pub(crate) async fn timeline(
                     s.active_during(local_date, wday_bit, slot_start_minutes, slot_end_minutes)
                 });
                 if active {
-                    *subject_totals
-                        .entry(course.subject.clone())
-                        .or_default() += course.enrollment as i64;
+                    *subject_totals.entry(course.subject.clone()).or_default() +=
+                        course.enrollment as i64;
                 }
             }
 

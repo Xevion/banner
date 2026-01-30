@@ -11,11 +11,15 @@ const staticTabs = [
 
 const APP_PREFIXES = ["/profile", "/settings", "/admin"];
 
-let profileTab = $derived({
-  href: authStore.isAuthenticated ? "/profile" : "/login",
-  label: authStore.isAuthenticated ? "Account" : "Login",
-  icon: User,
-});
+let profileTab = $derived(
+  authStore.isLoading
+    ? { href: "/login" as const, label: null, icon: User }
+    : {
+        href: authStore.isAuthenticated ? ("/profile" as const) : ("/login" as const),
+        label: authStore.isAuthenticated ? "Account" : "Login",
+        icon: User,
+      }
+);
 
 function isActive(tabHref: string): boolean {
   if (tabHref === "/") return page.url.pathname === "/";
@@ -50,7 +54,7 @@ function isActive(tabHref: string): boolean {
             : 'text-muted-foreground hover:text-foreground hover:bg-background/50'}"
       >
         <User size={15} strokeWidth={2} />
-        {profileTab.label}
+        {#if profileTab.label}{profileTab.label}{/if}
       </a>
       <ThemeToggle />
     </div>

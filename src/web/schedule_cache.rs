@@ -9,8 +9,8 @@
 use chrono::NaiveDate;
 use serde_json::Value;
 use sqlx::PgPool;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::watch;
 use tracing::{debug, error, info};
 
@@ -141,11 +141,10 @@ struct ScheduleRow {
 async fn load_snapshot(pool: &PgPool) -> anyhow::Result<ScheduleSnapshot> {
     let start = std::time::Instant::now();
 
-    let rows: Vec<ScheduleRow> = sqlx::query_as(
-        "SELECT subject, enrollment, meeting_times FROM courses",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<ScheduleRow> =
+        sqlx::query_as("SELECT subject, enrollment, meeting_times FROM courses")
+            .fetch_all(pool)
+            .await?;
 
     let courses: Vec<CachedCourse> = rows
         .into_iter()

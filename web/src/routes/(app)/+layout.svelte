@@ -15,7 +15,7 @@ import {
   User,
   Users,
 } from "@lucide/svelte";
-import { onMount, tick } from "svelte";
+import { tick } from "svelte";
 
 let { children } = $props();
 
@@ -38,12 +38,6 @@ $effect(() => {
     boundaryReset = null;
     errorPathname = null;
     tick().then(() => reset());
-  }
-});
-
-onMount(async () => {
-  if (authStore.isLoading) {
-    await authStore.init();
   }
 });
 

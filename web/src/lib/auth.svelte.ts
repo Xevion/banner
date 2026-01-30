@@ -60,6 +60,13 @@ class AuthStore {
     }
   }
 
+  /** Idempotently mark the session as lost. Called by apiFetch on 401. */
+  handleUnauthorized() {
+    if (this.state.mode !== "unauthenticated") {
+      this.state = { mode: "unauthenticated" };
+    }
+  }
+
   login() {
     window.location.href = "/api/auth/login";
   }

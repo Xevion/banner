@@ -108,7 +108,6 @@ impl SessionCache {
     /// Delete expired sessions from the database and sweep the in-memory cache.
     ///
     /// Returns the number of sessions deleted from the database.
-    #[allow(dead_code)] // Intended for periodic cleanup task (not yet wired)
     pub async fn cleanup_expired(&self) -> anyhow::Result<u64> {
         let deleted = crate::data::sessions::cleanup_expired(&self.db_pool).await?;
 

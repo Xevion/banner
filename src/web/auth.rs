@@ -235,7 +235,7 @@ pub async fn auth_callback(
     let session = crate::data::sessions::create_session(
         &state.db_pool,
         discord_id,
-        Duration::from_secs(7 * 24 * 3600),
+        Duration::from_secs(crate::data::sessions::SESSION_DURATION_SECS),
     )
     .await
     .map_err(|e| {
@@ -248,7 +248,11 @@ pub async fn auth_callback(
 
     // 6. Build response with session cookie
     let secure = redirect_uri.starts_with("https://");
-    let cookie = session_cookie(&session.id, 604800, secure);
+    let cookie = session_cookie(
+        &session.id,
+        crate::data::sessions::SESSION_DURATION_SECS as i64,
+        secure,
+    );
 
     let redirect_to = if user.is_admin { "/admin" } else { "/" };
 
