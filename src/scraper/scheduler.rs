@@ -3,11 +3,14 @@ use crate::data::models::{ReferenceData, ScrapePriority, TargetType};
 use crate::data::scrape_jobs;
 use crate::error::Result;
 use crate::rmp::RmpClient;
+use crate::scraper::adaptive::{SubjectSchedule, SubjectStats, evaluate_subject};
 use crate::scraper::jobs::subject::SubjectJob;
 use crate::state::ReferenceCache;
 use crate::web::ws::{ScrapeJobDto, ScrapeJobEvent};
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, broadcast};
@@ -148,10 +151,9 @@ impl Scheduler {
 
     /// Core scheduling logic that analyzes data and creates scrape jobs.
     ///
-    /// Strategy:
-    /// 1. Fetch all subjects for the current term from Banner API
-    /// 2. Query existing jobs in a single batch query
-    /// 3. Create jobs only for subjects that don't have pending jobs
+    /// Uses adaptive scheduling to determine per-subject scrape intervals based
+    /// on recent change rates, failure patterns, and time of day. Only subjects
+    /// that are eligible (i.e. their cooldown has elapsed) are enqueued.
     ///
     /// This is a static method (not &self) to allow it to be called from spawned tasks.
     #[tracing::instrument(skip_all, fields(term))]
@@ -160,10 +162,6 @@ impl Scheduler {
         banner_api: &BannerApi,
         job_events_tx: Option<&broadcast::Sender<ScrapeJobEvent>>,
     ) -> Result<()> {
-        // For now, we will implement a simple baseline scheduling strategy:
-        // 1. Get a list of all subjects from the Banner API.
-        // 2. Query existing jobs for all subjects in a single query.
-        // 3. Create new jobs only for subjects that don't have existing jobs.
         let term = Term::get_current().inner().to_string();
 
         tracing::Span::current().record("term", term.as_str());
@@ -175,13 +173,70 @@ impl Scheduler {
             "Retrieved subjects from API"
         );
 
-        // Create payloads for all subjects
-        let subject_payloads: Vec<_> = subjects
-            .iter()
-            .map(|subject| json!({ "subject": subject.code }))
+        // Fetch per-subject stats and build a lookup map
+        let stats_rows = scrape_jobs::fetch_subject_stats(db_pool).await?;
+        let stats_map: HashMap<String, SubjectStats> = stats_rows
+            .into_iter()
+            .map(|row| {
+                let subject = row.subject.clone();
+                (subject, SubjectStats::from(row))
+            })
             .collect();
 
-        // Query existing jobs for all subjects in a single query
+        // Evaluate each subject using adaptive scheduling
+        let now = Utc::now();
+        let is_past_term = false; // Scheduler currently only fetches current term subjects
+        let mut eligible_subjects: Vec<String> = Vec::new();
+        let mut cooldown_count: usize = 0;
+        let mut paused_count: usize = 0;
+        let mut read_only_count: usize = 0;
+
+        for subject in &subjects {
+            let stats = stats_map.get(&subject.code).cloned().unwrap_or_else(|| {
+                // Cold start: no history for this subject
+                SubjectStats {
+                    subject: subject.code.clone(),
+                    recent_runs: 0,
+                    avg_change_ratio: 0.0,
+                    consecutive_zero_changes: 0,
+                    consecutive_empty_fetches: 0,
+                    recent_failure_count: 0,
+                    recent_success_count: 0,
+                    last_completed: DateTime::<Utc>::MIN_UTC,
+                }
+            });
+
+            match evaluate_subject(&stats, now, is_past_term) {
+                SubjectSchedule::Eligible(_) => {
+                    eligible_subjects.push(subject.code.clone());
+                }
+                SubjectSchedule::Cooldown(_) => cooldown_count += 1,
+                SubjectSchedule::Paused => paused_count += 1,
+                SubjectSchedule::ReadOnly => read_only_count += 1,
+            }
+        }
+
+        info!(
+            total = subjects.len(),
+            eligible = eligible_subjects.len(),
+            cooldown = cooldown_count,
+            paused = paused_count,
+            read_only = read_only_count,
+            "Adaptive scheduling decisions"
+        );
+
+        if eligible_subjects.is_empty() {
+            debug!("No eligible subjects to schedule");
+            return Ok(());
+        }
+
+        // Create payloads only for eligible subjects
+        let subject_payloads: Vec<_> = eligible_subjects
+            .iter()
+            .map(|code| json!({ "subject": code }))
+            .collect();
+
+        // Query existing jobs for eligible subjects only
         let existing_payloads = scrape_jobs::find_existing_job_payloads(
             TargetType::Subject,
             &subject_payloads,
@@ -189,12 +244,12 @@ impl Scheduler {
         )
         .await?;
 
-        // Filter out subjects that already have jobs and prepare new jobs
+        // Filter out subjects that already have pending jobs
         let mut skipped_count = 0;
-        let new_jobs: Vec<_> = subjects
+        let new_jobs: Vec<_> = eligible_subjects
             .into_iter()
-            .filter_map(|subject| {
-                let job = SubjectJob::new(subject.code.clone());
+            .filter_map(|subject_code| {
+                let job = SubjectJob::new(subject_code.clone());
                 let payload = serde_json::to_value(&job).unwrap();
                 let payload_str = payload.to_string();
 
@@ -202,7 +257,7 @@ impl Scheduler {
                     skipped_count += 1;
                     None
                 } else {
-                    Some((payload, subject.code))
+                    Some((payload, subject_code))
                 }
             })
             .collect();

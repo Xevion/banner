@@ -11,6 +11,7 @@ use axum::{
 
 use crate::web::admin;
 use crate::web::admin_rmp;
+use crate::web::admin_scraper;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::ws;
 #[cfg(feature = "embed-assets")]
@@ -86,6 +87,19 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
             post(admin_rmp::unmatch_instructor),
         )
         .route("/admin/rmp/rescore", post(admin_rmp::rescore))
+        .route("/admin/scraper/stats", get(admin_scraper::scraper_stats))
+        .route(
+            "/admin/scraper/timeseries",
+            get(admin_scraper::scraper_timeseries),
+        )
+        .route(
+            "/admin/scraper/subjects",
+            get(admin_scraper::scraper_subjects),
+        )
+        .route(
+            "/admin/scraper/subjects/{subject}",
+            get(admin_scraper::scraper_subject_detail),
+        )
         .with_state(app_state);
 
     let mut router = Router::new()

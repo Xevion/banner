@@ -213,6 +213,70 @@ pub async fn insert_job_result(
     Ok(())
 }
 
+/// Per-subject aggregated stats from recent scrape results.
+///
+/// Populated by [`fetch_subject_stats`] and converted into
+/// [`crate::scraper::adaptive::SubjectStats`] for interval computation.
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct SubjectResultStats {
+    pub subject: String,
+    pub recent_runs: i64,
+    pub avg_change_ratio: f64,
+    pub consecutive_zero_changes: i64,
+    pub consecutive_empty_fetches: i64,
+    pub recent_failure_count: i64,
+    pub recent_success_count: i64,
+    pub last_completed: DateTime<Utc>,
+}
+
+/// Fetch aggregated per-subject statistics from the last 24 hours of results.
+///
+/// For each subject, examines the 20 most recent results and computes:
+/// - Average change ratio (courses_changed / courses_fetched)
+/// - Consecutive zero-change runs from the most recent result
+/// - Consecutive empty-fetch runs from the most recent result
+/// - Failure and success counts
+/// - Last completion timestamp
+pub async fn fetch_subject_stats(db_pool: &PgPool) -> Result<Vec<SubjectResultStats>> {
+    let rows = sqlx::query_as::<_, SubjectResultStats>(
+        r#"
+        WITH recent AS (
+            SELECT payload->>'subject' AS subject, success,
+                   COALESCE(courses_fetched, 0) AS courses_fetched,
+                   COALESCE(courses_changed, 0) AS courses_changed,
+                   completed_at,
+                   ROW_NUMBER() OVER (PARTITION BY payload->>'subject' ORDER BY completed_at DESC) AS rn
+            FROM scrape_job_results
+            WHERE target_type = 'Subject' AND completed_at > NOW() - INTERVAL '24 hours'
+        ),
+        filtered AS (SELECT * FROM recent WHERE rn <= 20),
+        zero_break AS (
+            SELECT subject,
+                   MIN(rn) FILTER (WHERE courses_changed > 0 AND success) AS first_nonzero_rn,
+                   MIN(rn) FILTER (WHERE courses_fetched > 0 AND success) AS first_nonempty_rn
+            FROM filtered GROUP BY subject
+        )
+        SELECT
+            f.subject::TEXT AS "subject!",
+            COUNT(*)::BIGINT AS "recent_runs!",
+            COALESCE(AVG(CASE WHEN f.success AND f.courses_fetched > 0
+                 THEN f.courses_changed::FLOAT / f.courses_fetched ELSE NULL END), 0.0)::FLOAT8 AS "avg_change_ratio!",
+            COALESCE(zb.first_nonzero_rn - 1, COUNT(*) FILTER (WHERE f.success AND f.courses_changed = 0))::BIGINT AS "consecutive_zero_changes!",
+            COALESCE(zb.first_nonempty_rn - 1, COUNT(*) FILTER (WHERE f.success AND f.courses_fetched = 0))::BIGINT AS "consecutive_empty_fetches!",
+            COUNT(*) FILTER (WHERE NOT f.success)::BIGINT AS "recent_failure_count!",
+            COUNT(*) FILTER (WHERE f.success)::BIGINT AS "recent_success_count!",
+            MAX(f.completed_at) AS "last_completed!"
+        FROM filtered f
+        LEFT JOIN zero_break zb ON f.subject = zb.subject
+        GROUP BY f.subject, zb.first_nonzero_rn, zb.first_nonempty_rn
+        "#,
+    )
+    .fetch_all(db_pool)
+    .await?;
+
+    Ok(rows)
+}
+
 /// Batch insert scrape jobs using UNNEST for a single round-trip.
 ///
 /// All jobs are inserted with `execute_at` set to the current time.
