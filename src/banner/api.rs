@@ -40,9 +40,9 @@ impl BannerApi {
                 .cookie_store(false)
                 .user_agent(user_agent())
                 .tcp_keepalive(Some(std::time::Duration::from_secs(60 * 5)))
-                .read_timeout(std::time::Duration::from_secs(10))
-                .connect_timeout(std::time::Duration::from_secs(10))
-                .timeout(std::time::Duration::from_secs(30))
+                .read_timeout(std::time::Duration::from_secs(20))
+                .connect_timeout(std::time::Duration::from_secs(15))
+                .timeout(std::time::Duration::from_secs(40))
                 .build()
                 .context("Failed to create HTTP client")?,
         )

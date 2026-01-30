@@ -7,9 +7,7 @@ export function formatRelativeDate(date: string | Date): string {
 }
 
 /** Returns a full absolute datetime string for tooltip display, e.g. "Jan 29, 2026, 3:45:12 PM". */
-export function formatAbsoluteDate(date: string | Date | null | undefined): string {
-  if (date == null) return "—";
+export function formatAbsoluteDate(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  if (Number.isNaN(d.getTime())) return "—";
   return format(d, "MMM d, yyyy, h:mm:ss a");
 }

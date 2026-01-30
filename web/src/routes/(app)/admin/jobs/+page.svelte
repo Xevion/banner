@@ -284,9 +284,13 @@ function getTimingDisplay(
     const tooltipLines = [
       `Queued: ${formatAbsoluteDate(job.queuedAt)}`,
       `Waited: ${formatDuration(Math.max(0, waitedMs))}`,
-      `Locked: ${formatAbsoluteDate(job.lockedAt)}`,
-      `${job.status === "staleLock" ? "Stale for" : "Processing"}: ${formatDuration(processingMs)}`,
     ];
+    if (job.lockedAt) {
+      tooltipLines.push(`Locked: ${formatAbsoluteDate(job.lockedAt)}`);
+    }
+    tooltipLines.push(
+      `${job.status === "staleLock" ? "Stale for" : "Processing"}: ${formatDuration(processingMs)}`,
+    );
 
     return {
       text: `${prefix} ${formatDuration(processingMs)}`,
