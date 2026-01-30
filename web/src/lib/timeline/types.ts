@@ -1,16 +1,16 @@
 /**
  * Shared types for the timeline feature.
+ *
+ * Subjects are dynamic strings (actual Banner subject codes like "CS",
+ * "MAT", "BIO") rather than a fixed enum — the set of subjects comes
+ * from the API response.
  */
 import type { ScaleLinear, ScaleTime } from "d3-scale";
 
-import type { Subject } from "./data";
-
-export type { Subject };
-
-/** A single 15-minute time slot with per-subject class counts. */
+/** A single 15-minute time slot with per-subject enrollment totals. */
 export interface TimeSlot {
   time: Date;
-  subjects: Record<Subject, number>;
+  subjects: Record<string, number>;
 }
 
 /** Lerped animation entry for a single subject within a slot. */

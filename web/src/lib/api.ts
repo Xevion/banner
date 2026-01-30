@@ -135,6 +135,29 @@ export interface MetricsParams {
   limit?: number;
 }
 
+/** A time range for timeline queries (ISO-8601 strings). */
+export interface TimelineRange {
+  start: string;
+  end: string;
+}
+
+/** Request body for POST /api/timeline. */
+export interface TimelineRequest {
+  ranges: TimelineRange[];
+}
+
+/** A single 15-minute slot returned by the timeline API. */
+export interface TimelineSlot {
+  time: string;
+  subjects: Record<string, number>;
+}
+
+/** Response from POST /api/timeline. */
+export interface TimelineResponse {
+  slots: TimelineSlot[];
+  subjects: string[];
+}
+
 export interface SearchParams {
   term: string;
   subjects?: string[];
@@ -296,6 +319,13 @@ export class BannerApiClient {
 
   /** Stored `Last-Modified` value for audit log conditional requests. */
   private _auditLastModified: string | null = null;
+
+  async getTimeline(ranges: TimelineRange[]): Promise<TimelineResponse> {
+    return this.request<TimelineResponse>("/timeline", {
+      method: "POST",
+      body: { ranges } satisfies TimelineRequest,
+    });
+  }
 
   async getMetrics(params?: MetricsParams): Promise<MetricsResponse> {
     const query = new URLSearchParams();

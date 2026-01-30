@@ -7,7 +7,7 @@
 import { stack, area, curveMonotoneX, type Series } from "d3-shape";
 import { timeFormat } from "d3-time-format";
 
-import { SUBJECT_COLORS, type Subject } from "./data";
+import { getSubjectColor } from "./data";
 import type { AnimMap } from "./animation";
 import { getStackSubjects } from "./viewport";
 import type { ChartContext, TimeSlot } from "./types";
@@ -55,22 +55,31 @@ export function chooseTickCount(viewSpan: number): number {
  * Stack only the visible slice using *animated* values so transitions
  * between filter/data states are smooth. Includes subjects that are
  * still animating out so removal is gradual.
+ *
+ * @param allSubjects - full set of known subject codes
  */
 export function stackVisibleSlots(
   visible: TimeSlot[],
-  enabledSubjects: Set<Subject>,
+  allSubjects: readonly string[],
+  enabledSubjects: Set<string>,
   animMap: AnimMap
 ): VisibleStack {
   if (visible.length === 0) return [];
 
-  const stackKeys = getStackSubjects(visible, enabledSubjects, animMap, SETTLE_THRESHOLD);
+  const stackKeys = getStackSubjects(
+    visible,
+    allSubjects,
+    enabledSubjects,
+    animMap,
+    SETTLE_THRESHOLD
+  );
   if (stackKeys.length === 0) return [];
 
   // Build synthetic slots with animated current values.
   const animatedSlots: TimeSlot[] = visible.map((slot) => {
     const timeMs = slot.time.getTime();
     const subjectMap = animMap.get(timeMs);
-    const subjects = {} as Record<Subject, number>;
+    const subjects: Record<string, number> = {};
     for (const subject of stackKeys) {
       const entry = subjectMap?.get(subject);
       subjects[subject] = entry ? entry.current : slot.subjects[subject] || 0;
@@ -80,7 +89,7 @@ export function stackVisibleSlots(
 
   const gen = stack<TimeSlot>()
     .keys(stackKeys)
-    .value((d, key) => d.subjects[key as Subject] || 0);
+    .value((d, key) => d.subjects[key] || 0);
   return gen(animatedSlots);
 }
 
@@ -187,8 +196,8 @@ export function drawStackedArea(chart: ChartContext, visibleStack: VisibleStack)
 
   for (let i = visibleStack.length - 1; i >= 0; i--) {
     const layer = visibleStack[i];
-    const subject = layer.key as Subject;
-    const color = SUBJECT_COLORS[subject];
+    const subject = layer.key;
+    const color = getSubjectColor(subject);
 
     ctx.beginPath();
     area<StackPoint>()

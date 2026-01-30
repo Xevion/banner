@@ -3,10 +3,9 @@
  *
  * Tracks which time ranges have already been fetched and only requests
  * the missing segments when the view expands into unloaded territory.
- * Fetches are throttled so rapid panning/zooming doesn't flood the
- * (currently mock) API.
+ * Fetches are throttled so rapid panning/zooming doesn't flood the API.
  */
-import { generateSlots } from "./data";
+import { client, type TimelineRange } from "$lib/api";
 import { SLOT_INTERVAL_MS } from "./constants";
 import type { TimeSlot } from "./types";
 
@@ -15,20 +14,6 @@ type Range = [start: number, end: number];
 
 const FETCH_THROTTLE_MS = 500;
 const BUFFER_RATIO = 0.15;
-
-// Mock network latency bounds (ms).
-const MOCK_DELAY_MIN = 40;
-const MOCK_DELAY_MAX = 120;
-
-/**
- * Simulate an API call that returns slots for an arbitrary time range.
- * The delay makes loading behaviour visible during development.
- */
-async function mockFetch(startMs: number, endMs: number): Promise<TimeSlot[]> {
-  const delay = MOCK_DELAY_MIN + Math.random() * (MOCK_DELAY_MAX - MOCK_DELAY_MIN);
-  await new Promise((r) => setTimeout(r, delay));
-  return generateSlots(startMs, endMs);
-}
 
 /** Align a timestamp down to the nearest slot boundary. */
 function alignFloor(ms: number): number {
@@ -85,6 +70,24 @@ function mergeRange(ranges: Range[], added: Range): Range[] {
 }
 
 /**
+ * Fetch timeline data for the given gap ranges from the API.
+ * Converts gap ranges into the API request format.
+ */
+async function fetchFromApi(gaps: Range[]): Promise<TimeSlot[]> {
+  const ranges: TimelineRange[] = gaps.map(([start, end]) => ({
+    start: new Date(start).toISOString(),
+    end: new Date(end).toISOString(),
+  }));
+
+  const response = await client.getTimeline(ranges);
+
+  return response.slots.map((slot) => ({
+    time: new Date(slot.time),
+    subjects: slot.subjects,
+  }));
+}
+
+/**
  * Create a reactive timeline store.
  *
  * Call `requestRange(viewStart, viewEnd)` whenever the visible window
@@ -93,6 +96,9 @@ function mergeRange(ranges: Range[], added: Range): Range[] {
  *
  * The `data` getter returns a sorted `TimeSlot[]` that reactively
  * updates as new segments arrive.
+ *
+ * The `subjects` getter returns the sorted list of all subject codes
+ * seen so far across all fetched data.
  */
 export function createTimelineStore() {
   // All loaded slots keyed by aligned timestamp (ms).
@@ -100,6 +106,9 @@ export function createTimelineStore() {
 
   // Sorted, non-overlapping list of fetched ranges.
   let loadedRanges: Range[] = [];
+
+  // All subject codes observed across all fetched data.
+  let knownSubjects: Set<string> = $state(new Set());
 
   let throttleTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingStart = 0;
@@ -112,18 +121,28 @@ export function createTimelineStore() {
     [...slotMap.values()].sort((a, b) => a.time.getTime() - b.time.getTime())
   );
 
+  // Sorted subject list derived from the known subjects set.
+  const subjects: string[] = $derived([...knownSubjects].sort());
+
   async function fetchGaps(start: number, end: number): Promise<void> {
     const gaps = findGaps(start, end, loadedRanges);
     if (gaps.length === 0) return;
 
-    // Fetch all gap segments in parallel.
-    const results = await Promise.all(gaps.map(([gs, ge]) => mockFetch(gs, ge)));
+    let slots: TimeSlot[];
+    try {
+      slots = await fetchFromApi(gaps);
+    } catch (err) {
+      console.error("Timeline fetch failed:", err);
+      return;
+    }
 
     // Merge results into the slot map.
     const next = new Map(slotMap);
-    for (const slots of results) {
-      for (const slot of slots) {
-        next.set(slot.time.getTime(), slot);
+    const nextSubjects = new Set(knownSubjects);
+    for (const slot of slots) {
+      next.set(slot.time.getTime(), slot);
+      for (const subject of Object.keys(slot.subjects)) {
+        nextSubjects.add(subject);
       }
     }
 
@@ -132,8 +151,9 @@ export function createTimelineStore() {
       loadedRanges = mergeRange(loadedRanges, gap);
     }
 
-    // Single reactive assignment.
+    // Single reactive assignments.
     slotMap = next;
+    knownSubjects = nextSubjects;
   }
 
   /**
@@ -172,6 +192,9 @@ export function createTimelineStore() {
   return {
     get data() {
       return data;
+    },
+    get subjects() {
+      return subjects;
     },
     requestRange,
     dispose,

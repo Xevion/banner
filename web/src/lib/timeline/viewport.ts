@@ -3,7 +3,6 @@
  * hit-testing, and snapping for the timeline canvas.
  */
 import { SLOT_INTERVAL_MS, RENDER_MARGIN_SLOTS } from "./constants";
-import { SUBJECTS, type Subject } from "./data";
 import type { TimeSlot } from "./types";
 
 /**
@@ -55,8 +54,8 @@ export function snapToSlot(timeMs: number): number {
   return Math.floor(timeMs / SLOT_INTERVAL_MS) * SLOT_INTERVAL_MS;
 }
 
-/** Sum of class counts for enabled subjects in a slot. */
-export function enabledTotalClasses(slot: TimeSlot, activeSubjects: readonly Subject[]): number {
+/** Sum of enrollment counts for enabled subjects in a slot. */
+export function enabledTotalClasses(slot: TimeSlot, activeSubjects: readonly string[]): number {
   let sum = 0;
   for (const s of activeSubjects) {
     sum += slot.subjects[s] || 0;
@@ -67,15 +66,18 @@ export function enabledTotalClasses(slot: TimeSlot, activeSubjects: readonly Sub
 /**
  * Determine which subjects to include in the stack: all enabled subjects
  * plus any disabled subjects still animating out (current > threshold).
+ *
+ * @param allSubjects - the full set of known subject codes
  */
 export function getStackSubjects(
   visible: TimeSlot[],
-  enabledSubjects: Set<Subject>,
+  allSubjects: readonly string[],
+  enabledSubjects: Set<string>,
   animMap: Map<number, Map<string, { current: number }>>,
   settleThreshold: number
-): Subject[] {
-  const subjects: Subject[] = [];
-  for (const subject of SUBJECTS) {
+): string[] {
+  const subjects: string[] = [];
+  for (const subject of allSubjects) {
     if (enabledSubjects.has(subject)) {
       subjects.push(subject);
       continue;

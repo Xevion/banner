@@ -85,6 +85,11 @@ impl App {
             info!(error = ?e, "Could not load reference cache on startup (may be empty)");
         }
 
+        // Load schedule cache for timeline enrollment queries
+        if let Err(e) = app_state.schedule_cache.load().await {
+            info!(error = ?e, "Could not load schedule cache on startup (may be empty)");
+        }
+
         // Seed the initial admin user if configured
         if let Some(admin_id) = config.admin_discord_id {
             let user = crate::data::users::ensure_seed_admin(&db_pool, admin_id as i64)

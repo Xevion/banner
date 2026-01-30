@@ -1,6 +1,6 @@
 <script lang="ts">
 import { timeFormat } from "d3-time-format";
-import { SUBJECT_COLORS, type Subject } from "$lib/timeline/data";
+import { getSubjectColor } from "$lib/timeline/data";
 import type { TimeSlot } from "$lib/timeline/types";
 import { enabledTotalClasses } from "$lib/timeline/viewport";
 
@@ -9,7 +9,7 @@ interface Props {
   x: number;
   y: number;
   slot: TimeSlot | null;
-  activeSubjects: readonly Subject[];
+  activeSubjects: readonly string[];
 }
 
 let { visible, x, y, slot, activeSubjects }: Props = $props();
@@ -35,7 +35,7 @@ const fmtTime = timeFormat("%-I:%M %p");
             <div class="flex items-center gap-1.5">
               <span
                 class="inline-block w-2 h-2 rounded-sm"
-                style="background: {SUBJECT_COLORS[subject]}"
+                style="background: {getSubjectColor(subject)}"
               ></span>
               <span class="text-muted-foreground">{subject}</span>
             </div>

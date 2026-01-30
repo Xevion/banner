@@ -1,13 +1,14 @@
 <script lang="ts">
 import { Filter, X } from "@lucide/svelte";
-import { SUBJECTS, SUBJECT_COLORS, type Subject } from "$lib/timeline/data";
+import { getSubjectColor } from "$lib/timeline/data";
 import { DRAWER_WIDTH } from "$lib/timeline/constants";
 
 interface Props {
   open: boolean;
-  enabledSubjects: Set<Subject>;
+  subjects: readonly string[];
+  enabledSubjects: Set<string>;
   followEnabled: boolean;
-  onToggleSubject: (subject: Subject) => void;
+  onToggleSubject: (subject: string) => void;
   onEnableAll: () => void;
   onDisableAll: () => void;
   onResumeFollow: () => void;
@@ -15,6 +16,7 @@ interface Props {
 
 let {
   open = $bindable(),
+  subjects,
   enabledSubjects,
   followEnabled,
   onToggleSubject,
@@ -109,8 +111,9 @@ function onKeyDown(e: KeyboardEvent) {
         </div>
       </div>
       <div class="space-y-0.5">
-        {#each SUBJECTS as subject}
+        {#each subjects as subject}
           {@const enabled = enabledSubjects.has(subject)}
+          {@const color = getSubjectColor(subject)}
           <button
             class="flex items-center gap-2 w-full px-1.5 py-1 rounded text-xs
               hover:bg-muted/50 transition-colors cursor-pointer text-left"
@@ -118,7 +121,7 @@ function onKeyDown(e: KeyboardEvent) {
           >
             <span
               class="inline-block w-3 h-3 rounded-sm shrink-0 transition-opacity"
-              style="background: {SUBJECT_COLORS[subject]}; opacity: {enabled ? 1 : 0.2};"
+              style="background: {color}; opacity: {enabled ? 1 : 0.2};"
             ></span>
             <span
               class="transition-opacity {enabled

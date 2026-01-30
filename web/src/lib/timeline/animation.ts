@@ -5,7 +5,6 @@
  * targets. This module owns the AnimMap lifecycle: syncing targets,
  * stepping current values, and pruning offscreen entries.
  */
-import { SUBJECTS, type Subject } from "./data";
 import { VALUE_EASE, MAXY_EASE, SETTLE_THRESHOLD, MIN_MAXY } from "./constants";
 import type { AnimEntry, TimeSlot } from "./types";
 
@@ -20,11 +19,15 @@ export function createAnimMap(): AnimMap {
  * Sync animMap targets from data + filter state.
  * New slots start at current=0 so they animate in from the baseline.
  * Disabled subjects get target=0 so they animate out.
+ *
+ * @param subjects - the full list of known subject codes
+ * @param enabledSubjects - subjects currently toggled on
  */
 export function syncAnimTargets(
   animMap: AnimMap,
   slots: TimeSlot[],
-  enabledSubjects: Set<Subject>
+  subjects: readonly string[],
+  enabledSubjects: Set<string>
 ): void {
   for (const slot of slots) {
     const timeMs = slot.time.getTime();
@@ -34,7 +37,7 @@ export function syncAnimTargets(
       animMap.set(timeMs, subjectMap);
     }
 
-    for (const subject of SUBJECTS) {
+    for (const subject of subjects) {
       const realValue = enabledSubjects.has(subject) ? slot.subjects[subject] || 0 : 0;
       const entry = subjectMap.get(subject);
       if (entry) {

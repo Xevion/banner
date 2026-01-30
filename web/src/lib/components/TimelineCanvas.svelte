@@ -2,7 +2,6 @@
 import { onMount } from "svelte";
 import { scaleTime, scaleLinear } from "d3-scale";
 
-import { SUBJECTS, type Subject } from "$lib/timeline/data";
 import type { TimeSlot, ChartContext } from "$lib/timeline/types";
 import {
   PADDING,
@@ -125,12 +124,31 @@ let pointerOverCanvas = false;
 
 // ── Drawer ──────────────────────────────────────────────────────────
 let drawerOpen = $state(false);
-let enabledSubjects: Set<Subject> = $state(new Set(SUBJECTS));
+// Start with an empty set — subjects are populated dynamically from the API.
+let enabledSubjects: Set<string> = $state(new Set());
 
 // ── Data store ──────────────────────────────────────────────────────
 const store = createTimelineStore();
 let data: TimeSlot[] = $derived(store.data);
-let activeSubjects = $derived(SUBJECTS.filter((s) => enabledSubjects.has(s)));
+let allSubjects: string[] = $derived(store.subjects);
+
+// Auto-enable newly discovered subjects.
+$effect(() => {
+  const storeSubjects = store.subjects;
+  const next = new Set(enabledSubjects);
+  let changed = false;
+  for (const s of storeSubjects) {
+    if (!next.has(s)) {
+      next.add(s);
+      changed = true;
+    }
+  }
+  if (changed) {
+    enabledSubjects = next;
+  }
+});
+
+let activeSubjects = $derived(allSubjects.filter((s) => enabledSubjects.has(s)));
 
 // ── Derived layout ──────────────────────────────────────────────────
 let viewStart = $derived(viewCenter - viewSpan / 2);
@@ -151,7 +169,7 @@ let yScale = scaleLinear()
   .range([0, 1]);
 
 // ── Subject toggling ────────────────────────────────────────────────
-function toggleSubject(subject: Subject) {
+function toggleSubject(subject: string) {
   const next = new Set(enabledSubjects);
   if (next.has(subject)) next.delete(subject);
   else next.add(subject);
@@ -159,7 +177,7 @@ function toggleSubject(subject: Subject) {
 }
 
 function enableAll() {
-  enabledSubjects = new Set(SUBJECTS);
+  enabledSubjects = new Set(allSubjects);
 }
 
 function disableAll() {
@@ -192,7 +210,7 @@ function render() {
   };
 
   const visible = getVisibleSlots(data, viewStart, viewEnd);
-  const visibleStack = stackVisibleSlots(visible, enabledSubjects, animMap);
+  const visibleStack = stackVisibleSlots(visible, allSubjects, enabledSubjects, animMap);
 
   drawGrid(chart);
   drawHoverColumn(chart, visibleStack, hoverSlotTime);
@@ -585,8 +603,9 @@ function tick(timestamp: number) {
 // ── Animation sync ──────────────────────────────────────────────────
 $effect(() => {
   const slots = data;
+  const subs = allSubjects;
   const enabled = enabledSubjects;
-  syncAnimTargets(animMap, slots, enabled);
+  syncAnimTargets(animMap, slots, subs, enabled);
 });
 
 // Request data whenever the visible window changes.
@@ -625,7 +644,7 @@ onMount(() => {
     class:cursor-grabbing={isDragging}
     style="display: block; touch-action: none;"
     tabindex="0"
-    aria-label="Interactive class schedule timeline chart"
+    aria-label="Interactive enrollment timeline chart"
     onpointerdown={(e) => { canvasEl?.focus(); onPointerDown(e); }}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
@@ -638,6 +657,7 @@ onMount(() => {
 
   <TimelineDrawer
     bind:open={drawerOpen}
+    subjects={allSubjects}
     {enabledSubjects}
     {followEnabled}
     onToggleSubject={toggleSubject}

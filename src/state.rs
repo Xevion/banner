@@ -4,6 +4,7 @@ use crate::banner::BannerApi;
 use crate::banner::Course;
 use crate::data::models::ReferenceData;
 use crate::status::ServiceStatusRegistry;
+use crate::web::schedule_cache::ScheduleCache;
 use crate::web::session_cache::{OAuthStateStore, SessionCache};
 use crate::web::ws::ScrapeJobEvent;
 use anyhow::Result;
@@ -76,12 +77,14 @@ pub struct AppState {
     pub reference_cache: Arc<RwLock<ReferenceCache>>,
     pub session_cache: SessionCache,
     pub oauth_state_store: OAuthStateStore,
+    pub schedule_cache: ScheduleCache,
     pub scrape_job_tx: broadcast::Sender<ScrapeJobEvent>,
 }
 
 impl AppState {
     pub fn new(banner_api: Arc<BannerApi>, db_pool: PgPool) -> Self {
         let (scrape_job_tx, _) = broadcast::channel(64);
+        let schedule_cache = ScheduleCache::new(db_pool.clone());
         Self {
             session_cache: SessionCache::new(db_pool.clone()),
             oauth_state_store: OAuthStateStore::new(),
@@ -89,6 +92,7 @@ impl AppState {
             db_pool,
             service_statuses: ServiceStatusRegistry::new(),
             reference_cache: Arc::new(RwLock::new(ReferenceCache::new())),
+            schedule_cache,
             scrape_job_tx,
         }
     }

@@ -14,6 +14,7 @@ use crate::web::admin_rmp;
 use crate::web::admin_scraper;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::calendar;
+use crate::web::timeline;
 use crate::web::ws;
 #[cfg(feature = "embed-assets")]
 use axum::{
@@ -54,6 +55,7 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
         .route("/terms", get(get_terms))
         .route("/subjects", get(get_subjects))
         .route("/reference/{category}", get(get_reference))
+        .route("/timeline", post(timeline::timeline))
         .with_state(app_state.clone());
 
     let auth_router = Router::new()

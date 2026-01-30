@@ -11,7 +11,9 @@ pub mod calendar;
 pub mod encoding;
 pub mod extractors;
 pub mod routes;
+pub mod schedule_cache;
 pub mod session_cache;
+pub mod timeline;
 pub mod ws;
 
 pub use routes::*;
