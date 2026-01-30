@@ -38,8 +38,12 @@ onMount(() => {
 </script>
 
 <Tooltip.Provider>
-  <div class="flex min-h-screen flex-col">
-    <NavBar />
+  <div class="relative flex min-h-screen flex-col">
+    <!-- pointer-events-none so the navbar doesn't block canvas interactions;
+         NavBar re-enables pointer-events on its own container. -->
+    <div class="absolute inset-x-0 top-0 z-50 pointer-events-none">
+      <NavBar />
+    </div>
 
     <svelte:boundary onerror={(e) => console.error("[root boundary]", e)}>
       <PageTransition key={transitionKey}>

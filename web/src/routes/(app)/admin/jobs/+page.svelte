@@ -289,7 +289,7 @@ function getTimingDisplay(
       tooltipLines.push(`Locked: ${formatAbsoluteDate(job.lockedAt)}`);
     }
     tooltipLines.push(
-      `${job.status === "staleLock" ? "Stale for" : "Processing"}: ${formatDuration(processingMs)}`,
+      `${job.status === "staleLock" ? "Stale for" : "Processing"}: ${formatDuration(processingMs)}`
     );
 
     return {

@@ -200,7 +200,7 @@ function handlePageChange(newOffset: number) {
 }
 </script>
 
-<div class="min-h-screen flex flex-col items-center p-5">
+<div class="min-h-screen flex flex-col items-center px-5 pb-5 pt-20">
   <div class="w-full max-w-6xl flex flex-col gap-6 pt-2">
 
     <!-- Search status + Filters -->

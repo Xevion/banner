@@ -70,19 +70,19 @@ function isActive(href: string): boolean {
 </script>
 
 {#if authStore.isLoading}
-  <div class="flex flex-col items-center p-5 pt-2">
+  <div class="flex flex-col items-center px-5 pb-5 pt-20">
     <div class="w-full max-w-6xl">
       <p class="text-muted-foreground py-12 text-center text-sm">Loading...</p>
     </div>
   </div>
 {:else if !authStore.isAuthenticated}
-  <div class="flex flex-col items-center p-5 pt-2">
+  <div class="flex flex-col items-center px-5 pb-5 pt-20">
     <div class="w-full max-w-6xl">
       <p class="text-muted-foreground py-12 text-center text-sm">Redirecting to login...</p>
     </div>
   </div>
 {:else}
-  <div class="flex flex-col items-center p-5 pt-2">
+  <div class="flex flex-col items-center px-5 pb-5 pt-20">
     <div class="w-full max-w-6xl flex gap-8">
       <!-- Inline sidebar -->
       <aside class="w-48 shrink-0 pt-1">

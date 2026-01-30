@@ -1,10 +1,13 @@
 <script lang="ts">
 import { page } from "$app/state";
-import { Search, User } from "@lucide/svelte";
+import { Search, User, Clock } from "@lucide/svelte";
 import { authStore } from "$lib/auth.svelte";
 import ThemeToggle from "./ThemeToggle.svelte";
 
-const staticTabs = [{ href: "/", label: "Search", icon: Search }] as const;
+const staticTabs = [
+  { href: "/", label: "Search", icon: Search },
+  { href: "/timeline", label: "Timeline", icon: Clock },
+] as const;
 
 const APP_PREFIXES = ["/profile", "/settings", "/admin"];
 
@@ -25,7 +28,8 @@ function isActive(tabHref: string): boolean {
 
 <nav class="w-full flex justify-center pt-5 px-5">
   <div class="w-full max-w-6xl flex items-center justify-between">
-    <div class="flex items-center gap-1 rounded-lg bg-muted p-1">
+    <!-- pointer-events-auto: root layout wraps nav in pointer-events-none overlay -->
+    <div class="flex items-center gap-1 rounded-lg bg-muted p-1 pointer-events-auto">
       {#each staticTabs as tab}
         <a
           href={tab.href}
@@ -48,8 +52,7 @@ function isActive(tabHref: string): boolean {
         <User size={15} strokeWidth={2} />
         {profileTab.label}
       </a>
+      <ThemeToggle />
     </div>
-
-    <ThemeToggle />
   </div>
 </nav>
