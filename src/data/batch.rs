@@ -68,6 +68,8 @@ fn extract_campus_code(course: &Course) -> Option<String> {
 struct UpsertDiffRow {
     id: i32,
     old_id: Option<i32>,
+    crn: String,
+    term_code: String,
 
     // enrollment fields
     old_enrollment: Option<i32>,
@@ -382,8 +384,14 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
     // Step 1: Upsert courses with CTE, returning diff rows
     let diff_rows = upsert_courses(courses, &mut tx).await?;
 
-    // Step 2: Extract course IDs for instructor linking
-    let course_ids: Vec<i32> = diff_rows.iter().map(|r| r.id).collect();
+    // Step 2: Build (crn, term_code) → course_id map for instructor linking.
+    // RETURNING order from INSERT ... ON CONFLICT is not guaranteed to match
+    // the input array order, so we must key by (crn, term_code) rather than
+    // relying on positional correspondence.
+    let crn_term_to_id: HashMap<(&str, &str), i32> = diff_rows
+        .iter()
+        .map(|r| ((r.crn.as_str(), r.term_code.as_str()), r.id))
+        .collect();
 
     // Step 3: Compute audit/metric diffs
     let (audits, metrics) = compute_diffs(&diff_rows);
@@ -409,7 +417,7 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
     let email_to_id = upsert_instructors(courses, &mut tx).await?;
 
     // Step 6: Link courses to instructors via junction table
-    upsert_course_instructors(courses, &course_ids, &email_to_id, &mut tx).await?;
+    upsert_course_instructors(courses, &crn_term_to_id, &email_to_id, &mut tx).await?;
 
     tx.commit().await?;
 
@@ -556,6 +564,7 @@ async fn upsert_courses(courses: &[Course], conn: &mut PgConnection) -> Result<V
         )
         SELECT u.id,
                o.id AS old_id,
+               u.crn, u.term_code,
                o.enrollment AS old_enrollment, u.enrollment AS new_enrollment,
                o.max_enrollment AS old_max_enrollment, u.max_enrollment AS new_max_enrollment,
                o.wait_count AS old_wait_count, u.wait_count AS new_wait_count,
@@ -670,7 +679,7 @@ async fn upsert_instructors(
 /// Link courses to their instructors via the junction table.
 async fn upsert_course_instructors(
     courses: &[Course],
-    course_ids: &[i32],
+    crn_term_to_id: &HashMap<(&str, &str), i32>,
     email_to_id: &HashMap<String, i32>,
     conn: &mut PgConnection,
 ) -> Result<()> {
@@ -679,7 +688,20 @@ async fn upsert_course_instructors(
     let mut banner_ids: Vec<&str> = Vec::new();
     let mut primaries = Vec::new();
 
-    for (course, &course_id) in courses.iter().zip(course_ids) {
+    for course in courses {
+        let key = (
+            course.course_reference_number.as_str(),
+            course.term.as_str(),
+        );
+        let Some(&course_id) = crn_term_to_id.get(&key) else {
+            tracing::warn!(
+                crn = %course.course_reference_number,
+                term = %course.term,
+                "No course_id found for CRN/term pair during instructor linking"
+            );
+            continue;
+        };
+
         for faculty in &course.faculty {
             if let Some(email) = &faculty.email_address {
                 let email_lower = email.to_lowercase();
