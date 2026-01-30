@@ -8,6 +8,7 @@ use tracing::info;
 mod app;
 mod banner;
 mod bot;
+mod calendar;
 mod cli;
 mod config;
 mod data;

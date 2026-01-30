@@ -13,6 +13,7 @@ use crate::web::admin;
 use crate::web::admin_rmp;
 use crate::web::admin_scraper;
 use crate::web::auth::{self, AuthConfig};
+use crate::web::calendar;
 use crate::web::ws;
 #[cfg(feature = "embed-assets")]
 use axum::{
@@ -45,6 +46,11 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
         .route("/metrics", get(metrics))
         .route("/courses/search", get(search_courses))
         .route("/courses/{term}/{crn}", get(get_course))
+        .route(
+            "/courses/{term}/{crn}/calendar.ics",
+            get(calendar::course_ics),
+        )
+        .route("/courses/{term}/{crn}/gcal", get(calendar::course_gcal))
         .route("/terms", get(get_terms))
         .route("/subjects", get(get_subjects))
         .route("/reference/{category}", get(get_reference))

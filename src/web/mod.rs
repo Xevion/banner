@@ -6,6 +6,7 @@ pub mod admin_scraper;
 #[cfg(feature = "embed-assets")]
 pub mod assets;
 pub mod auth;
+pub mod calendar;
 #[cfg(feature = "embed-assets")]
 pub mod encoding;
 pub mod extractors;

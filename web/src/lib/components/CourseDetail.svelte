@@ -16,7 +16,16 @@ import { useClipboard } from "$lib/composables/useClipboard.svelte";
 import { cn, tooltipContentClass, formatNumber } from "$lib/utils";
 import { Tooltip } from "bits-ui";
 import SimpleTooltip from "./SimpleTooltip.svelte";
-import { Info, Copy, Check, Star, Triangle, ExternalLink } from "@lucide/svelte";
+import {
+  Info,
+  Copy,
+  Check,
+  Star,
+  Triangle,
+  ExternalLink,
+  Calendar,
+  Download,
+} from "@lucide/svelte";
 
 let { course }: { course: CourseResponse } = $props();
 
@@ -300,6 +309,43 @@ const clipboard = useClipboard();
                 <span class="text-2foreground"
                     >{formatNumber(course.waitCount)} / {formatNumber(course.waitCapacity)}</span
                 >
+            </div>
+        {/if}
+
+        <!-- Calendar Export -->
+        {#if course.meetingTimes.length > 0}
+            <div>
+                <h4 class="text-sm text-foreground mb-2">
+                    <span class="inline-flex items-center gap-1">
+                        Calendar
+                        <SimpleTooltip
+                            text="Export this course schedule to your calendar app"
+                            delay={150}
+                            passthrough
+                        >
+                            <Info class="size-3 text-muted-foreground/50" />
+                        </SimpleTooltip>
+                    </span>
+                </h4>
+                <div class="flex flex-wrap gap-1.5">
+                    <a
+                        href="/api/courses/{course.termCode}/{course.crn}/calendar.ics"
+                        download
+                        class="inline-flex items-center gap-1.5 text-sm font-medium bg-card border border-border rounded-md px-2.5 py-1 text-foreground hover:border-foreground/20 hover:bg-card/80 transition-colors"
+                    >
+                        <Download class="size-3.5" />
+                        ICS File
+                    </a>
+                    <a
+                        href="/api/courses/{course.termCode}/{course.crn}/gcal"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-1.5 text-sm font-medium bg-card border border-border rounded-md px-2.5 py-1 text-foreground hover:border-foreground/20 hover:bg-card/80 transition-colors"
+                    >
+                        <Calendar class="size-3.5" />
+                        Google Calendar
+                    </a>
+                </div>
             </div>
         {/if}
     </div>
