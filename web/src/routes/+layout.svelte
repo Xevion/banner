@@ -37,9 +37,11 @@ onMount(() => {
 </script>
 
 <Tooltip.Provider>
-  <NavBar />
+  <div class="flex min-h-screen flex-col">
+    <NavBar />
 
-  <PageTransition key={transitionKey}>
-    {@render children()}
-  </PageTransition>
+    <PageTransition key={transitionKey}>
+      {@render children()}
+    </PageTransition>
+  </div>
 </Tooltip.Provider>
