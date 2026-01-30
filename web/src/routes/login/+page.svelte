@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { authStore } from "$lib/auth.svelte";
     import SiDiscord from "@icons-pack/svelte-simple-icons/icons/SiDiscord";
     import { ChevronDown } from "@lucide/svelte";
     import { Accordion } from "bits-ui";
@@ -38,13 +37,13 @@
                 Sign in to manage your watchlist and notifications.
             </p>
 
-            <button
-                onclick={() => authStore.login()}
+            <a
+                href="/api/auth/login"
                 class="mt-6 inline-flex w-full items-center justify-center gap-2.5 rounded-lg bg-[#5865F2] px-6 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#4752C4] active:bg-[#3C45A5]"
             >
-                <SiDiscord size={20} color="white" />
+                <SiDiscord size={20} color="white" title="" />
                 Sign in with Discord
-            </button>
+            </a>
         </div>
 
         <!-- FAQ section -->
