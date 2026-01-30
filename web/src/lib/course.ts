@@ -415,3 +415,24 @@ export function formatCreditHours(course: CourseResponse): string {
   }
   return "—";
 }
+
+/**
+ * Convert Banner "Last, First Middle" → "First Middle Last".
+ * Handles: no comma (returned as-is), trailing/leading spaces,
+ * middle names/initials preserved.
+ */
+export function formatInstructorName(displayName: string): string {
+  const commaIdx = displayName.indexOf(",");
+  if (commaIdx === -1) return displayName.trim();
+
+  const last = displayName.slice(0, commaIdx).trim();
+  const rest = displayName.slice(commaIdx + 1).trim();
+  if (!rest) return last;
+
+  return `${rest} ${last}`;
+}
+
+/** Check if a rating value represents real data (not the 0.0 placeholder for unrated professors). */
+export function isRatingValid(avgRating: number | null, numRatings: number): boolean {
+  return avgRating !== null && !(avgRating === 0 && numRatings === 0);
+}

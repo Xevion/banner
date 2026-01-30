@@ -1,12 +1,21 @@
 import type {
+  CandidateResponse,
   CodeDescription,
   CourseResponse,
   DbMeetingTime,
+  InstructorDetail,
+  InstructorDetailResponse,
+  InstructorListItem,
   InstructorResponse,
+  InstructorStats,
+  LinkedRmpProfile,
+  ListInstructorsResponse,
+  RescoreResponse,
   SearchResponse as SearchResponseGenerated,
   ServiceInfo,
   ServiceStatus,
   StatusResponse,
+  TopCandidateResponse,
   User,
 } from "$lib/bindings";
 
@@ -14,13 +23,22 @@ const API_BASE_URL = "/api";
 
 // Re-export generated types under their canonical names
 export type {
+  CandidateResponse,
   CodeDescription,
   CourseResponse,
   DbMeetingTime,
+  InstructorDetail,
+  InstructorDetailResponse,
+  InstructorListItem,
   InstructorResponse,
+  InstructorStats,
+  LinkedRmpProfile,
+  ListInstructorsResponse,
+  RescoreResponse,
   ServiceInfo,
   ServiceStatus,
   StatusResponse,
+  TopCandidateResponse,
 };
 
 // Semantic aliases — these all share the CodeDescription shape
@@ -112,6 +130,15 @@ export interface SearchParams {
   sort_dir?: SortDirection;
 }
 
+// Admin instructor query params (client-only, not generated)
+export interface AdminInstructorListParams {
+  status?: string;
+  search?: string;
+  page?: number;
+  per_page?: number;
+  sort?: string;
+}
+
 export class BannerApiClient {
   private baseUrl: string;
   private fetchFn: typeof fetch;
@@ -121,14 +148,51 @@ export class BannerApiClient {
     this.fetchFn = fetchFn;
   }
 
-  private async request<T>(endpoint: string): Promise<T> {
-    const response = await this.fetchFn(`${this.baseUrl}${endpoint}`);
+  private buildInit(options?: { method?: string; body?: unknown }): RequestInit | undefined {
+    if (!options) return undefined;
+    const init: RequestInit = {};
+    if (options.method) {
+      init.method = options.method;
+    }
+    if (options.body !== undefined) {
+      init.headers = { "Content-Type": "application/json" };
+      init.body = JSON.stringify(options.body);
+    } else if (options.method) {
+      init.headers = { "Content-Type": "application/json" };
+    }
+    return Object.keys(init).length > 0 ? init : undefined;
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options?: { method?: string; body?: unknown }
+  ): Promise<T> {
+    const init = this.buildInit(options);
+    const args: [string, RequestInit?] = [`${this.baseUrl}${endpoint}`];
+    if (init) args.push(init);
+
+    const response = await this.fetchFn(...args);
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
 
     return (await response.json()) as T;
+  }
+
+  private async requestVoid(
+    endpoint: string,
+    options?: { method?: string; body?: unknown }
+  ): Promise<void> {
+    const init = this.buildInit(options);
+    const args: [string, RequestInit?] = [`${this.baseUrl}${endpoint}`];
+    if (init) args.push(init);
+
+    const response = await this.fetchFn(...args);
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
   }
 
   async getStatus(): Promise<StatusResponse> {
@@ -174,13 +238,10 @@ export class BannerApiClient {
   }
 
   async setUserAdmin(discordId: string, isAdmin: boolean): Promise<User> {
-    const response = await this.fetchFn(`${this.baseUrl}/admin/users/${discordId}/admin`, {
+    return this.request<User>(`/admin/users/${discordId}/admin`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_admin: isAdmin }),
+      body: { is_admin: isAdmin },
     });
-    if (!response.ok) throw new Error(`API request failed: ${response.status}`);
-    return (await response.json()) as User;
   }
 
   async getAdminScrapeJobs(): Promise<ScrapeJobsResponse> {
@@ -229,6 +290,56 @@ export class BannerApiClient {
     if (params?.limit !== undefined) query.set("limit", String(params.limit));
     const qs = query.toString();
     return this.request<MetricsResponse>(`/metrics${qs ? `?${qs}` : ""}`);
+  }
+
+  // Admin instructor endpoints
+
+  async getAdminInstructors(params?: AdminInstructorListParams): Promise<ListInstructorsResponse> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.search) query.set("search", params.search);
+    if (params?.page !== undefined) query.set("page", String(params.page));
+    if (params?.per_page !== undefined) query.set("per_page", String(params.per_page));
+    if (params?.sort) query.set("sort", params.sort);
+    const qs = query.toString();
+    return this.request<ListInstructorsResponse>(`/admin/instructors${qs ? `?${qs}` : ""}`);
+  }
+
+  async getAdminInstructor(id: number): Promise<InstructorDetailResponse> {
+    return this.request<InstructorDetailResponse>(`/admin/instructors/${id}`);
+  }
+
+  async matchInstructor(id: number, rmpLegacyId: number): Promise<InstructorDetailResponse> {
+    return this.request<InstructorDetailResponse>(`/admin/instructors/${id}/match`, {
+      method: "POST",
+      body: { rmpLegacyId },
+    });
+  }
+
+  async rejectCandidate(id: number, rmpLegacyId: number): Promise<void> {
+    return this.requestVoid(`/admin/instructors/${id}/reject-candidate`, {
+      method: "POST",
+      body: { rmpLegacyId },
+    });
+  }
+
+  async rejectAllCandidates(id: number): Promise<void> {
+    return this.requestVoid(`/admin/instructors/${id}/reject-all`, {
+      method: "POST",
+    });
+  }
+
+  async unmatchInstructor(id: number, rmpLegacyId?: number): Promise<void> {
+    return this.requestVoid(`/admin/instructors/${id}/unmatch`, {
+      method: "POST",
+      ...(rmpLegacyId !== undefined ? { body: { rmpLegacyId } } : {}),
+    });
+  }
+
+  async rescoreInstructors(): Promise<RescoreResponse> {
+    return this.request<RescoreResponse>("/admin/rmp/rescore", {
+      method: "POST",
+    });
   }
 }
 

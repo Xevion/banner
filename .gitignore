@@ -2,5 +2,5 @@
 /target
 
 # ts-rs bindings
-web/src/lib/bindings/*.ts
+web/src/lib/bindings/**/*.ts
 !web/src/lib/bindings/index.ts

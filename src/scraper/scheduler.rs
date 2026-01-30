@@ -250,8 +250,16 @@ impl Scheduler {
         crate::data::rmp::batch_upsert_rmp_professors(&professors, db_pool).await?;
         info!(total, "RMP professors upserted");
 
-        let matched = crate::data::rmp::auto_match_instructors(db_pool).await?;
-        info!(total, matched, "RMP sync complete");
+        let stats = crate::data::rmp_matching::generate_candidates(db_pool).await?;
+        info!(
+            total,
+            stats.total_unmatched,
+            stats.candidates_created,
+            stats.auto_matched,
+            stats.skipped_unparseable,
+            stats.skipped_no_candidates,
+            "RMP sync complete"
+        );
 
         Ok(())
     }

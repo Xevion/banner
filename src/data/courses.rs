@@ -55,7 +55,7 @@ fn sort_clause(column: Option<SortColumn>, direction: Option<SortDirection>) -> 
         Some(SortColumn::Instructor) => {
             format!(
                 "(SELECT i.display_name FROM course_instructors ci \
-                 JOIN instructors i ON i.banner_id = ci.instructor_id \
+                 JOIN instructors i ON i.id = ci.instructor_id \
                  WHERE ci.course_id = courses.id AND ci.is_primary = true \
                  LIMIT 1) {dir} NULLS LAST"
             )
@@ -147,12 +147,19 @@ pub async fn get_course_instructors(
 ) -> Result<Vec<CourseInstructorDetail>> {
     let rows = sqlx::query_as::<_, CourseInstructorDetail>(
         r#"
-        SELECT i.banner_id, i.display_name, i.email, ci.is_primary,
-               rp.avg_rating, rp.num_ratings, i.rmp_legacy_id,
+        SELECT i.id as instructor_id, ci.banner_id, i.display_name, i.email, ci.is_primary,
+               rmp.avg_rating, rmp.num_ratings, rmp.rmp_legacy_id,
                ci.course_id
         FROM course_instructors ci
-        JOIN instructors i ON i.banner_id = ci.instructor_id
-        LEFT JOIN rmp_professors rp ON rp.legacy_id = i.rmp_legacy_id
+        JOIN instructors i ON i.id = ci.instructor_id
+        LEFT JOIN LATERAL (
+            SELECT rp.avg_rating, rp.num_ratings, rp.legacy_id as rmp_legacy_id
+            FROM instructor_rmp_links irl
+            JOIN rmp_professors rp ON rp.legacy_id = irl.rmp_legacy_id
+            WHERE irl.instructor_id = i.id
+            ORDER BY rp.num_ratings DESC NULLS LAST, rp.legacy_id ASC
+            LIMIT 1
+        ) rmp ON true
         WHERE ci.course_id = $1
         ORDER BY ci.is_primary DESC, i.display_name
         "#,
@@ -176,12 +183,19 @@ pub async fn get_instructors_for_courses(
 
     let rows = sqlx::query_as::<_, CourseInstructorDetail>(
         r#"
-        SELECT i.banner_id, i.display_name, i.email, ci.is_primary,
-               rp.avg_rating, rp.num_ratings, i.rmp_legacy_id,
+        SELECT i.id as instructor_id, ci.banner_id, i.display_name, i.email, ci.is_primary,
+               rmp.avg_rating, rmp.num_ratings, rmp.rmp_legacy_id,
                ci.course_id
         FROM course_instructors ci
-        JOIN instructors i ON i.banner_id = ci.instructor_id
-        LEFT JOIN rmp_professors rp ON rp.legacy_id = i.rmp_legacy_id
+        JOIN instructors i ON i.id = ci.instructor_id
+        LEFT JOIN LATERAL (
+            SELECT rp.avg_rating, rp.num_ratings, rp.legacy_id as rmp_legacy_id
+            FROM instructor_rmp_links irl
+            JOIN rmp_professors rp ON rp.legacy_id = irl.rmp_legacy_id
+            WHERE irl.instructor_id = i.id
+            ORDER BY rp.num_ratings DESC NULLS LAST, rp.legacy_id ASC
+            LIMIT 1
+        ) rmp ON true
         WHERE ci.course_id = ANY($1)
         ORDER BY ci.course_id, ci.is_primary DESC, i.display_name
         "#,

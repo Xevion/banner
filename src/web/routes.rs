@@ -10,6 +10,7 @@ use axum::{
 };
 
 use crate::web::admin;
+use crate::web::admin_rmp;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::ws;
 #[cfg(feature = "embed-assets")]
@@ -66,6 +67,25 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
         .route("/admin/scrape-jobs", get(admin::list_scrape_jobs))
         .route("/admin/scrape-jobs/ws", get(ws::scrape_jobs_ws))
         .route("/admin/audit-log", get(admin::list_audit_log))
+        .route("/admin/instructors", get(admin_rmp::list_instructors))
+        .route("/admin/instructors/{id}", get(admin_rmp::get_instructor))
+        .route(
+            "/admin/instructors/{id}/match",
+            post(admin_rmp::match_instructor),
+        )
+        .route(
+            "/admin/instructors/{id}/reject-candidate",
+            post(admin_rmp::reject_candidate),
+        )
+        .route(
+            "/admin/instructors/{id}/reject-all",
+            post(admin_rmp::reject_all),
+        )
+        .route(
+            "/admin/instructors/{id}/unmatch",
+            post(admin_rmp::unmatch_instructor),
+        )
+        .route("/admin/rmp/rescore", post(admin_rmp::rescore))
         .with_state(app_state);
 
     let mut router = Router::new()
@@ -435,9 +455,10 @@ pub struct CourseResponse {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct InstructorResponse {
+    instructor_id: i32,
     banner_id: String,
     display_name: String,
-    email: Option<String>,
+    email: String,
     is_primary: bool,
     rmp_rating: Option<f32>,
     rmp_num_ratings: Option<i32>,
@@ -470,6 +491,7 @@ fn build_course_response(
     let instructors = instructors
         .into_iter()
         .map(|i| InstructorResponse {
+            instructor_id: i.instructor_id,
             banner_id: i.banner_id,
             display_name: i.display_name,
             email: i.email,

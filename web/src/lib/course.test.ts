@@ -187,18 +187,20 @@ describe("getPrimaryInstructor", () => {
   it("returns primary instructor", () => {
     const instructors: InstructorResponse[] = [
       {
+        instructorId: 1,
         bannerId: "1",
         displayName: "A",
-        email: null,
+        email: "a@utsa.edu",
         isPrimary: false,
         rmpRating: null,
         rmpNumRatings: null,
         rmpLegacyId: null,
       },
       {
+        instructorId: 2,
         bannerId: "2",
         displayName: "B",
-        email: null,
+        email: "b@utsa.edu",
         isPrimary: true,
         rmpRating: null,
         rmpNumRatings: null,
@@ -210,9 +212,10 @@ describe("getPrimaryInstructor", () => {
   it("returns first instructor when no primary", () => {
     const instructors: InstructorResponse[] = [
       {
+        instructorId: 3,
         bannerId: "1",
         displayName: "A",
-        email: null,
+        email: "a@utsa.edu",
         isPrimary: false,
         rmpRating: null,
         rmpNumRatings: null,

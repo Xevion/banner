@@ -1,6 +1,7 @@
 //! Web API module for the banner application.
 
 pub mod admin;
+pub mod admin_rmp;
 #[cfg(feature = "embed-assets")]
 pub mod assets;
 pub mod auth;

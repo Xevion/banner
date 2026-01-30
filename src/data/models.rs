@@ -99,25 +99,28 @@ pub struct Course {
 #[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Instructor {
-    pub banner_id: String,
+    pub id: i32,
     pub display_name: String,
-    pub email: Option<String>,
+    pub email: String,
+    pub rmp_match_status: String,
 }
 
 #[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct CourseInstructor {
     pub course_id: i32,
-    pub instructor_id: String,
+    pub instructor_id: i32,
+    pub banner_id: String,
     pub is_primary: bool,
 }
 
 /// Joined instructor data for a course (from course_instructors + instructors + rmp_professors).
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct CourseInstructorDetail {
+    pub instructor_id: i32,
     pub banner_id: String,
     pub display_name: String,
-    pub email: Option<String>,
+    pub email: String,
     pub is_primary: bool,
     pub avg_rating: Option<f32>,
     pub num_ratings: Option<i32>,

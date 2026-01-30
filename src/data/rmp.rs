@@ -3,8 +3,7 @@
 use crate::error::Result;
 use crate::rmp::RmpProfessor;
 use sqlx::PgPool;
-use std::collections::{HashMap, HashSet};
-use tracing::{debug, info, warn};
+use std::collections::HashSet;
 
 /// Bulk upsert RMP professors using the UNNEST pattern.
 ///
@@ -93,14 +92,14 @@ pub async fn batch_upsert_rmp_professors(
 }
 
 /// Normalize a name for matching: lowercase, trim, strip trailing periods.
-fn normalize(s: &str) -> String {
+pub(crate) fn normalize(s: &str) -> String {
     s.trim().to_lowercase().trim_end_matches('.').to_string()
 }
 
 /// Parse Banner's "Last, First Middle" display name into (last, first) tokens.
 ///
 /// Returns `None` if the format is unparseable (no comma, empty parts).
-fn parse_display_name(display_name: &str) -> Option<(String, String)> {
+pub(crate) fn parse_display_name(display_name: &str) -> Option<(String, String)> {
     let (last_part, first_part) = display_name.split_once(',')?;
     let last = normalize(last_part);
     // Take only the first token of the first-name portion to drop middle names/initials.
@@ -111,128 +110,27 @@ fn parse_display_name(display_name: &str) -> Option<(String, String)> {
     Some((last, first))
 }
 
-/// Auto-match instructors to RMP professors by normalized name.
+/// Retrieve RMP rating data for an instructor by instructor id.
 ///
-/// Loads all pending instructors and all RMP professors, then matches in Rust
-/// using normalized name comparison. Only assigns a match when exactly one RMP
-/// professor matches a given instructor.
-pub async fn auto_match_instructors(db_pool: &PgPool) -> Result<u64> {
-    // Load pending instructors
-    let instructors: Vec<(String, String)> = sqlx::query_as(
-        "SELECT banner_id, display_name FROM instructors WHERE rmp_match_status = 'pending'",
-    )
-    .fetch_all(db_pool)
-    .await?;
-
-    if instructors.is_empty() {
-        info!(matched = 0, "No pending instructors to match");
-        return Ok(0);
-    }
-
-    // Load all RMP professors
-    let professors: Vec<(i32, String, String)> =
-        sqlx::query_as("SELECT legacy_id, first_name, last_name FROM rmp_professors")
-            .fetch_all(db_pool)
-            .await?;
-
-    // Build a lookup: (normalized_last, normalized_first) -> list of legacy_ids
-    let mut rmp_index: HashMap<(String, String), Vec<i32>> = HashMap::new();
-    for (legacy_id, first, last) in &professors {
-        let key = (normalize(last), normalize(first));
-        rmp_index.entry(key).or_default().push(*legacy_id);
-    }
-
-    // Match each instructor
-    let mut matches: Vec<(i32, String)> = Vec::new(); // (legacy_id, banner_id)
-    let mut no_comma = 0u64;
-    let mut no_match = 0u64;
-    let mut ambiguous = 0u64;
-
-    for (banner_id, display_name) in &instructors {
-        let Some((last, first)) = parse_display_name(display_name) else {
-            no_comma += 1;
-            continue;
-        };
-
-        let key = (last, first);
-        match rmp_index.get(&key) {
-            Some(ids) if ids.len() == 1 => {
-                matches.push((ids[0], banner_id.clone()));
-            }
-            Some(ids) => {
-                ambiguous += 1;
-                debug!(
-                    banner_id,
-                    display_name,
-                    candidates = ids.len(),
-                    "Ambiguous RMP match, skipping"
-                );
-            }
-            None => {
-                no_match += 1;
-            }
-        }
-    }
-
-    if no_comma > 0 || ambiguous > 0 {
-        warn!(
-            total_pending = instructors.len(),
-            no_comma,
-            no_match,
-            ambiguous,
-            matched = matches.len(),
-            "RMP matching diagnostics"
-        );
-    }
-
-    // Batch update matches
-    if matches.is_empty() {
-        info!(matched = 0, "Auto-matched instructors to RMP professors");
-        return Ok(0);
-    }
-
-    let legacy_ids: Vec<i32> = matches.iter().map(|(id, _)| *id).collect();
-    let banner_ids: Vec<&str> = matches.iter().map(|(_, bid)| bid.as_str()).collect();
-
-    let result = sqlx::query(
-        r#"
-        UPDATE instructors i
-        SET
-            rmp_legacy_id = m.legacy_id,
-            rmp_match_status = 'auto'
-        FROM UNNEST($1::int4[], $2::text[]) AS m(legacy_id, banner_id)
-        WHERE i.banner_id = m.banner_id
-        "#,
-    )
-    .bind(&legacy_ids)
-    .bind(&banner_ids)
-    .execute(db_pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("Failed to update instructor RMP matches: {}", e))?;
-
-    let matched = result.rows_affected();
-    info!(matched, "Auto-matched instructors to RMP professors");
-    Ok(matched)
-}
-
-/// Retrieve RMP rating data for an instructor by banner_id.
-///
-/// Returns `(avg_rating, num_ratings)` if the instructor has an RMP match.
+/// Returns `(avg_rating, num_ratings)` for the best linked RMP profile
+/// (most ratings). Returns `None` if no link exists.
 #[allow(dead_code)]
 pub async fn get_instructor_rmp_data(
     db_pool: &PgPool,
-    banner_id: &str,
+    instructor_id: i32,
 ) -> Result<Option<(f32, i32)>> {
     let row: Option<(f32, i32)> = sqlx::query_as(
         r#"
         SELECT rp.avg_rating, rp.num_ratings
-        FROM instructors i
-        JOIN rmp_professors rp ON rp.legacy_id = i.rmp_legacy_id
-        WHERE i.banner_id = $1
+        FROM instructor_rmp_links irl
+        JOIN rmp_professors rp ON rp.legacy_id = irl.rmp_legacy_id
+        WHERE irl.instructor_id = $1
           AND rp.avg_rating IS NOT NULL
+        ORDER BY rp.num_ratings DESC NULLS LAST
+        LIMIT 1
         "#,
     )
-    .bind(banner_id)
+    .bind(instructor_id)
     .fetch_optional(db_pool)
     .await?;
     Ok(row)

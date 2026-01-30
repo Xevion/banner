@@ -7,6 +7,7 @@ import ErrorBoundaryFallback from "$lib/components/ErrorBoundaryFallback.svelte"
 import {
   ClipboardList,
   FileText,
+  GraduationCap,
   LayoutDashboard,
   LogOut,
   Settings,
@@ -61,6 +62,7 @@ const adminItems = [
   { href: "/admin/jobs", label: "Scrape Jobs", icon: ClipboardList },
   { href: "/admin/audit", label: "Audit Log", icon: FileText },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/instructors", label: "Instructors", icon: GraduationCap },
 ];
 
 function isActive(href: string): boolean {
