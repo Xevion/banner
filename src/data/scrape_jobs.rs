@@ -1,7 +1,8 @@
 //! Database operations for scrape job queue management.
 
-use crate::data::models::{ScrapeJob, ScrapePriority, TargetType};
+use crate::data::models::{ScrapeJob, ScrapePriority, TargetType, UpsertCounts};
 use crate::error::Result;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use std::collections::HashSet;
 
@@ -164,6 +165,52 @@ pub async fn find_existing_job_payloads(
         .collect();
 
     Ok(existing_payloads)
+}
+
+/// Insert a scrape job result log entry.
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_job_result(
+    target_type: TargetType,
+    payload: serde_json::Value,
+    priority: ScrapePriority,
+    queued_at: DateTime<Utc>,
+    started_at: DateTime<Utc>,
+    duration_ms: i32,
+    success: bool,
+    error_message: Option<&str>,
+    retry_count: i32,
+    counts: Option<&UpsertCounts>,
+    db_pool: &PgPool,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO scrape_job_results (
+            target_type, payload, priority,
+            queued_at, started_at, duration_ms,
+            success, error_message, retry_count,
+            courses_fetched, courses_changed, courses_unchanged,
+            audits_generated, metrics_generated
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        "#,
+    )
+    .bind(target_type)
+    .bind(&payload)
+    .bind(priority)
+    .bind(queued_at)
+    .bind(started_at)
+    .bind(duration_ms)
+    .bind(success)
+    .bind(error_message)
+    .bind(retry_count)
+    .bind(counts.map(|c| c.courses_fetched))
+    .bind(counts.map(|c| c.courses_changed))
+    .bind(counts.map(|c| c.courses_unchanged))
+    .bind(counts.map(|c| c.audits_generated))
+    .bind(counts.map(|c| c.metrics_generated))
+    .execute(db_pool)
+    .await?;
+
+    Ok(())
 }
 
 /// Batch insert scrape jobs using UNNEST for a single round-trip.

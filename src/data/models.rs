@@ -159,6 +159,16 @@ pub struct CourseAudit {
     pub new_value: String,
 }
 
+/// Aggregate counts returned by batch upsert, used for scrape job result logging.
+#[derive(Debug, Clone, Default)]
+pub struct UpsertCounts {
+    pub courses_fetched: i32,
+    pub courses_changed: i32,
+    pub courses_unchanged: i32,
+    pub audits_generated: i32,
+    pub metrics_generated: i32,
+}
+
 /// The priority level of a scrape job.
 #[derive(sqlx::Type, Copy, Debug, Clone)]
 #[sqlx(type_name = "scrape_priority", rename_all = "PascalCase")]

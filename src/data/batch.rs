@@ -1,11 +1,11 @@
 //! Batch database operations for improved performance.
 
 use crate::banner::Course;
-use crate::data::models::DbMeetingTime;
+use crate::data::models::{DbMeetingTime, UpsertCounts};
 use crate::error::Result;
 use sqlx::PgConnection;
 use sqlx::PgPool;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use tracing::info;
 
@@ -368,10 +368,10 @@ async fn insert_metrics(metrics: &[MetricEntry], conn: &mut PgConnection) -> Res
 /// # Performance
 /// - Reduces N database round-trips to 5 (old-data CTE + upsert, audits, metrics, instructors, junction)
 /// - Typical usage: 50-200 courses per batch
-pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Result<()> {
+pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Result<UpsertCounts> {
     if courses.is_empty() {
         info!("No courses to upsert, skipping batch operation");
-        return Ok(());
+        return Ok(UpsertCounts::default());
     }
 
     let start = Instant::now();
@@ -388,6 +388,19 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
     // Step 3: Compute audit/metric diffs
     let (audits, metrics) = compute_diffs(&diff_rows);
 
+    // Count courses that had at least one field change (existing rows only)
+    let changed_ids: HashSet<i32> = audits.iter().map(|a| a.course_id).collect();
+    let existing_count = diff_rows.iter().filter(|r| r.old_id.is_some()).count() as i32;
+    let courses_changed = changed_ids.len() as i32;
+
+    let counts = UpsertCounts {
+        courses_fetched: course_count as i32,
+        courses_changed,
+        courses_unchanged: existing_count - courses_changed,
+        audits_generated: audits.len() as i32,
+        metrics_generated: metrics.len() as i32,
+    };
+
     // Step 4: Insert audits and metrics
     insert_audits(&audits, &mut tx).await?;
     insert_metrics(&metrics, &mut tx).await?;
@@ -403,13 +416,15 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
     let duration = start.elapsed();
     info!(
         courses_count = course_count,
-        audit_entries = audits.len(),
-        metric_entries = metrics.len(),
+        courses_changed = counts.courses_changed,
+        courses_unchanged = counts.courses_unchanged,
+        audit_entries = counts.audits_generated,
+        metric_entries = counts.metrics_generated,
         duration_ms = duration.as_millis(),
         "Batch upserted courses with instructors, audits, and metrics"
     );
 
-    Ok(())
+    Ok(counts)
 }
 
 // ---------------------------------------------------------------------------

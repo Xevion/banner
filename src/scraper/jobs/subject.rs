@@ -1,7 +1,7 @@
 use super::Job;
 use crate::banner::{BannerApi, SearchQuery, Term};
 use crate::data::batch::batch_upsert_courses;
-use crate::data::models::TargetType;
+use crate::data::models::{TargetType, UpsertCounts};
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -26,7 +26,7 @@ impl Job for SubjectJob {
     }
 
     #[tracing::instrument(skip(self, banner_api, db_pool), fields(subject = %self.subject))]
-    async fn process(&self, banner_api: &BannerApi, db_pool: &PgPool) -> Result<()> {
+    async fn process(&self, banner_api: &BannerApi, db_pool: &PgPool) -> Result<UpsertCounts> {
         let subject_code = &self.subject;
 
         // Get the current term
@@ -37,17 +37,19 @@ impl Job for SubjectJob {
             .search(&term, &query, "subjectDescription", false)
             .await?;
 
-        if let Some(courses_from_api) = search_result.data {
+        let counts = if let Some(courses_from_api) = search_result.data {
             info!(
                 subject = %subject_code,
                 count = courses_from_api.len(),
                 "Found courses"
             );
-            batch_upsert_courses(&courses_from_api, db_pool).await?;
-        }
+            batch_upsert_courses(&courses_from_api, db_pool).await?
+        } else {
+            UpsertCounts::default()
+        };
 
         debug!(subject = %subject_code, "Subject job completed");
-        Ok(())
+        Ok(counts)
     }
 
     fn description(&self) -> String {

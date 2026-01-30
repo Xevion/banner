@@ -1,7 +1,7 @@
 pub mod subject;
 
 use crate::banner::BannerApi;
-use crate::data::models::TargetType;
+use crate::data::models::{TargetType, UpsertCounts};
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -32,8 +32,9 @@ pub trait Job: Send + Sync {
     #[allow(dead_code)]
     fn target_type(&self) -> TargetType;
 
-    /// Process the job with the given API client and database pool
-    async fn process(&self, banner_api: &BannerApi, db_pool: &PgPool) -> Result<()>;
+    /// Process the job with the given API client and database pool.
+    /// Returns upsert effectiveness counts on success.
+    async fn process(&self, banner_api: &BannerApi, db_pool: &PgPool) -> Result<UpsertCounts>;
 
     /// Get a human-readable description of the job
     fn description(&self) -> String;

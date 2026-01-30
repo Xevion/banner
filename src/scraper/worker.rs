@@ -1,10 +1,10 @@
 use crate::banner::{BannerApi, BannerApiError};
-use crate::data::models::{ScrapeJob, ScrapeJobStatus};
+use crate::data::models::{ScrapeJob, ScrapeJobStatus, UpsertCounts};
 use crate::data::scrape_jobs;
 use crate::error::Result;
 use crate::scraper::jobs::{JobError, JobType};
 use crate::web::ws::ScrapeJobEvent;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -72,10 +72,15 @@ impl Worker {
             let job_id = job.id;
             let retry_count = job.retry_count;
             let max_retries = job.max_retries;
+            let target_type = job.target_type;
+            let payload = job.target_payload.clone();
+            let priority = job.priority;
+            let queued_at = job.queued_at;
+            let started_at = Utc::now();
             let start = std::time::Instant::now();
 
             // Emit JobLocked event
-            let locked_at = Utc::now().to_rfc3339();
+            let locked_at = started_at.to_rfc3339();
             debug!(job_id, "Emitting JobLocked event");
             let _ = self.job_events_tx.send(ScrapeJobEvent::JobLocked {
                 id: job_id,
@@ -105,8 +110,19 @@ impl Worker {
             let duration = start.elapsed();
 
             // Handle the job processing result
-            self.handle_job_result(job_id, retry_count, max_retries, process_result, duration)
-                .await;
+            self.handle_job_result(
+                job_id,
+                retry_count,
+                max_retries,
+                process_result,
+                duration,
+                target_type,
+                payload,
+                priority,
+                queued_at,
+                started_at,
+            )
+            .await;
         }
     }
 
@@ -118,7 +134,7 @@ impl Worker {
         scrape_jobs::fetch_and_lock_job(&self.db_pool).await
     }
 
-    async fn process_job(&self, job: ScrapeJob) -> Result<(), JobError> {
+    async fn process_job(&self, job: ScrapeJob) -> Result<UpsertCounts, JobError> {
         // Convert the database job to our job type
         let job_type = JobType::from_target_type_and_payload(job.target_type, job.target_payload)
             .map_err(|e| JobError::Unrecoverable(anyhow::anyhow!(e)))?; // Parse errors are unrecoverable
@@ -145,9 +161,7 @@ impl Worker {
             job_impl
                 .process(&self.banner_api, &self.db_pool)
                 .await
-                .map_err(JobError::Recoverable)?;
-
-            Ok(())
+                .map_err(JobError::Recoverable)
         }
         .instrument(span)
         .await
@@ -191,22 +205,53 @@ impl Worker {
     }
 
     /// Handle the result of job processing
+    #[allow(clippy::too_many_arguments)]
     async fn handle_job_result(
         &self,
         job_id: i32,
         retry_count: i32,
         max_retries: i32,
-        result: Result<(), JobError>,
+        result: Result<UpsertCounts, JobError>,
         duration: std::time::Duration,
+        target_type: crate::data::models::TargetType,
+        payload: serde_json::Value,
+        priority: crate::data::models::ScrapePriority,
+        queued_at: DateTime<Utc>,
+        started_at: DateTime<Utc>,
     ) {
+        let duration_ms = duration.as_millis() as i32;
+
         match result {
-            Ok(()) => {
+            Ok(counts) => {
                 debug!(
                     worker_id = self.id,
                     job_id,
                     duration_ms = duration.as_millis(),
+                    courses_fetched = counts.courses_fetched,
+                    courses_changed = counts.courses_changed,
+                    courses_unchanged = counts.courses_unchanged,
                     "Job completed successfully"
                 );
+
+                // Log the result
+                if let Err(e) = scrape_jobs::insert_job_result(
+                    target_type,
+                    payload,
+                    priority,
+                    queued_at,
+                    started_at,
+                    duration_ms,
+                    true,
+                    None,
+                    retry_count,
+                    Some(&counts),
+                    &self.db_pool,
+                )
+                .await
+                {
+                    error!(worker_id = self.id, job_id, error = ?e, "Failed to insert job result");
+                }
+
                 if let Err(e) = self.delete_job(job_id).await {
                     error!(worker_id = self.id, job_id, error = ?e, "Failed to delete completed job");
                 }
@@ -216,10 +261,41 @@ impl Worker {
                     .send(ScrapeJobEvent::JobCompleted { id: job_id });
             }
             Err(JobError::Recoverable(e)) => {
-                self.handle_recoverable_error(job_id, retry_count, max_retries, e, duration)
-                    .await;
+                self.handle_recoverable_error(
+                    job_id,
+                    retry_count,
+                    max_retries,
+                    e,
+                    duration,
+                    target_type,
+                    payload,
+                    priority,
+                    queued_at,
+                    started_at,
+                )
+                .await;
             }
             Err(JobError::Unrecoverable(e)) => {
+                // Log the failed result
+                let err_msg = format!("{e:#}");
+                if let Err(log_err) = scrape_jobs::insert_job_result(
+                    target_type,
+                    payload,
+                    priority,
+                    queued_at,
+                    started_at,
+                    duration_ms,
+                    false,
+                    Some(&err_msg),
+                    retry_count,
+                    None,
+                    &self.db_pool,
+                )
+                .await
+                {
+                    error!(worker_id = self.id, job_id, error = ?log_err, "Failed to insert job result");
+                }
+
                 error!(
                     worker_id = self.id,
                     job_id,
@@ -239,6 +315,7 @@ impl Worker {
     }
 
     /// Handle recoverable errors by logging appropriately and unlocking the job
+    #[allow(clippy::too_many_arguments)]
     async fn handle_recoverable_error(
         &self,
         job_id: i32,
@@ -246,6 +323,11 @@ impl Worker {
         max_retries: i32,
         e: anyhow::Error,
         duration: std::time::Duration,
+        target_type: crate::data::models::TargetType,
+        payload: serde_json::Value,
+        priority: crate::data::models::ScrapePriority,
+        queued_at: DateTime<Utc>,
+        started_at: DateTime<Utc>,
     ) {
         let next_attempt = retry_count.saturating_add(1);
         let remaining_retries = max_retries.saturating_sub(next_attempt);
@@ -276,7 +358,7 @@ impl Worker {
 
         // Atomically unlock and increment retry count, checking if retry is allowed
         match self.unlock_and_increment_retry(job_id, max_retries).await {
-            Ok(Some(queued_at)) => {
+            Ok(Some(new_queued_at)) => {
                 debug!(
                     worker_id = self.id,
                     job_id,
@@ -288,12 +370,33 @@ impl Worker {
                 let _ = self.job_events_tx.send(ScrapeJobEvent::JobRetried {
                     id: job_id,
                     retry_count: next_attempt,
-                    queued_at: queued_at.to_rfc3339(),
+                    queued_at: new_queued_at.to_rfc3339(),
                     status: ScrapeJobStatus::Pending,
                 });
+                // Don't log a result yet — the job will be retried
             }
             Ok(None) => {
-                // Max retries exceeded (detected atomically)
+                // Max retries exceeded — log final failure result
+                let duration_ms = duration.as_millis() as i32;
+                let err_msg = format!("{e:#}");
+                if let Err(log_err) = scrape_jobs::insert_job_result(
+                    target_type,
+                    payload,
+                    priority,
+                    queued_at,
+                    started_at,
+                    duration_ms,
+                    false,
+                    Some(&err_msg),
+                    next_attempt,
+                    None,
+                    &self.db_pool,
+                )
+                .await
+                {
+                    error!(worker_id = self.id, job_id, error = ?log_err, "Failed to insert job result");
+                }
+
                 error!(
                     worker_id = self.id,
                     job_id,
