@@ -27,8 +27,28 @@ check *flags:
       console.log("\x1b[1;36m→ Verifying...\x1b[0m");
     }
 
+    // Domain groups: format check name → { peers (other checks), formatter, sanity re-check }
+    const domains = {
+      rustfmt: {
+        peers: ["clippy", "rust-test"],
+        format: () => run(["cargo", "fmt", "--all"]),
+        recheck: [
+          { name: "rustfmt",    cmd: ["cargo", "fmt", "--all", "--", "--check"] },
+          { name: "cargo-check", cmd: ["cargo", "check", "--all-features"] },
+        ],
+      },
+      biome: {
+        peers: ["svelte-check", "web-test"],
+        format: () => run(["bun", "run", "--cwd", "web", "format"]),
+        recheck: [
+          { name: "biome",        cmd: ["bun", "run", "--cwd", "web", "format:check"] },
+          { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
+        ],
+      },
+    };
+
     const checks = [
-      { name: "rustfmt",      cmd: ["cargo", "fmt", "--all", "--", "--check"] },
+      { name: "rustfmt",      cmd: ["cargo", "fmt", "--all", "--", "--check"], terse: true },
       { name: "clippy",       cmd: ["cargo", "clippy", "--all-features", "--", "--deny", "warnings"] },
       { name: "rust-test",    cmd: ["cargo", "nextest", "run", "-E", "not test(export_bindings)"] },
       { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
@@ -60,16 +80,23 @@ check *flags:
       process.stderr.write(`\r\x1b[K${elapsed}s [${Array.from(remaining).join(", ")}]`);
     }, 100) : null;
 
+    // Phase 1: collect all results, eagerly displaying whichever finishes first
+    const results = {};
     let anyFailed = false;
-    for (const promise of promises) {
-      const r = await promise;
+    const tagged = promises.map((p, i) => p.then(r => ({ i, r })));
+    for (let n = 0; n < checks.length; n++) {
+      const { i, r } = await Promise.race(tagged);
+      tagged[i] = new Promise(() => {}); // sentinel: never resolves
+      results[r.name] = r;
       remaining.delete(r.name);
       if (isTTY) process.stderr.write(`\r\x1b[K`);
       if (r.exitCode !== 0) {
         anyFailed = true;
         process.stdout.write(`\x1b[31m✗ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
-        if (r.stdout) process.stdout.write(r.stdout);
-        if (r.stderr) process.stderr.write(r.stderr);
+        if (!r.terse) {
+          if (r.stdout) process.stdout.write(r.stdout);
+          if (r.stderr) process.stderr.write(r.stderr);
+        }
       } else {
         process.stdout.write(`\x1b[32m✓ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
       }
@@ -77,7 +104,61 @@ check *flags:
 
     if (interval) clearInterval(interval);
     if (isTTY) process.stderr.write(`\r\x1b[K`);
-    process.exit(anyFailed ? 1 : 0);
+
+    // Phase 2: auto-fix formatting if it's the only failure in a domain
+    let autoFixed = false;
+    for (const [fmtName, domain] of Object.entries(domains)) {
+      const fmtResult = results[fmtName];
+      if (!fmtResult || fmtResult.exitCode === 0) continue;
+      const peersAllPassed = domain.peers.every(p => results[p]?.exitCode === 0);
+      if (!peersAllPassed) continue;
+
+      process.stdout.write(`\n\x1b[1;36m→ Auto-formatting ${fmtName} (peers passed, only formatting failed)...\x1b[0m\n`);
+      domain.format();
+
+      // Re-verify format + sanity check in parallel
+      const recheckStart = Date.now();
+      const recheckPromises = domain.recheck.map(async (check) => {
+        const proc = Bun.spawn(check.cmd, {
+          env: { ...process.env, FORCE_COLOR: "1" },
+          stdout: "pipe", stderr: "pipe",
+        });
+        const [stdout, stderr] = await Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+        ]);
+        await proc.exited;
+        return { ...check, stdout, stderr, exitCode: proc.exitCode,
+                 elapsed: ((Date.now() - recheckStart) / 1000).toFixed(1) };
+      });
+
+      let recheckFailed = false;
+      for (const p of recheckPromises) {
+        const r = await p;
+        if (r.exitCode !== 0) {
+          recheckFailed = true;
+          process.stdout.write(`\x1b[31m  ✗ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
+          if (r.stdout) process.stdout.write(r.stdout);
+          if (r.stderr) process.stderr.write(r.stderr);
+        } else {
+          process.stdout.write(`\x1b[32m  ✓ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
+        }
+      }
+
+      if (!recheckFailed) {
+        process.stdout.write(`\x1b[32m  ✓ ${fmtName} auto-fix succeeded\x1b[0m\n`);
+        results[fmtName].exitCode = 0;
+        autoFixed = true;
+      } else {
+        process.stdout.write(`\x1b[31m  ✗ ${fmtName} auto-fix failed sanity check\x1b[0m\n`);
+      }
+    }
+
+    const finalFailed = Object.values(results).some(r => r.exitCode !== 0);
+    if (autoFixed && !finalFailed) {
+      process.stdout.write(`\n\x1b[1;32m✓ All checks passed (formatting was auto-fixed)\x1b[0m\n`);
+    }
+    process.exit(finalFailed ? 1 : 0);
 
 # Format all Rust and TypeScript code
 format:
