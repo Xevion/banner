@@ -257,15 +257,15 @@ pub async fn fetch_subject_stats(db_pool: &PgPool) -> Result<Vec<SubjectResultSt
             FROM filtered GROUP BY subject
         )
         SELECT
-            f.subject::TEXT AS "subject!",
-            COUNT(*)::BIGINT AS "recent_runs!",
+            f.subject::TEXT AS subject,
+            COUNT(*)::BIGINT AS recent_runs,
             COALESCE(AVG(CASE WHEN f.success AND f.courses_fetched > 0
-                 THEN f.courses_changed::FLOAT / f.courses_fetched ELSE NULL END), 0.0)::FLOAT8 AS "avg_change_ratio!",
-            COALESCE(zb.first_nonzero_rn - 1, COUNT(*) FILTER (WHERE f.success AND f.courses_changed = 0))::BIGINT AS "consecutive_zero_changes!",
-            COALESCE(zb.first_nonempty_rn - 1, COUNT(*) FILTER (WHERE f.success AND f.courses_fetched = 0))::BIGINT AS "consecutive_empty_fetches!",
-            COUNT(*) FILTER (WHERE NOT f.success)::BIGINT AS "recent_failure_count!",
-            COUNT(*) FILTER (WHERE f.success)::BIGINT AS "recent_success_count!",
-            MAX(f.completed_at) AS "last_completed!"
+                 THEN f.courses_changed::FLOAT / f.courses_fetched ELSE NULL END), 0.0)::FLOAT8 AS avg_change_ratio,
+            COALESCE(zb.first_nonzero_rn - 1, COUNT(*) FILTER (WHERE f.success AND f.courses_changed = 0))::BIGINT AS consecutive_zero_changes,
+            COALESCE(zb.first_nonempty_rn - 1, COUNT(*) FILTER (WHERE f.success AND f.courses_fetched = 0))::BIGINT AS consecutive_empty_fetches,
+            COUNT(*) FILTER (WHERE NOT f.success)::BIGINT AS recent_failure_count,
+            COUNT(*) FILTER (WHERE f.success)::BIGINT AS recent_success_count,
+            MAX(f.completed_at) AS last_completed
         FROM filtered f
         LEFT JOIN zero_break zb ON f.subject = zb.subject
         GROUP BY f.subject, zb.first_nonzero_rn, zb.first_nonempty_rn

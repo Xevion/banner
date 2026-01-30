@@ -5,6 +5,7 @@ import { authStore } from "$lib/auth.svelte";
 import PageTransition from "$lib/components/PageTransition.svelte";
 import ErrorBoundaryFallback from "$lib/components/ErrorBoundaryFallback.svelte";
 import {
+  Activity,
   ClipboardList,
   FileText,
   GraduationCap,
@@ -59,6 +60,7 @@ const userItems = [
 
 const adminItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/scraper", label: "Scraper", icon: Activity },
   { href: "/admin/jobs", label: "Scrape Jobs", icon: ClipboardList },
   { href: "/admin/audit", label: "Audit Log", icon: FileText },
   { href: "/admin/users", label: "Users", icon: Users },

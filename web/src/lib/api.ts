@@ -11,10 +11,17 @@ import type {
   LinkedRmpProfile,
   ListInstructorsResponse,
   RescoreResponse,
+  ScraperStatsResponse,
   SearchResponse as SearchResponseGenerated,
   ServiceInfo,
   ServiceStatus,
   StatusResponse,
+  SubjectDetailResponse,
+  SubjectResultEntry,
+  SubjectSummary,
+  SubjectsResponse,
+  TimeseriesPoint,
+  TimeseriesResponse,
   TopCandidateResponse,
   User,
 } from "$lib/bindings";
@@ -35,9 +42,16 @@ export type {
   LinkedRmpProfile,
   ListInstructorsResponse,
   RescoreResponse,
+  ScraperStatsResponse,
   ServiceInfo,
   ServiceStatus,
   StatusResponse,
+  SubjectDetailResponse,
+  SubjectResultEntry,
+  SubjectSummary,
+  SubjectsResponse,
+  TimeseriesPoint,
+  TimeseriesResponse,
   TopCandidateResponse,
 };
 
@@ -48,6 +62,8 @@ export type ReferenceEntry = CodeDescription;
 
 // SearchResponse re-exported (aliased to strip the "Generated" suffix)
 export type SearchResponse = SearchResponseGenerated;
+
+export type ScraperPeriod = "1h" | "6h" | "24h" | "7d" | "30d";
 
 // Client-side only — not generated from Rust
 export type SortColumn = "course_code" | "title" | "instructor" | "time" | "seats";
@@ -340,6 +356,32 @@ export class BannerApiClient {
     return this.request<RescoreResponse>("/admin/rmp/rescore", {
       method: "POST",
     });
+  }
+
+  // Scraper analytics endpoints
+
+  async getScraperStats(period?: ScraperPeriod): Promise<ScraperStatsResponse> {
+    const qs = period ? `?period=${period}` : "";
+    return this.request<ScraperStatsResponse>(`/admin/scraper/stats${qs}`);
+  }
+
+  async getScraperTimeseries(period?: ScraperPeriod, bucket?: string): Promise<TimeseriesResponse> {
+    const query = new URLSearchParams();
+    if (period) query.set("period", period);
+    if (bucket) query.set("bucket", bucket);
+    const qs = query.toString();
+    return this.request<TimeseriesResponse>(`/admin/scraper/timeseries${qs ? `?${qs}` : ""}`);
+  }
+
+  async getScraperSubjects(): Promise<SubjectsResponse> {
+    return this.request<SubjectsResponse>("/admin/scraper/subjects");
+  }
+
+  async getScraperSubjectDetail(subject: string, limit?: number): Promise<SubjectDetailResponse> {
+    const qs = limit !== undefined ? `?limit=${limit}` : "";
+    return this.request<SubjectDetailResponse>(
+      `/admin/scraper/subjects/${encodeURIComponent(subject)}${qs}`
+    );
   }
 }
 

@@ -49,6 +49,23 @@ export function formatDuration(ms: number): string {
  * Uses {@link formatDuration} for the text, plus computes the optimal refresh
  * interval so callers can schedule the next update efficiently.
  */
+/**
+ * Format a millisecond duration with a dynamic unit, optimised for
+ * scrape-style timings that are typically under 60 seconds.
+ *
+ * - < 1 000 ms  → "423ms"
+ * - < 10 000 ms → "4.52s"  (two decimals)
+ * - < 60 000 ms → "16.9s"  (one decimal)
+ * - ≥ 60 000 ms → delegates to {@link formatDuration} ("1m 5s")
+ */
+export function formatDurationMs(ms: number): string {
+  const abs = Math.abs(ms);
+  if (abs < 1_000) return `${Math.round(abs)}ms`;
+  if (abs < 10_000) return `${(abs / 1_000).toFixed(2)}s`;
+  if (abs < 60_000) return `${(abs / 1_000).toFixed(1)}s`;
+  return formatDuration(ms);
+}
+
 export function relativeTime(date: Date, ref: Date): RelativeTimeResult {
   const diffMs = ref.getTime() - date.getTime();
   const totalSeconds = Math.floor(diffMs / 1000);

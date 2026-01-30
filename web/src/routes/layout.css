@@ -19,6 +19,7 @@
   --status-red: oklch(0.63 0.2 25);
   --status-orange: oklch(0.75 0.18 70);
   --status-gray: oklch(0.556 0 0);
+  --status-blue: oklch(0.55 0.15 250);
 }
 
 .dark {
@@ -37,6 +38,7 @@
   --status-red: oklch(0.7 0.19 25);
   --status-orange: oklch(0.8 0.16 70);
   --status-gray: oklch(0.708 0 0);
+  --status-blue: oklch(0.7 0.15 250);
 }
 
 @theme inline {
@@ -54,6 +56,9 @@
   --color-status-red: var(--status-red);
   --color-status-orange: var(--status-orange);
   --color-status-gray: var(--status-gray);
+  --color-status-blue: var(--status-blue);
+  --color-surface-100: var(--card);
+  --color-surface-content: var(--foreground);
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --animate-accordion-down: accordion-down 200ms ease-out;
   --animate-accordion-up: accordion-up 200ms ease-out;
