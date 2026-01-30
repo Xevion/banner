@@ -1,6 +1,6 @@
 /** Layout & padding */
 export const PADDING = { top: 20, right: 0, bottom: 40, left: 0 } as const;
-export const DEFAULT_AXIS_RATIO = 0.80;
+export const DEFAULT_AXIS_RATIO = 0.8;
 export const CHART_HEIGHT_RATIO = 0.6;
 
 /** Viewport span limits (ms) */
@@ -70,6 +70,10 @@ export const RENDER_MARGIN_SLOTS = 3;
 
 /** Drawer */
 export const DRAWER_WIDTH = 220;
+
+/** Touch / tap */
+export const TAP_MAX_DURATION_MS = 250;
+export const TAP_MAX_DISTANCE_PX = 10;
 
 /** Axis text */
 export const AXIS_FONT = "11px Inter, system-ui, sans-serif";

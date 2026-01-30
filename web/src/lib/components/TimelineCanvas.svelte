@@ -32,6 +32,8 @@ import {
   MIN_MAXY,
   MAX_DT,
   DEFAULT_DT,
+  TAP_MAX_DURATION_MS,
+  TAP_MAX_DISTANCE_PX,
 } from "$lib/timeline/constants";
 import { createTimelineStore } from "$lib/timeline/store.svelte";
 import {
@@ -82,6 +84,18 @@ let ctrlHeld = $state(false);
 let panVelocity = 0;
 let panVelocityY = 0;
 let pointerSamples: { time: number; x: number; y: number }[] = [];
+
+// ── Multi-touch / pinch state ────────────────────────────────────────
+let activePointers = new Map<number, { x: number; y: number }>();
+let isPinching = false;
+let pinchStartDist = 0;
+let pinchStartSpan = 0;
+let pinchAnchorTime = 0;
+let pinchAnchorRatio = 0.5;
+
+// ── Tap detection ────────────────────────────────────────────────────
+let pointerDownTime = 0;
+let pointerDownPos = { x: 0, y: 0 };
 
 let targetSpan = DEFAULT_SPAN_MS;
 let zoomAnchorTime = 0;
@@ -236,9 +250,45 @@ function updateHover() {
   hoverSlotTime = snappedTime;
 }
 
+// ── Interaction helpers ───────────────────────────────────────────────
+function pinchDistance(): number {
+  const pts = [...activePointers.values()];
+  if (pts.length < 2) return 0;
+  const dx = pts[1].x - pts[0].x;
+  const dy = pts[1].y - pts[0].y;
+  return Math.hypot(dx, dy);
+}
+
+function pinchMidpoint(): { x: number; y: number } {
+  const pts = [...activePointers.values()];
+  if (pts.length < 2) return { x: 0, y: 0 };
+  return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+}
+
 // ── Interaction handlers ────────────────────────────────────────────
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // Two fingers down → start pinch-to-zoom
+  if (activePointers.size === 2) {
+    isDragging = false;
+    isPinching = true;
+    pinchStartDist = pinchDistance();
+    pinchStartSpan = viewSpan;
+
+    const mid = pinchMidpoint();
+    const rect = canvasEl?.getBoundingClientRect();
+    const midX = rect ? mid.x - rect.left : mid.x;
+    const chartWidth = width - PADDING.left - PADDING.right;
+
+    pinchAnchorTime = xScale.invert(midX).getTime();
+    pinchAnchorRatio = (midX - PADDING.left) / chartWidth;
+    return;
+  }
+
+  // Single finger / mouse → start drag
   isDragging = true;
   dragStartX = e.clientX;
   dragStartY = e.clientY;
@@ -253,8 +303,9 @@ function onPointerDown(e: PointerEvent) {
   targetSpan = viewSpan;
   tooltipVisible = false;
   hoverSlotTime = null;
+  pointerDownTime = performance.now();
+  pointerDownPos = { x: e.clientX, y: e.clientY };
   pointerSamples = [{ time: performance.now(), x: e.clientX, y: e.clientY }];
-  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 }
 
 function onPointerMove(e: PointerEvent) {
@@ -262,6 +313,20 @@ function onPointerMove(e: PointerEvent) {
   lastPointerClientX = e.clientX;
   lastPointerClientY = e.clientY;
   pointerOverCanvas = true;
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // Pinch-to-zoom (two-finger gesture)
+  if (isPinching && activePointers.size >= 2) {
+    const dist = pinchDistance();
+    if (pinchStartDist > 0) {
+      const scale = pinchStartDist / dist; // fingers apart = zoom in
+      const newSpan = Math.min(MAX_SPAN_MS, Math.max(MIN_SPAN_MS, pinchStartSpan * scale));
+      viewSpan = newSpan;
+      targetSpan = newSpan;
+      viewCenter = pinchAnchorTime + (0.5 - pinchAnchorRatio) * viewSpan;
+    }
+    return;
+  }
 
   if (isDragging) {
     const dx = e.clientX - dragStartX;
@@ -280,9 +345,43 @@ function onPointerMove(e: PointerEvent) {
 }
 
 function onPointerUp(e: PointerEvent) {
-  isDragging = false;
   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+  activePointers.delete(e.pointerId);
 
+  // End pinch when fewer than 2 fingers remain
+  if (isPinching) {
+    if (activePointers.size < 2) {
+      isPinching = false;
+      // If one finger remains, reset drag origin to that finger's position
+      if (activePointers.size === 1) {
+        const remaining = [...activePointers.values()][0];
+        isDragging = true;
+        dragStartX = remaining.x;
+        dragStartY = remaining.y;
+        dragStartCenter = viewCenter;
+        dragStartYRatio = viewYRatio;
+        pointerSamples = [{ time: performance.now(), x: remaining.x, y: remaining.y }];
+      }
+    }
+    return;
+  }
+
+  isDragging = false;
+
+  // Tap detection: short duration + minimal movement → show tooltip
+  const elapsed = performance.now() - pointerDownTime;
+  const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+  if (elapsed < TAP_MAX_DURATION_MS && dist < TAP_MAX_DISTANCE_PX) {
+    lastPointerClientX = e.clientX;
+    lastPointerClientY = e.clientY;
+    pointerOverCanvas = true;
+    // Bypass the isDragging guard in updateHover since we just cleared it
+    updateHover();
+    pointerSamples = [];
+    return;
+  }
+
+  // Momentum from drag
   if (pointerSamples.length >= 2) {
     const first = pointerSamples[0];
     const last = pointerSamples[pointerSamples.length - 1];
@@ -301,6 +400,12 @@ function onPointerLeave() {
   pointerOverCanvas = false;
   tooltipVisible = false;
   hoverSlotTime = null;
+}
+
+function onPointerCancel(e: PointerEvent) {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) isPinching = false;
+  if (activePointers.size === 0) isDragging = false;
 }
 
 function onWheel(e: WheelEvent) {
@@ -518,13 +623,14 @@ onMount(() => {
     bind:this={canvasEl}
     class="w-full h-full cursor-grab outline-none"
     class:cursor-grabbing={isDragging}
-    style="display: block;"
+    style="display: block; touch-action: none;"
     tabindex="0"
     aria-label="Interactive class schedule timeline chart"
     onpointerdown={(e) => { canvasEl?.focus(); onPointerDown(e); }}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
     onpointerleave={onPointerLeave}
+    onpointercancel={onPointerCancel}
     onwheel={onWheel}
     onkeydown={onKeyDown}
     onkeyup={onKeyUp}

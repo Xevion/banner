@@ -1,30 +1,34 @@
 <script lang="ts">
-    import SiDiscord from "@icons-pack/svelte-simple-icons/icons/SiDiscord";
-    import { ChevronDown } from "@lucide/svelte";
-    import { Accordion } from "bits-ui";
+import SiDiscord from "@icons-pack/svelte-simple-icons/icons/SiDiscord";
+import { ChevronDown } from "@lucide/svelte";
+import { Accordion } from "bits-ui";
 
-    const faqItems = [
-        {
-            value: "what",
-            question: "What does this do?",
-            answer: "Banner monitors UTSA course availability in real-time. Get notified on Discord when seats open up in the classes you need, so you never miss a registration window.",
-        },
-        {
-            value: "why-discord",
-            question: "Why sign in with Discord?",
-            answer: "Banner delivers notifications through a Discord bot. Signing in with Discord lets us link your account to send you alerts directly, and lets you manage your watchlist from the web dashboard.",
-        },
-        {
-            value: "data",
-            question: "What data do you access?",
-            answer: "We only request your Discord username and avatar. We don't read your messages, join servers on your behalf, or access any other Discord data.",
-        },
-        {
-            value: "official",
-            question: "Is this an official UTSA tool?",
-            answer: "No. Banner is an independent, community-built project. It is not affiliated with, endorsed by, or maintained by UTSA or Ellucian.",
-        },
-    ];
+const faqItems = [
+  {
+    value: "what",
+    question: "What does this do?",
+    answer:
+      "Banner monitors UTSA course availability in real-time. Get notified on Discord when seats open up in the classes you need, so you never miss a registration window.",
+  },
+  {
+    value: "why-discord",
+    question: "Why sign in with Discord?",
+    answer:
+      "Banner delivers notifications through a Discord bot. Signing in with Discord lets us link your account to send you alerts directly, and lets you manage your watchlist from the web dashboard.",
+  },
+  {
+    value: "data",
+    question: "What data do you access?",
+    answer:
+      "We only request your Discord username and avatar. We don't read your messages, join servers on your behalf, or access any other Discord data.",
+  },
+  {
+    value: "official",
+    question: "Is this an official UTSA tool?",
+    answer:
+      "No. Banner is an independent, community-built project. It is not affiliated with, endorsed by, or maintained by UTSA or Ellucian.",
+  },
+];
 </script>
 
 <div class="flex flex-1 items-center justify-center px-4 pb-14">
