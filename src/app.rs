@@ -126,6 +126,7 @@ impl App {
                 self.banner_api.clone(),
                 self.app_state.reference_cache.clone(),
                 self.app_state.service_statuses.clone(),
+                self.app_state.scrape_job_tx.clone(),
             ));
             self.service_manager
                 .register_service(ServiceName::Scraper.as_str(), scraper_service);

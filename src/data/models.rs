@@ -176,6 +176,20 @@ pub enum TargetType {
     SingleCrn,
 }
 
+/// Computed status for a scrape job, derived from existing fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ScrapeJobStatus {
+    Processing,
+    StaleLock,
+    Exhausted,
+    Scheduled,
+    Pending,
+}
+
+/// How long a lock can be held before it is considered stale (mirrors `scrape_jobs::LOCK_EXPIRY`).
+const LOCK_EXPIRY_SECS: i64 = 10 * 60;
+
 /// Represents a queryable job from the database.
 #[allow(dead_code)]
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -191,6 +205,27 @@ pub struct ScrapeJob {
     pub retry_count: i32,
     /// Maximum number of retry attempts allowed (non-negative, enforced by CHECK constraint)
     pub max_retries: i32,
+    /// When the job last entered the "ready to pick up" state.
+    /// Set to NOW() on creation; updated to NOW() on retry.
+    pub queued_at: DateTime<Utc>,
+}
+
+impl ScrapeJob {
+    /// Compute the current status of this job from its fields.
+    pub fn status(&self) -> ScrapeJobStatus {
+        let now = Utc::now();
+        match self.locked_at {
+            Some(locked) if (now - locked).num_seconds() < LOCK_EXPIRY_SECS => {
+                ScrapeJobStatus::Processing
+            }
+            Some(_) => ScrapeJobStatus::StaleLock,
+            None if self.retry_count >= self.max_retries && self.max_retries > 0 => {
+                ScrapeJobStatus::Exhausted
+            }
+            None if self.execute_at > now => ScrapeJobStatus::Scheduled,
+            None => ScrapeJobStatus::Pending,
+        }
+    }
 }
 
 /// A user authenticated via Discord OAuth.

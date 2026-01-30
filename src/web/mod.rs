@@ -9,5 +9,6 @@ pub mod encoding;
 pub mod extractors;
 pub mod routes;
 pub mod session_cache;
+pub mod ws;
 
 pub use routes::*;

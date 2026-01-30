@@ -11,6 +11,7 @@ use axum::{
 
 use crate::web::admin;
 use crate::web::auth::{self, AuthConfig};
+use crate::web::ws;
 #[cfg(feature = "embed-assets")]
 use axum::{
     http::{HeaderMap, StatusCode, Uri},
@@ -63,6 +64,7 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
             put(admin::set_user_admin),
         )
         .route("/admin/scrape-jobs", get(admin::list_scrape_jobs))
+        .route("/admin/scrape-jobs/ws", get(ws::scrape_jobs_ws))
         .route("/admin/audit-log", get(admin::list_audit_log))
         .with_state(app_state);
 

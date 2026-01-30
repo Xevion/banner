@@ -5,6 +5,7 @@ use crate::error::Result;
 use crate::rmp::RmpClient;
 use crate::scraper::jobs::subject::SubjectJob;
 use crate::state::ReferenceCache;
+use crate::web::ws::{ScrapeJobDto, ScrapeJobEvent};
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -25,6 +26,7 @@ pub struct Scheduler {
     db_pool: PgPool,
     banner_api: Arc<BannerApi>,
     reference_cache: Arc<RwLock<ReferenceCache>>,
+    job_events_tx: broadcast::Sender<ScrapeJobEvent>,
 }
 
 impl Scheduler {
@@ -32,11 +34,13 @@ impl Scheduler {
         db_pool: PgPool,
         banner_api: Arc<BannerApi>,
         reference_cache: Arc<RwLock<ReferenceCache>>,
+        job_events_tx: broadcast::Sender<ScrapeJobEvent>,
     ) -> Self {
         Self {
             db_pool,
             banner_api,
             reference_cache,
+            job_events_tx,
         }
     }
 
@@ -74,6 +78,7 @@ impl Scheduler {
                         let banner_api = self.banner_api.clone();
                         let cancel_token = cancel_token.clone();
                         let reference_cache = self.reference_cache.clone();
+                        let job_events_tx = self.job_events_tx.clone();
 
                                 async move {
                                     tokio::select! {
@@ -99,7 +104,7 @@ impl Scheduler {
 
                                             tokio::join!(rmp_fut, ref_fut);
 
-                                            if let Err(e) = Self::schedule_jobs_impl(&db_pool, &banner_api).await {
+                                            if let Err(e) = Self::schedule_jobs_impl(&db_pool, &banner_api, Some(&job_events_tx)).await {
                                                 error!(error = ?e, "Failed to schedule jobs");
                                             }
                                         } => {}
@@ -150,7 +155,11 @@ impl Scheduler {
     ///
     /// This is a static method (not &self) to allow it to be called from spawned tasks.
     #[tracing::instrument(skip_all, fields(term))]
-    async fn schedule_jobs_impl(db_pool: &PgPool, banner_api: &BannerApi) -> Result<()> {
+    async fn schedule_jobs_impl(
+        db_pool: &PgPool,
+        banner_api: &BannerApi,
+        job_events_tx: Option<&broadcast::Sender<ScrapeJobEvent>>,
+    ) -> Result<()> {
         // For now, we will implement a simple baseline scheduling strategy:
         // 1. Get a list of all subjects from the Banner API.
         // 2. Query existing jobs for all subjects in a single query.
@@ -213,7 +222,16 @@ impl Scheduler {
                 .map(|(payload, _)| (payload, TargetType::Subject, ScrapePriority::Low))
                 .collect();
 
-            scrape_jobs::batch_insert_jobs(&jobs, db_pool).await?;
+            let inserted = scrape_jobs::batch_insert_jobs(&jobs, db_pool).await?;
+
+            if let Some(tx) = job_events_tx {
+                inserted.iter().for_each(|job| {
+                    debug!(job_id = job.id, "Emitting JobCreated event");
+                    let _ = tx.send(ScrapeJobEvent::JobCreated {
+                        job: ScrapeJobDto::from(job),
+                    });
+                });
+            }
         }
 
         debug!("Job scheduling complete");

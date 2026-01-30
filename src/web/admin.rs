@@ -163,6 +163,8 @@ pub async fn list_scrape_jobs(
                 "lockedAt": j.locked_at.map(|t| t.to_rfc3339()),
                 "retryCount": j.retry_count,
                 "maxRetries": j.max_retries,
+                "queuedAt": j.queued_at.to_rfc3339(),
+                "status": j.status(),
             })
         })
         .collect();

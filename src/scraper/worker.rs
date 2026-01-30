@@ -1,8 +1,10 @@
 use crate::banner::{BannerApi, BannerApiError};
-use crate::data::models::ScrapeJob;
+use crate::data::models::{ScrapeJob, ScrapeJobStatus};
 use crate::data::scrape_jobs;
 use crate::error::Result;
 use crate::scraper::jobs::{JobError, JobType};
+use crate::web::ws::ScrapeJobEvent;
+use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,14 +23,21 @@ pub struct Worker {
     id: usize, // For logging purposes
     db_pool: PgPool,
     banner_api: Arc<BannerApi>,
+    job_events_tx: broadcast::Sender<ScrapeJobEvent>,
 }
 
 impl Worker {
-    pub fn new(id: usize, db_pool: PgPool, banner_api: Arc<BannerApi>) -> Self {
+    pub fn new(
+        id: usize,
+        db_pool: PgPool,
+        banner_api: Arc<BannerApi>,
+        job_events_tx: broadcast::Sender<ScrapeJobEvent>,
+    ) -> Self {
         Self {
             id,
             db_pool,
             banner_api,
+            job_events_tx,
         }
     }
 
@@ -64,6 +73,15 @@ impl Worker {
             let retry_count = job.retry_count;
             let max_retries = job.max_retries;
             let start = std::time::Instant::now();
+
+            // Emit JobLocked event
+            let locked_at = Utc::now().to_rfc3339();
+            debug!(job_id, "Emitting JobLocked event");
+            let _ = self.job_events_tx.send(ScrapeJobEvent::JobLocked {
+                id: job_id,
+                locked_at,
+                status: ScrapeJobStatus::Processing,
+            });
 
             // Process the job, racing against shutdown signal and timeout
             let process_result = tokio::select! {
@@ -143,7 +161,11 @@ impl Worker {
         scrape_jobs::unlock_job(job_id, &self.db_pool).await
     }
 
-    async fn unlock_and_increment_retry(&self, job_id: i32, max_retries: i32) -> Result<bool> {
+    async fn unlock_and_increment_retry(
+        &self,
+        job_id: i32,
+        max_retries: i32,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
         scrape_jobs::unlock_and_increment_retry(job_id, max_retries, &self.db_pool).await
     }
 
@@ -188,6 +210,10 @@ impl Worker {
                 if let Err(e) = self.delete_job(job_id).await {
                     error!(worker_id = self.id, job_id, error = ?e, "Failed to delete completed job");
                 }
+                debug!(job_id, "Emitting JobCompleted event");
+                let _ = self
+                    .job_events_tx
+                    .send(ScrapeJobEvent::JobCompleted { id: job_id });
             }
             Err(JobError::Recoverable(e)) => {
                 self.handle_recoverable_error(job_id, retry_count, max_retries, e, duration)
@@ -204,6 +230,10 @@ impl Worker {
                 if let Err(e) = self.delete_job(job_id).await {
                     error!(worker_id = self.id, job_id, error = ?e, "Failed to delete corrupted job");
                 }
+                debug!(job_id, "Emitting JobDeleted event");
+                let _ = self
+                    .job_events_tx
+                    .send(ScrapeJobEvent::JobDeleted { id: job_id });
             }
         }
     }
@@ -246,7 +276,7 @@ impl Worker {
 
         // Atomically unlock and increment retry count, checking if retry is allowed
         match self.unlock_and_increment_retry(job_id, max_retries).await {
-            Ok(can_retry) if can_retry => {
+            Ok(Some(queued_at)) => {
                 debug!(
                     worker_id = self.id,
                     job_id,
@@ -254,8 +284,15 @@ impl Worker {
                     remaining_retries = remaining_retries,
                     "Job unlocked for retry"
                 );
+                debug!(job_id, "Emitting JobRetried event");
+                let _ = self.job_events_tx.send(ScrapeJobEvent::JobRetried {
+                    id: job_id,
+                    retry_count: next_attempt,
+                    queued_at: queued_at.to_rfc3339(),
+                    status: ScrapeJobStatus::Pending,
+                });
             }
-            Ok(_) => {
+            Ok(None) => {
                 // Max retries exceeded (detected atomically)
                 error!(
                     worker_id = self.id,
@@ -269,6 +306,13 @@ impl Worker {
                 if let Err(e) = self.delete_job(job_id).await {
                     error!(worker_id = self.id, job_id, error = ?e, "Failed to delete failed job");
                 }
+                debug!(job_id, "Emitting JobExhausted and JobDeleted events");
+                let _ = self
+                    .job_events_tx
+                    .send(ScrapeJobEvent::JobExhausted { id: job_id });
+                let _ = self
+                    .job_events_tx
+                    .send(ScrapeJobEvent::JobDeleted { id: job_id });
             }
             Err(e) => {
                 error!(worker_id = self.id, job_id, error = ?e, "Failed to unlock and increment retry count");

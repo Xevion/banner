@@ -53,6 +53,8 @@ export interface ScrapeJob {
   lockedAt: string | null;
   retryCount: number;
   maxRetries: number;
+  queuedAt: string;
+  status: "processing" | "staleLock" | "exhausted" | "scheduled" | "pending";
 }
 
 export interface ScrapeJobsResponse {

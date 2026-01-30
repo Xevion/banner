@@ -48,7 +48,7 @@ function inTransition(_node: HTMLElement): TransitionConfig {
 
 function outTransition(_node: HTMLElement): TransitionConfig {
   const dir = navigationStore.direction;
-  const base = "position: absolute; top: 0; left: 0; width: 100%";
+  const base = "position: absolute; top: 0; left: 0; width: 100%; height: 100%";
   if (dir === "fade") {
     return {
       duration: DURATION,
@@ -67,9 +67,9 @@ function outTransition(_node: HTMLElement): TransitionConfig {
 }
 </script>
 
-<div class="relative overflow-hidden">
+<div class="relative flex flex-1 flex-col overflow-hidden">
   {#key key}
-    <div in:inTransition out:outTransition class="w-full">
+    <div in:inTransition out:outTransition class="flex flex-1 flex-col">
       {@render children()}
     </div>
   {/key}

@@ -8,6 +8,7 @@ import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svel
 import { initNavigation } from "$lib/stores/navigation.svelte";
 import { themeStore } from "$lib/stores/theme.svelte";
 import { Tooltip } from "bits-ui";
+import ErrorBoundaryFallback from "$lib/components/ErrorBoundaryFallback.svelte";
 import { onMount } from "svelte";
 
 let { children } = $props();
@@ -40,8 +41,14 @@ onMount(() => {
   <div class="flex min-h-screen flex-col">
     <NavBar />
 
-    <PageTransition key={transitionKey}>
-      {@render children()}
-    </PageTransition>
+    <svelte:boundary onerror={(e) => console.error("[root boundary]", e)}>
+      <PageTransition key={transitionKey}>
+        {@render children()}
+      </PageTransition>
+
+      {#snippet failed(error, reset)}
+        <ErrorBoundaryFallback {error} {reset} />
+      {/snippet}
+    </svelte:boundary>
   </div>
 </Tooltip.Provider>

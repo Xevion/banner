@@ -217,10 +217,13 @@ async fn unlock_and_increment_retry_has_retries_remaining(pool: PgPool) {
     )
     .await;
 
-    let has_retries = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
+    let result = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
         .await
         .unwrap();
-    assert!(has_retries, "should have retries remaining (0→1, max=3)");
+    assert!(
+        result.is_some(),
+        "should have retries remaining (0→1, max=3)"
+    );
 
     // Verify state in DB
     let (retry_count, locked_at): (i32, Option<chrono::DateTime<chrono::Utc>>) =
@@ -246,11 +249,11 @@ async fn unlock_and_increment_retry_exhausted(pool: PgPool) {
     )
     .await;
 
-    let has_retries = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
+    let result = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
         .await
         .unwrap();
     assert!(
-        !has_retries,
+        result.is_none(),
         "should NOT have retries remaining (3→4, max=3)"
     );
 
@@ -276,11 +279,11 @@ async fn unlock_and_increment_retry_already_exceeded(pool: PgPool) {
     )
     .await;
 
-    let has_retries = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
+    let result = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
         .await
         .unwrap();
     assert!(
-        !has_retries,
+        result.is_none(),
         "should NOT have retries remaining (5→6, max=3)"
     );
 

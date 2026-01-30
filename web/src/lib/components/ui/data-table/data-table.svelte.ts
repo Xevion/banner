@@ -39,7 +39,7 @@ export function createSvelteTable<TData extends RowData>(options: TableOptions<T
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         onStateChange: (updater: any) => {
           if (updater instanceof Function) state = updater(state);
-          else state = mergeObjects(state, updater as Partial<TableState>);
+          else state = { ...state, ...(updater as Partial<TableState>) };
 
           options.onStateChange?.(updater);
         },

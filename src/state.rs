@@ -5,11 +5,12 @@ use crate::banner::Course;
 use crate::data::models::ReferenceData;
 use crate::status::ServiceStatusRegistry;
 use crate::web::session_cache::{OAuthStateStore, SessionCache};
+use crate::web::ws::ScrapeJobEvent;
 use anyhow::Result;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 
 /// In-memory cache for reference data (code→description lookups).
 ///
@@ -75,10 +76,12 @@ pub struct AppState {
     pub reference_cache: Arc<RwLock<ReferenceCache>>,
     pub session_cache: SessionCache,
     pub oauth_state_store: OAuthStateStore,
+    pub scrape_job_tx: broadcast::Sender<ScrapeJobEvent>,
 }
 
 impl AppState {
     pub fn new(banner_api: Arc<BannerApi>, db_pool: PgPool) -> Self {
+        let (scrape_job_tx, _) = broadcast::channel(64);
         Self {
             session_cache: SessionCache::new(db_pool.clone()),
             oauth_state_store: OAuthStateStore::new(),
@@ -86,7 +89,13 @@ impl AppState {
             db_pool,
             service_statuses: ServiceStatusRegistry::new(),
             reference_cache: Arc::new(RwLock::new(ReferenceCache::new())),
+            scrape_job_tx,
         }
+    }
+
+    /// Subscribe to scrape job lifecycle events.
+    pub fn scrape_job_events(&self) -> broadcast::Receiver<ScrapeJobEvent> {
+        self.scrape_job_tx.subscribe()
     }
 
     /// Initialize the reference cache from the database.

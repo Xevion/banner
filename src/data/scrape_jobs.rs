@@ -13,9 +13,11 @@ use std::collections::HashSet;
 /// # Returns
 /// The number of jobs that were unlocked.
 pub async fn force_unlock_all(db_pool: &PgPool) -> Result<u64> {
-    let result = sqlx::query("UPDATE scrape_jobs SET locked_at = NULL WHERE locked_at IS NOT NULL")
-        .execute(db_pool)
-        .await?;
+    let result = sqlx::query(
+        "UPDATE scrape_jobs SET locked_at = NULL, queued_at = NOW() WHERE locked_at IS NOT NULL",
+    )
+    .execute(db_pool)
+    .await?;
     Ok(result.rows_affected())
 }
 
@@ -97,10 +99,11 @@ pub async fn unlock_job(job_id: i32, db_pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-/// Atomically unlock a job and increment its retry count.
+/// Atomically unlock a job, increment its retry count, and reset `queued_at`.
 ///
-/// Returns whether the job still has retries remaining. This is determined
-/// atomically in the database to avoid race conditions between workers.
+/// Returns the new `queued_at` timestamp if retries remain, or `None` if
+/// the job has exhausted its retries. This is determined atomically in the
+/// database to avoid race conditions between workers.
 ///
 /// # Arguments
 /// * `job_id` - The database ID of the job
@@ -108,25 +111,25 @@ pub async fn unlock_job(job_id: i32, db_pool: &PgPool) -> Result<()> {
 /// * `db_pool` - PostgreSQL connection pool
 ///
 /// # Returns
-/// * `Ok(true)` if the job was unlocked and retries remain
-/// * `Ok(false)` if the job has exhausted its retries
+/// * `Ok(Some(queued_at))` if the job was unlocked and retries remain
+/// * `Ok(None)` if the job has exhausted its retries
 pub async fn unlock_and_increment_retry(
     job_id: i32,
     max_retries: i32,
     db_pool: &PgPool,
-) -> Result<bool> {
-    let result = sqlx::query_scalar::<_, Option<i32>>(
+) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    let result = sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
         "UPDATE scrape_jobs
-         SET locked_at = NULL, retry_count = retry_count + 1
+         SET locked_at = NULL, retry_count = retry_count + 1, queued_at = NOW()
          WHERE id = $1
-         RETURNING CASE WHEN retry_count <= $2 THEN retry_count ELSE NULL END",
+         RETURNING CASE WHEN retry_count <= $2 THEN queued_at ELSE NULL END",
     )
     .bind(job_id)
     .bind(max_retries)
     .fetch_one(db_pool)
     .await?;
 
-    Ok(result.is_some())
+    Ok(result)
 }
 
 /// Find existing job payloads matching the given target type and candidates.
@@ -173,9 +176,9 @@ pub async fn find_existing_job_payloads(
 pub async fn batch_insert_jobs(
     jobs: &[(serde_json::Value, TargetType, ScrapePriority)],
     db_pool: &PgPool,
-) -> Result<()> {
+) -> Result<Vec<ScrapeJob>> {
     if jobs.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     let mut target_types: Vec<String> = Vec::with_capacity(jobs.len());
@@ -188,19 +191,20 @@ pub async fn batch_insert_jobs(
         priorities.push(format!("{priority:?}"));
     }
 
-    sqlx::query(
+    let inserted = sqlx::query_as::<_, ScrapeJob>(
         r#"
-        INSERT INTO scrape_jobs (target_type, target_payload, priority, execute_at)
-        SELECT v.target_type::target_type, v.payload, v.priority::scrape_priority, NOW()
+        INSERT INTO scrape_jobs (target_type, target_payload, priority, execute_at, queued_at)
+        SELECT v.target_type::target_type, v.payload, v.priority::scrape_priority, NOW(), NOW()
         FROM UNNEST($1::text[], $2::jsonb[], $3::text[])
             AS v(target_type, payload, priority)
+        RETURNING *
         "#,
     )
     .bind(&target_types)
     .bind(&payloads)
     .bind(&priorities)
-    .execute(db_pool)
+    .fetch_all(db_pool)
     .await?;
 
-    Ok(())
+    Ok(inserted)
 }

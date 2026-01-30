@@ -14,13 +14,40 @@ interface RelativeTimeResult {
 }
 
 /**
- * Compute a compact relative time string and the interval until it next changes.
+ * Format a duration in milliseconds as a compact human-readable string.
  *
  * Format tiers:
  * - < 60s: seconds only ("45s")
  * - < 1h: minutes + seconds ("9m 35s")
  * - < 24h: hours + minutes ("1h 23m")
  * - >= 24h: days only ("3d")
+ */
+export function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(Math.abs(ms) / 1000);
+
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    const secs = totalSeconds % 60;
+    return `${totalMinutes}m ${secs}s`;
+  }
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const mins = totalMinutes % 60;
+    return `${totalHours}h ${mins}m`;
+  }
+
+  const days = Math.floor(totalHours / 24);
+  return `${days}d`;
+}
+
+/**
+ * Compute a compact relative time string and the interval until it next changes.
+ *
+ * Uses {@link formatDuration} for the text, plus computes the optimal refresh
+ * interval so callers can schedule the next update efficiently.
  */
 export function relativeTime(date: Date, ref: Date): RelativeTimeResult {
   const diffMs = ref.getTime() - date.getTime();
@@ -30,40 +57,22 @@ export function relativeTime(date: Date, ref: Date): RelativeTimeResult {
     return { text: "now", nextUpdateMs: 1000 - (diffMs % 1000) || 1000 };
   }
 
-  if (totalSeconds < 60) {
-    const remainder = 1000 - (diffMs % 1000);
-    return {
-      text: `${totalSeconds}s`,
-      nextUpdateMs: remainder || 1000,
-    };
-  }
+  const text = formatDuration(diffMs);
 
+  // Compute optimal next-update interval based on the current tier
   const totalMinutes = Math.floor(totalSeconds / 60);
-  if (totalMinutes < 60) {
-    const secs = totalSeconds % 60;
-    const remainder = 1000 - (diffMs % 1000);
-    return {
-      text: `${totalMinutes}m ${secs}s`,
-      nextUpdateMs: remainder || 1000,
-    };
-  }
-
   const totalHours = Math.floor(totalMinutes / 60);
-  if (totalHours < 24) {
-    const mins = totalMinutes % 60;
+
+  let nextUpdateMs: number;
+  if (totalHours >= 24) {
+    const msIntoCurrentDay = diffMs % 86_400_000;
+    nextUpdateMs = 86_400_000 - msIntoCurrentDay || 86_400_000;
+  } else if (totalMinutes >= 60) {
     const msIntoCurrentMinute = diffMs % 60_000;
-    const msUntilNextMinute = 60_000 - msIntoCurrentMinute;
-    return {
-      text: `${totalHours}h ${mins}m`,
-      nextUpdateMs: msUntilNextMinute || 60_000,
-    };
+    nextUpdateMs = 60_000 - msIntoCurrentMinute || 60_000;
+  } else {
+    nextUpdateMs = 1000 - (diffMs % 1000) || 1000;
   }
 
-  const days = Math.floor(totalHours / 24);
-  const msIntoCurrentDay = diffMs % 86_400_000;
-  const msUntilNextDay = 86_400_000 - msIntoCurrentDay;
-  return {
-    text: `${days}d`,
-    nextUpdateMs: msUntilNextDay || 86_400_000,
-  };
+  return { text, nextUpdateMs };
 }

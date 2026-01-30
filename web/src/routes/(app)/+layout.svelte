@@ -3,6 +3,7 @@ import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { authStore } from "$lib/auth.svelte";
 import PageTransition from "$lib/components/PageTransition.svelte";
+import ErrorBoundaryFallback from "$lib/components/ErrorBoundaryFallback.svelte";
 import {
   ClipboardList,
   FileText,
@@ -12,9 +13,31 @@ import {
   User,
   Users,
 } from "@lucide/svelte";
-import { onMount } from "svelte";
+import { onMount, tick } from "svelte";
 
 let { children } = $props();
+
+// Track boundary reset function so navigation can auto-clear errors
+let boundaryReset = $state<(() => void) | null>(null);
+let errorPathname = $state<string | null>(null);
+
+function onBoundaryError(e: unknown, reset: () => void) {
+  console.error("[page boundary]", e);
+  boundaryReset = reset;
+  errorPathname = page.url.pathname;
+}
+
+// Auto-reset the boundary only when the user navigates away from the errored page
+$effect(() => {
+  const currentPath = page.url.pathname;
+
+  if (boundaryReset && errorPathname && currentPath !== errorPathname) {
+    const reset = boundaryReset;
+    boundaryReset = null;
+    errorPathname = null;
+    tick().then(() => reset());
+  }
+});
 
 onMount(async () => {
   if (authStore.isLoading) {
@@ -115,9 +138,15 @@ function isActive(href: string): boolean {
 
       <!-- Content -->
       <main class="flex-1 min-w-0">
-        <PageTransition key={page.url.pathname} axis="vertical">
-          {@render children()}
-        </PageTransition>
+        <svelte:boundary onerror={onBoundaryError}>
+          <PageTransition key={page.url.pathname} axis="vertical">
+            {@render children()}
+          </PageTransition>
+
+          {#snippet failed(error, reset)}
+            <ErrorBoundaryFallback title="Page error" {error} {reset} />
+          {/snippet}
+        </svelte:boundary>
       </main>
     </div>
   </div>
