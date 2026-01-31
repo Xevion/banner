@@ -276,14 +276,14 @@ fn compute_diffs(rows: &[UpsertDiffRow]) -> (Vec<AuditEntry>, Vec<MetricEntry>) 
         diff_field!(json audits, row, "meeting_times", old_meeting_times, new_meeting_times);
         diff_field!(json audits, row, "attributes", old_attributes, new_attributes);
 
-        // Emit a metric entry when enrollment/wait_count/max_enrollment changed
-        // Skip fresh inserts (no old data to compare against)
+        // Emit a metric entry on fresh insert (baseline) or when enrollment data changed
+        let is_new = row.old_id.is_none();
         let enrollment_changed = row.old_id.is_some()
             && (row.old_enrollment != Some(row.new_enrollment)
                 || row.old_wait_count != Some(row.new_wait_count)
                 || row.old_max_enrollment != Some(row.new_max_enrollment));
 
-        if enrollment_changed {
+        if is_new || enrollment_changed {
             metrics.push(MetricEntry {
                 course_id: row.id,
                 enrollment: row.new_enrollment,

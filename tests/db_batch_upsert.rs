@@ -214,7 +214,7 @@ async fn test_batch_upsert_unique_constraint_crn_term(pool: PgPool) {
 
 #[sqlx::test]
 async fn test_batch_upsert_creates_audit_and_metric_entries(pool: PgPool) {
-    // Insert initial data — should NOT create audits/metrics (it's a fresh insert)
+    // Insert initial data — should create a baseline metric but no audits
     let initial = vec![helpers::make_course(
         "50001",
         "202510",
@@ -242,9 +242,20 @@ async fn test_batch_upsert_creates_audit_and_metric_entries(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        metric_count, 0,
-        "initial insert should not create metric entries"
+        metric_count, 1,
+        "initial insert should create a baseline metric"
     );
+
+    // Verify baseline metric values
+    let (enrollment, wait_count, seats): (i32, i32, i32) = sqlx::query_as(
+        "SELECT enrollment, wait_count, seats_available FROM course_metrics ORDER BY timestamp LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(enrollment, 10);
+    assert_eq!(wait_count, 0);
+    assert_eq!(seats, 25); // 35 - 10
 
     // Update enrollment and wait_count
     let updated = vec![helpers::make_course(
@@ -270,16 +281,16 @@ async fn test_batch_upsert_creates_audit_and_metric_entries(pool: PgPool) {
         "should have audit entries for enrollment and wait_count changes, got {audit_count}"
     );
 
-    // Should have exactly 1 metric entry
+    // Should have 2 metric entries: baseline + change
     let (metric_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM course_metrics")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(metric_count, 1, "should have 1 metric snapshot");
+    assert_eq!(metric_count, 2, "should have baseline + 1 change metric");
 
-    // Verify metric values
+    // Verify the latest metric values
     let (enrollment, wait_count, seats): (i32, i32, i32) = sqlx::query_as(
-        "SELECT enrollment, wait_count, seats_available FROM course_metrics LIMIT 1",
+        "SELECT enrollment, wait_count, seats_available FROM course_metrics ORDER BY timestamp DESC LIMIT 1",
     )
     .fetch_one(&pool)
     .await
@@ -291,7 +302,7 @@ async fn test_batch_upsert_creates_audit_and_metric_entries(pool: PgPool) {
 
 #[sqlx::test]
 async fn test_batch_upsert_no_change_no_audit(pool: PgPool) {
-    // Insert then re-insert identical data — should produce zero audits/metrics
+    // Insert then re-insert identical data — should produce baseline metric but no audits or extra metrics
     let course = vec![helpers::make_course(
         "60001",
         "202510",
@@ -320,7 +331,7 @@ async fn test_batch_upsert_no_change_no_audit(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        metric_count, 0,
-        "identical re-upsert should not create metric entries"
+        metric_count, 1,
+        "identical re-upsert should only have the baseline metric"
     );
 }
