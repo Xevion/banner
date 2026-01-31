@@ -14,14 +14,17 @@ import SearchStatus, { type SearchMeta } from "$lib/components/SearchStatus.svel
 import CourseTable from "$lib/components/CourseTable.svelte";
 import Pagination from "$lib/components/Pagination.svelte";
 import Footer from "$lib/components/Footer.svelte";
+import { termToBanner, termToFriendly } from "$lib/term-format";
 
 let { data } = $props();
 
 // Read initial state from URL params (intentionally captured once)
 const initialParams = untrack(() => new URLSearchParams(data.url.search));
 
-// Filter state
-let selectedTerm = $state(untrack(() => initialParams.get("term") ?? data.terms[0]?.code ?? ""));
+// Filter state - only set term from URL if present (no auto-default)
+const urlTerm = initialParams.get("term");
+const bannerTerm = urlTerm ? (termToBanner(urlTerm) ?? "") : "";
+let selectedTerm = $state(bannerTerm);
 let selectedSubjects: string[] = $state(untrack(() => initialParams.getAll("subject")));
 let query = $state(initialParams.get("q") ?? "");
 let openOnly = $state(initialParams.get("open") === "true");
@@ -160,7 +163,10 @@ async function performSearch(
     sort.length > 0 ? (sort[0].desc ? "desc" : "asc") : undefined;
 
   const params = new URLSearchParams();
-  params.set("term", term);
+  const friendlyTerm = termToFriendly(term);
+  if (friendlyTerm) {
+    params.set("term", friendlyTerm);
+  }
   for (const s of subjects) {
     params.append("subject", s);
   }
