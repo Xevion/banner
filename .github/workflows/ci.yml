@@ -73,6 +73,22 @@ jobs:
   rust-tests:
     name: Rust Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: banner
+          POSTGRES_PASSWORD: banner
+          POSTGRES_DB: banner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://banner:banner@localhost:5432/banner
     steps:
       - uses: actions/checkout@v4
 
@@ -163,7 +179,7 @@ jobs:
           exit-code: 0
 
       - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: trivy-results.sarif
