@@ -1,8 +1,8 @@
 <script lang="ts">
-import { Select } from "bits-ui";
-import { ChevronUp, ChevronDown } from "@lucide/svelte";
-import type { Action } from "svelte/action";
 import { formatNumber } from "$lib/utils";
+import { ChevronDown, ChevronUp } from "@lucide/svelte";
+import { Select } from "bits-ui";
+import type { Action } from "svelte/action";
 
 const slideIn: Action<HTMLElement, number> = (node, direction) => {
   if (direction !== 0) {

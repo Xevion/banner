@@ -1,7 +1,7 @@
 <script lang="ts">
 import { page } from "$app/state";
-import { Search, User, Clock } from "@lucide/svelte";
 import { authStore } from "$lib/auth.svelte";
+import { Clock, Search, User } from "@lucide/svelte";
 import ThemeToggle from "./ThemeToggle.svelte";
 
 const staticTabs = [

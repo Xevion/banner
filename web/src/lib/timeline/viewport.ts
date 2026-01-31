@@ -2,7 +2,7 @@
  * Pure viewport utility functions: binary search, visible-slot slicing,
  * hit-testing, and snapping for the timeline canvas.
  */
-import { SLOT_INTERVAL_MS, RENDER_MARGIN_SLOTS } from "./constants";
+import { RENDER_MARGIN_SLOTS, SLOT_INTERVAL_MS } from "./constants";
 import type { TimeSlot } from "./types";
 
 /**

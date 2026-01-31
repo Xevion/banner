@@ -1,7 +1,7 @@
 <script lang="ts">
-import { Filter, X } from "@lucide/svelte";
-import { getSubjectColor } from "$lib/timeline/data";
 import { DRAWER_WIDTH } from "$lib/timeline/constants";
+import { getSubjectColor } from "$lib/timeline/data";
+import { Filter, X } from "@lucide/svelte";
 
 interface Props {
   open: boolean;

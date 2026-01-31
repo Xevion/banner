@@ -1,6 +1,6 @@
 <script lang="ts">
-import { onMount } from "svelte";
 import TimelineCanvas from "$lib/components/TimelineCanvas.svelte";
+import { onMount } from "svelte";
 
 // Prevent body scroll while this page is mounted via a CSS class
 // (avoids conflicting with other components that may manage overflow).

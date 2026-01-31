@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+import { extname, join } from "path";
+import { constants, brotliCompressSync, gzipSync } from "zlib";
+import { $ } from "bun";
 /**
  * Pre-compress static assets with maximum compression levels.
  * Run after `bun run build`.
@@ -7,10 +10,7 @@
  * These are embedded alongside originals by rust-embed and served via
  * content negotiation in src/web/assets.rs.
  */
-import { readdir, stat, readFile, writeFile } from "fs/promises";
-import { join, extname } from "path";
-import { gzipSync, brotliCompressSync, constants } from "zlib";
-import { $ } from "bun";
+import { readFile, readdir, stat, writeFile } from "fs/promises";
 
 // Must match COMPRESSION_MIN_SIZE in src/web/encoding.rs
 const MIN_SIZE = 512;

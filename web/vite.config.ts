@@ -1,8 +1,8 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
-import { resolve } from "node:path";
-import { readFileSync, existsSync } from "node:fs";
 
 function getVersion() {
   const filename = "Cargo.toml";

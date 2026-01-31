@@ -1,8 +1,8 @@
 <script lang="ts">
-import { onMount } from "svelte";
 import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import { relativeTime } from "$lib/time";
 import { formatNumber } from "$lib/utils";
+import { onMount } from "svelte";
 
 export interface SearchMeta {
   totalCount: number;

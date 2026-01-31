@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { termToFriendly, termToBanner } from "./term-format";
+import { describe, expect, it } from "vitest";
+import { termToBanner, termToFriendly } from "./term-format";
 
 describe("termToFriendly", () => {
   it("converts spring term correctly", () => {

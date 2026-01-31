@@ -1,0 +1,11 @@
+# cargo-audit configuration
+# https://github.com/rustsec/rustsec/tree/main/cargo-audit
+
+[advisories]
+# Transitive dependencies we can't control
+ignore = [
+    # rsa: Marvin Attack timing sidechannel (via sqlx-mysql, no fix available)
+    "RUSTSEC-2023-0071",
+    # derivative: unmaintained (via poise)
+    "RUSTSEC-2024-0388",
+]

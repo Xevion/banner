@@ -1,7 +1,7 @@
 <script lang="ts">
+import { cn } from "$lib/utils";
 import { Tooltip } from "bits-ui";
 import type { Snippet } from "svelte";
-import { cn } from "$lib/utils";
 
 let {
   text,

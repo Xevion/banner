@@ -38,7 +38,7 @@ check *flags:
         ],
       },
       biome: {
-        peers: ["svelte-check", "web-test"],
+        peers: ["svelte-check", "biome-lint", "web-test"],
         format: () => run(["bun", "run", "--cwd", "web", "format"]),
         recheck: [
           { name: "biome",        cmd: ["bun", "run", "--cwd", "web", "format:check"] },
@@ -53,7 +53,9 @@ check *flags:
       { name: "rust-test",    cmd: ["cargo", "nextest", "run", "-E", "not test(export_bindings)"] },
       { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
       { name: "biome",        cmd: ["bun", "run", "--cwd", "web", "format:check"] },
+      { name: "biome-lint",   cmd: ["bun", "run", "--cwd", "web", "lint"] },
       { name: "web-test",     cmd: ["bun", "run", "--cwd", "web", "test"] },
+      { name: "actionlint",  cmd: ["actionlint"] },
       // { name: "sqlx-prepare", cmd: ["cargo", "sqlx", "prepare", "--check"] },
     ];
 

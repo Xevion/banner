@@ -5,7 +5,7 @@
  * the missing segments when the view expands into unloaded territory.
  * Fetches are throttled so rapid panning/zooming doesn't flood the API.
  */
-import { client, type TimelineRange } from "$lib/api";
+import { type TimelineRange, client } from "$lib/api";
 import { SLOT_INTERVAL_MS } from "./constants";
 import type { TimeSlot } from "./types";
 

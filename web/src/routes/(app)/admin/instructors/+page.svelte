@@ -1,13 +1,12 @@
 <script lang="ts">
-import { onMount, onDestroy } from "svelte";
-import { slide, fade } from "svelte/transition";
 import {
-  client,
+  type CandidateResponse,
+  type InstructorDetailResponse,
   type InstructorListItem,
   type InstructorStats,
-  type InstructorDetailResponse,
-  type CandidateResponse,
+  client,
 } from "$lib/api";
+import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import { formatInstructorName, isRatingValid, ratingStyle } from "$lib/course";
 import { themeStore } from "$lib/stores/theme.svelte";
 import {
@@ -19,7 +18,8 @@ import {
   Search,
   X,
 } from "@lucide/svelte";
-import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
+import { onDestroy, onMount } from "svelte";
+import { fade, slide } from "svelte/transition";
 import CandidateCard from "./CandidateCard.svelte";
 
 // --- State ---

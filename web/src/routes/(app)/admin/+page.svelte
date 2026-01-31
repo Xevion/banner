@@ -1,7 +1,7 @@
 <script lang="ts">
-import { onMount } from "svelte";
-import { client, type AdminStatus } from "$lib/api";
+import { type AdminStatus, client } from "$lib/api";
 import { formatNumber } from "$lib/utils";
+import { onMount } from "svelte";
 
 let status = $state<AdminStatus | null>(null);
 let error = $state<string | null>(null);

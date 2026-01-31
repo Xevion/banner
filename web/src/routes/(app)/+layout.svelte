@@ -2,8 +2,8 @@
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { authStore } from "$lib/auth.svelte";
-import PageTransition from "$lib/components/PageTransition.svelte";
 import ErrorBoundaryFallback from "$lib/components/ErrorBoundaryFallback.svelte";
+import PageTransition from "$lib/components/PageTransition.svelte";
 import {
   Activity,
   ClipboardList,

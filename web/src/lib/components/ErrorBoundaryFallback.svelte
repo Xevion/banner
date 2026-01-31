@@ -1,6 +1,6 @@
 <script lang="ts">
 import { page } from "$app/state";
-import { TriangleAlert, RotateCcw } from "@lucide/svelte";
+import { RotateCcw, TriangleAlert } from "@lucide/svelte";
 
 interface Props {
   /** Heading shown in the error card */

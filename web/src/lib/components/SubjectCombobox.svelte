@@ -1,9 +1,9 @@
 <script lang="ts">
-import { Combobox } from "bits-ui";
-import { Check, ChevronsUpDown } from "@lucide/svelte";
-import { fly } from "svelte/transition";
 import type { Subject } from "$lib/api";
 import { formatNumber } from "$lib/utils";
+import { Check, ChevronsUpDown } from "@lucide/svelte";
+import { Combobox } from "bits-ui";
+import { fly } from "svelte/transition";
 
 let {
   subjects,

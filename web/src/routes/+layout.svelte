@@ -2,14 +2,14 @@
 import "overlayscrollbars/overlayscrollbars.css";
 import "./layout.css";
 import { page } from "$app/state";
-import PageTransition from "$lib/components/PageTransition.svelte";
+import { authStore } from "$lib/auth.svelte";
+import ErrorBoundaryFallback from "$lib/components/ErrorBoundaryFallback.svelte";
 import NavBar from "$lib/components/NavBar.svelte";
+import PageTransition from "$lib/components/PageTransition.svelte";
 import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svelte";
 import { initNavigation } from "$lib/stores/navigation.svelte";
 import { themeStore } from "$lib/stores/theme.svelte";
-import { authStore } from "$lib/auth.svelte";
 import { Tooltip } from "bits-ui";
-import ErrorBoundaryFallback from "$lib/components/ErrorBoundaryFallback.svelte";
 import { onMount } from "svelte";
 
 let { children } = $props();

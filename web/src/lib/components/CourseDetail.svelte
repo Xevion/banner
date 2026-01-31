@@ -1,31 +1,31 @@
 <script lang="ts">
 import type { CourseResponse } from "$lib/api";
+import { useClipboard } from "$lib/composables/useClipboard.svelte";
 import {
-  formatTime,
+  RMP_CONFIDENCE_THRESHOLD,
   formatCreditHours,
   formatDate,
   formatMeetingDaysLong,
+  formatTime,
   isMeetingTimeTBA,
   isTimeTBA,
   ratingStyle,
   rmpUrl,
-  RMP_CONFIDENCE_THRESHOLD,
 } from "$lib/course";
 import { themeStore } from "$lib/stores/theme.svelte";
-import { useClipboard } from "$lib/composables/useClipboard.svelte";
-import { cn, tooltipContentClass, formatNumber } from "$lib/utils";
-import { Tooltip } from "bits-ui";
-import SimpleTooltip from "./SimpleTooltip.svelte";
+import { cn, formatNumber, tooltipContentClass } from "$lib/utils";
 import {
-  Info,
-  Copy,
+  Calendar,
   Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Info,
   Star,
   Triangle,
-  ExternalLink,
-  Calendar,
-  Download,
 } from "@lucide/svelte";
+import { Tooltip } from "bits-ui";
+import SimpleTooltip from "./SimpleTooltip.svelte";
 
 let { course }: { course: CourseResponse } = $props();
 

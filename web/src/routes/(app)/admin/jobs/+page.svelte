@@ -3,6 +3,7 @@ import { type ScrapeJob, client } from "$lib/api";
 import { FlexRender, createSvelteTable } from "$lib/components/ui/data-table/index.js";
 import { formatAbsoluteDate } from "$lib/date";
 import { formatDuration } from "$lib/time";
+import { type ConnectionState, ScrapeJobsStore } from "$lib/ws";
 import { ArrowDown, ArrowUp, ArrowUpDown, TriangleAlert } from "@lucide/svelte";
 import {
   type ColumnDef,
@@ -12,7 +13,6 @@ import {
   getSortedRowModel,
 } from "@tanstack/table-core";
 import { onMount } from "svelte";
-import { type ConnectionState, ScrapeJobsStore } from "$lib/ws";
 
 let jobs = $state<ScrapeJob[]>([]);
 let connectionState = $state<ConnectionState>("disconnected");

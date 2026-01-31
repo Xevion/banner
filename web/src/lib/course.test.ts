@@ -1,22 +1,22 @@
-import { describe, it, expect } from "vitest";
+import type { CourseResponse, DbMeetingTime, InstructorResponse } from "$lib/api";
 import {
-  formatTime,
-  formatTimeRange,
+  abbreviateInstructor,
+  formatCreditHours,
+  formatDate,
+  formatDateShort,
   formatMeetingDays,
+  formatMeetingDaysLong,
   formatMeetingDaysVerbose,
   formatMeetingTime,
   formatMeetingTimeTooltip,
   formatMeetingTimesTooltip,
-  abbreviateInstructor,
-  formatCreditHours,
+  formatTime,
+  formatTimeRange,
   getPrimaryInstructor,
   isMeetingTimeTBA,
   isTimeTBA,
-  formatDate,
-  formatDateShort,
-  formatMeetingDaysLong,
 } from "$lib/course";
-import type { DbMeetingTime, CourseResponse, InstructorResponse } from "$lib/api";
+import { describe, expect, it } from "vitest";
 
 function makeMeetingTime(overrides: Partial<DbMeetingTime> = {}): DbMeetingTime {
   return {

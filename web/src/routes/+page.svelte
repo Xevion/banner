@@ -1,20 +1,20 @@
 <script lang="ts">
-import { untrack } from "svelte";
 import { goto } from "$app/navigation";
 import {
-  type Subject,
   type SearchResponse,
   type SortColumn,
   type SortDirection,
+  type Subject,
   client,
 } from "$lib/api";
-import type { SortingState } from "@tanstack/table-core";
+import CourseTable from "$lib/components/CourseTable.svelte";
+import Footer from "$lib/components/Footer.svelte";
+import Pagination from "$lib/components/Pagination.svelte";
 import SearchFilters from "$lib/components/SearchFilters.svelte";
 import SearchStatus, { type SearchMeta } from "$lib/components/SearchStatus.svelte";
-import CourseTable from "$lib/components/CourseTable.svelte";
-import Pagination from "$lib/components/Pagination.svelte";
-import Footer from "$lib/components/Footer.svelte";
 import { termToBanner, termToFriendly } from "$lib/term-format";
+import type { SortingState } from "@tanstack/table-core";
+import { untrack } from "svelte";
 
 let { data } = $props();
 

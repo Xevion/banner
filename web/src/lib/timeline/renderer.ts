@@ -4,28 +4,28 @@
  * Every function takes a {@link ChartContext} plus any data it needs.
  * No Svelte reactivity, no side-effects beyond drawing on the context.
  */
-import { stack, area, curveMonotoneX, type Series } from "d3-shape";
+import { type Series, area, curveMonotoneX, stack } from "d3-shape";
 import { timeFormat } from "d3-time-format";
 
-import { getSubjectColor } from "./data";
 import type { AnimMap } from "./animation";
-import { getStackSubjects } from "./viewport";
-import type { ChartContext, TimeSlot } from "./types";
 import {
-  GRID_ALPHA,
-  HOUR_GRID_ALPHA,
-  NOW_LINE_WIDTH,
-  NOW_LINE_COLOR,
-  NOW_TRIANGLE_HEIGHT,
-  NOW_TRIANGLE_HALF_WIDTH,
-  NOW_LABEL_FONT,
-  HOVER_HIGHLIGHT_ALPHA,
   AREA_FILL_ALPHA,
   AREA_STROKE_ALPHA,
-  SLOT_INTERVAL_MS,
-  SETTLE_THRESHOLD,
   AXIS_FONT,
+  GRID_ALPHA,
+  HOUR_GRID_ALPHA,
+  HOVER_HIGHLIGHT_ALPHA,
+  NOW_LABEL_FONT,
+  NOW_LINE_COLOR,
+  NOW_LINE_WIDTH,
+  NOW_TRIANGLE_HALF_WIDTH,
+  NOW_TRIANGLE_HEIGHT,
+  SETTLE_THRESHOLD,
+  SLOT_INTERVAL_MS,
 } from "./constants";
+import { getSubjectColor } from "./data";
+import type { ChartContext, TimeSlot } from "./types";
+import { getStackSubjects } from "./viewport";
 
 // ── Formatters (allocated once) ─────────────────────────────────────
 const fmtHour = timeFormat("%-I %p");

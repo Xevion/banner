@@ -5,7 +5,7 @@
  * targets. This module owns the AnimMap lifecycle: syncing targets,
  * stepping current values, and pruning offscreen entries.
  */
-import { VALUE_EASE, MAXY_EASE, SETTLE_THRESHOLD, MIN_MAXY } from "./constants";
+import { MAXY_EASE, MIN_MAXY, SETTLE_THRESHOLD, VALUE_EASE } from "./constants";
 import type { AnimEntry, TimeSlot } from "./types";
 
 export type AnimMap = Map<number, Map<string, AnimEntry>>;

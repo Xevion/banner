@@ -1,5 +1,9 @@
 <script lang="ts">
-import { onMount } from "svelte";
+import { type ServiceInfo, type ServiceStatus, type StatusResponse, client } from "$lib/api";
+import Footer from "$lib/components/Footer.svelte";
+import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
+import { relativeTime } from "$lib/time";
+import { formatNumber } from "$lib/utils";
 import {
   Activity,
   Bot,
@@ -12,11 +16,7 @@ import {
   WifiOff,
   XCircle,
 } from "@lucide/svelte";
-import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
-import Footer from "$lib/components/Footer.svelte";
-import { type ServiceStatus, type ServiceInfo, type StatusResponse, client } from "$lib/api";
-import { relativeTime } from "$lib/time";
-import { formatNumber } from "$lib/utils";
+import { onMount } from "svelte";
 
 const REFRESH_INTERVAL = import.meta.env.DEV ? 3000 : 30000;
 const REQUEST_TIMEOUT = 10000;

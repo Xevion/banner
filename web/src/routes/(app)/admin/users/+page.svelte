@@ -1,8 +1,8 @@
 <script lang="ts">
-import { onMount } from "svelte";
 import { client } from "$lib/api";
 import type { User } from "$lib/bindings";
 import { Shield, ShieldOff } from "@lucide/svelte";
+import { onMount } from "svelte";
 
 let users = $state<User[]>([]);
 let error = $state<string | null>(null);

@@ -1,7 +1,7 @@
 <script lang="ts">
-import { tick } from "svelte";
-import { Moon, Sun } from "@lucide/svelte";
 import { themeStore } from "$lib/stores/theme.svelte";
+import { Moon, Sun } from "@lucide/svelte";
+import { tick } from "svelte";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 
 /**

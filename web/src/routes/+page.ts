@@ -1,5 +1,5 @@
-import type { PageLoad } from "./$types";
 import { BannerApiClient } from "$lib/api";
+import type { PageLoad } from "./$types";
 
 export const load: PageLoad = async ({ url, fetch }) => {
   const client = new BannerApiClient(undefined, fetch);

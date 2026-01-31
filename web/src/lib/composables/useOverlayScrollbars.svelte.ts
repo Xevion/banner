@@ -1,6 +1,6 @@
-import { onMount } from "svelte";
-import { OverlayScrollbars, type PartialOptions } from "overlayscrollbars";
 import { themeStore } from "$lib/stores/theme.svelte";
+import { OverlayScrollbars, type PartialOptions } from "overlayscrollbars";
+import { onMount } from "svelte";
 
 /**
  * Set up OverlayScrollbars on an element with automatic theme reactivity.

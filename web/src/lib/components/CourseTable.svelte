@@ -1,6 +1,10 @@
 <script lang="ts">
 import type { CourseResponse } from "$lib/api";
+import { FlexRender, createSvelteTable } from "$lib/components/ui/data-table/index.js";
+import { useClipboard } from "$lib/composables/useClipboard.svelte";
+import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svelte";
 import {
+  RMP_CONFIDENCE_THRESHOLD,
   abbreviateInstructor,
   concernAccentColor,
   formatLocationDisplay,
@@ -13,40 +17,36 @@ import {
   isMeetingTimeTBA,
   isTimeTBA,
   openSeats,
-  seatsColor,
-  seatsDotColor,
   ratingStyle,
   rmpUrl,
-  RMP_CONFIDENCE_THRESHOLD,
+  seatsColor,
+  seatsDotColor,
 } from "$lib/course";
 import { themeStore } from "$lib/stores/theme.svelte";
-import { useClipboard } from "$lib/composables/useClipboard.svelte";
-import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svelte";
-import CourseDetail from "./CourseDetail.svelte";
-import { fade, fly, slide } from "svelte/transition";
-import { flip } from "svelte/animate";
-import { createSvelteTable, FlexRender } from "$lib/components/ui/data-table/index.js";
+import { cn, formatNumber, tooltipContentClass } from "$lib/utils";
 import {
-  getCoreRowModel,
-  getSortedRowModel,
-  type ColumnDef,
-  type SortingState,
-  type VisibilityState,
-  type Updater,
-} from "@tanstack/table-core";
-import {
-  ArrowUp,
   ArrowDown,
+  ArrowUp,
   ArrowUpDown,
-  Columns3,
   Check,
+  Columns3,
+  ExternalLink,
   RotateCcw,
   Star,
   Triangle,
-  ExternalLink,
 } from "@lucide/svelte";
-import { DropdownMenu, ContextMenu, Tooltip } from "bits-ui";
-import { cn, tooltipContentClass, formatNumber } from "$lib/utils";
+import {
+  type ColumnDef,
+  type SortingState,
+  type Updater,
+  type VisibilityState,
+  getCoreRowModel,
+  getSortedRowModel,
+} from "@tanstack/table-core";
+import { ContextMenu, DropdownMenu, Tooltip } from "bits-ui";
+import { flip } from "svelte/animate";
+import { fade, fly, slide } from "svelte/transition";
+import CourseDetail from "./CourseDetail.svelte";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 
 let {

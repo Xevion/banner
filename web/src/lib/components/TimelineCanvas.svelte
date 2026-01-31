@@ -1,60 +1,60 @@
 <script lang="ts">
+import { scaleLinear, scaleTime } from "d3-scale";
 import { onMount } from "svelte";
-import { scaleTime, scaleLinear } from "d3-scale";
 
-import type { TimeSlot, ChartContext } from "$lib/timeline/types";
-import {
-  PADDING,
-  DEFAULT_AXIS_RATIO,
-  CHART_HEIGHT_RATIO,
-  MIN_SPAN_MS,
-  MAX_SPAN_MS,
-  DEFAULT_SPAN_MS,
-  ZOOM_FACTOR,
-  ZOOM_KEY_FACTOR,
-  ZOOM_EASE,
-  ZOOM_SETTLE_THRESHOLD,
-  PAN_FRICTION,
-  PAN_STOP_THRESHOLD,
-  PAN_STOP_THRESHOLD_Y,
-  VELOCITY_SAMPLE_WINDOW,
-  VELOCITY_MIN_DT,
-  PAN_STEP_RATIO,
-  PAN_STEP_CTRL_RATIO,
-  PAN_EASE,
-  PAN_SETTLE_THRESHOLD_PX,
-  YRATIO_STEP,
-  YRATIO_MIN,
-  YRATIO_MAX,
-  YRATIO_SETTLE_THRESHOLD,
-  FOLLOW_EASE,
-  MIN_MAXY,
-  MAX_DT,
-  DEFAULT_DT,
-  TAP_MAX_DURATION_MS,
-  TAP_MAX_DISTANCE_PX,
-} from "$lib/timeline/constants";
-import { createTimelineStore } from "$lib/timeline/store.svelte";
 import {
   createAnimMap,
-  syncAnimTargets,
-  stepAnimations,
   pruneAnimMap,
+  stepAnimations,
+  syncAnimTargets,
 } from "$lib/timeline/animation";
 import {
-  getVisibleSlots,
-  findSlotByTime,
-  snapToSlot,
-  enabledTotalClasses,
-} from "$lib/timeline/viewport";
+  CHART_HEIGHT_RATIO,
+  DEFAULT_AXIS_RATIO,
+  DEFAULT_DT,
+  DEFAULT_SPAN_MS,
+  FOLLOW_EASE,
+  MAX_DT,
+  MAX_SPAN_MS,
+  MIN_MAXY,
+  MIN_SPAN_MS,
+  PADDING,
+  PAN_EASE,
+  PAN_FRICTION,
+  PAN_SETTLE_THRESHOLD_PX,
+  PAN_STEP_CTRL_RATIO,
+  PAN_STEP_RATIO,
+  PAN_STOP_THRESHOLD,
+  PAN_STOP_THRESHOLD_Y,
+  TAP_MAX_DISTANCE_PX,
+  TAP_MAX_DURATION_MS,
+  VELOCITY_MIN_DT,
+  VELOCITY_SAMPLE_WINDOW,
+  YRATIO_MAX,
+  YRATIO_MIN,
+  YRATIO_SETTLE_THRESHOLD,
+  YRATIO_STEP,
+  ZOOM_EASE,
+  ZOOM_FACTOR,
+  ZOOM_KEY_FACTOR,
+  ZOOM_SETTLE_THRESHOLD,
+} from "$lib/timeline/constants";
 import {
   drawGrid,
   drawHoverColumn,
-  drawStackedArea,
   drawNowLine,
+  drawStackedArea,
   drawTimeAxis,
   stackVisibleSlots,
 } from "$lib/timeline/renderer";
+import { createTimelineStore } from "$lib/timeline/store.svelte";
+import type { ChartContext, TimeSlot } from "$lib/timeline/types";
+import {
+  enabledTotalClasses,
+  findSlotByTime,
+  getVisibleSlots,
+  snapToSlot,
+} from "$lib/timeline/viewport";
 import TimelineDrawer from "./TimelineDrawer.svelte";
 import TimelineTooltip from "./TimelineTooltip.svelte";
 

@@ -1,8 +1,8 @@
 <script lang="ts">
-import { timeFormat } from "d3-time-format";
 import { getSubjectColor } from "$lib/timeline/data";
 import type { TimeSlot } from "$lib/timeline/types";
 import { enabledTotalClasses } from "$lib/timeline/viewport";
+import { timeFormat } from "d3-time-format";
 
 interface Props {
   visible: boolean;

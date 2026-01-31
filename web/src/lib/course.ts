@@ -1,4 +1,4 @@
-import type { DbMeetingTime, CourseResponse, InstructorResponse } from "$lib/api";
+import type { CourseResponse, DbMeetingTime, InstructorResponse } from "$lib/api";
 
 /** Convert "0900" to "9:00 AM" */
 export function formatTime(time: string | null): string {

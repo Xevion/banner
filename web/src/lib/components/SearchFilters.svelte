@@ -1,8 +1,8 @@
 <script lang="ts">
-import type { Term, Subject } from "$lib/api";
+import type { Subject, Term } from "$lib/api";
 import SimpleTooltip from "./SimpleTooltip.svelte";
-import TermCombobox from "./TermCombobox.svelte";
 import SubjectCombobox from "./SubjectCombobox.svelte";
+import TermCombobox from "./TermCombobox.svelte";
 
 let {
   terms,
