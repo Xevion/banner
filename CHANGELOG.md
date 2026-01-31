@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.1](https://github.com/Xevion/Banner/compare/v0.6.0...v0.6.1) (2026-01-31)
+
+
+### Features
+
+* **build:** Auto-regenerate TypeScript bindings on source changes ([e203e8e](https://github.com/Xevion/Banner/commit/e203e8e182f7a0b0224a8f9e6bf79d15259215a2))
+* **course:** Distinguish async from synchronous online courses ([8bfc14e](https://github.com/Xevion/Banner/commit/8bfc14e55c1bdf5acc2006096476e0b1eb1b7cc6))
+* **scraper:** Improve dashboard clarity with stat tooltips ([1ad614d](https://github.com/Xevion/Banner/commit/1ad614dad03d3631a8d119203786718c814e72c7))
+* **scraper:** Improve results visibility and loading states ([c533768](https://github.com/Xevion/Banner/commit/c53376836238f3aca92ac82cd5fd59a077bcceff))
+
+
+### Bug Fixes
+
+* Avoid status flickering on subjects table ([2689587](https://github.com/Xevion/Banner/commit/2689587dd53c572a65eeb91f74c737662e1f148b))
+* **ci:** Add postgres container service for rust tests ([ebb7a97](https://github.com/Xevion/Banner/commit/ebb7a97c113fa1d4b61b8637dfe97cae5260075c))
+* **ci:** Fix rust/frontend/security job failures and expand local checks ([dd148e0](https://github.com/Xevion/Banner/commit/dd148e08a0b6d5b7afe4ff614d7d6e4e4d0dfce6))
+* **data:** Decode HTML entities in course titles and instructor names ([7d2255a](https://github.com/Xevion/Banner/commit/7d2255a988a23f6e1b1c8e7cb5a8ead833ad34da))
+* **metrics:** Always emit baseline metrics on initial course insertion ([16039e0](https://github.com/Xevion/Banner/commit/16039e02a999c668d4969a43eb9ed1d4e8d370e1))
+
+
+### Code Refactoring
+
+* **terms:** Move term formatting from frontend to backend ([cbb0a51](https://github.com/Xevion/Banner/commit/cbb0a51bca9e4e0d6a8fcee90465c93943f2a30e))
+* Use friendly term codes in URL query parameters ([550401b](https://github.com/Xevion/Banner/commit/550401b85ceb8a447e316209b479c69062c5b658))
+
+
+### Continuous Integration
+
+* Add Release Please automation for changelog and version management ([6863ee5](https://github.com/Xevion/Banner/commit/6863ee58d0a5778303af1b7626b2a9eda3043ca0))
+* Split quality checks into parallel jobs with security scanning ([3494341](https://github.com/Xevion/Banner/commit/3494341e3fbe9ffd96b6fcd8abbe7f95ecec6f45))
+
+
+### Miscellaneous
+
+* Add ts-rs generated bindings ([2df0ba0](https://github.com/Xevion/Banner/commit/2df0ba0ec58155d73830a66132cb635dc819e8a9))
+* Update frontend packages ([acccaa5](https://github.com/Xevion/Banner/commit/acccaa54d4455500db60d1b6437cad1c592445f1))
+
 ## [Unreleased]
 
 ## [0.6.0] - 2026-01-30
