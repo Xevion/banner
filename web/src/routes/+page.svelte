@@ -12,7 +12,6 @@ import Footer from "$lib/components/Footer.svelte";
 import Pagination from "$lib/components/Pagination.svelte";
 import SearchFilters from "$lib/components/SearchFilters.svelte";
 import SearchStatus, { type SearchMeta } from "$lib/components/SearchStatus.svelte";
-import { termToBanner, termToFriendly } from "$lib/term-format";
 import type { SortingState } from "@tanstack/table-core";
 import { untrack } from "svelte";
 
@@ -21,10 +20,14 @@ let { data } = $props();
 // Read initial state from URL params (intentionally captured once)
 const initialParams = untrack(() => new URLSearchParams(data.url.search));
 
-// Filter state - only set term from URL if present (no auto-default)
+// The default term is the first one returned by the backend (most current)
+const defaultTermSlug = data.terms[0]?.slug ?? "";
+
+// Default to the first term when no URL param is present
 const urlTerm = initialParams.get("term");
-const bannerTerm = urlTerm ? (termToBanner(urlTerm) ?? "") : "";
-let selectedTerm = $state(bannerTerm);
+let selectedTerm = $state(
+  urlTerm && data.terms.some((t) => t.slug === urlTerm) ? urlTerm : defaultTermSlug
+);
 let selectedSubjects: string[] = $state(untrack(() => initialParams.getAll("subject")));
 let query = $state(initialParams.get("q") ?? "");
 let openOnly = $state(initialParams.get("open") === "true");
@@ -163,10 +166,6 @@ async function performSearch(
     sort.length > 0 ? (sort[0].desc ? "desc" : "asc") : undefined;
 
   const params = new URLSearchParams();
-  const friendlyTerm = termToFriendly(term);
-  if (friendlyTerm) {
-    params.set("term", friendlyTerm);
-  }
   for (const s of subjects) {
     params.append("subject", s);
   }
@@ -175,6 +174,12 @@ async function performSearch(
   if (off > 0) params.set("offset", String(off));
   if (sortBy) params.set("sort_by", sortBy);
   if (sortDir && sortBy) params.set("sort_dir", sortDir);
+
+  // Include term in URL only when it differs from the default or other params are active
+  const hasOtherParams = params.size > 0;
+  if (term !== defaultTermSlug || hasOtherParams) {
+    params.set("term", term);
+  }
   goto(`?${params.toString()}`, { replaceState: true, noScroll: true, keepFocus: true });
 
   const t0 = performance.now();

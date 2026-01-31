@@ -16,12 +16,11 @@ let open = $state(false);
 let searchValue = $state("");
 let containerEl = $state<HTMLDivElement>(null!);
 
-const currentTermCode = $derived(
-  terms.find((t) => !t.description.includes("(View Only)"))?.code ?? ""
-);
+// The first term from the backend is the most current
+const currentTermSlug = $derived(terms[0]?.slug ?? "");
 
 const selectedLabel = $derived(
-  terms.find((t) => t.code === value)?.description ?? "Select term..."
+  terms.find((t) => t.slug === value)?.description ?? "Select term..."
 );
 
 const filteredTerms = $derived.by(() => {
@@ -29,8 +28,8 @@ const filteredTerms = $derived.by(() => {
   const matched =
     query === "" ? terms : terms.filter((t) => t.description.toLowerCase().includes(query));
 
-  const current = matched.find((t) => t.code === currentTermCode);
-  const rest = matched.filter((t) => t.code !== currentTermCode);
+  const current = matched.find((t) => t.slug === currentTermSlug);
+  const rest = matched.filter((t) => t.slug !== currentTermSlug);
   return current ? [current, ...rest] : rest;
 });
 
@@ -100,22 +99,22 @@ $effect(() => {
           <div {...wrapperProps}>
             <div {...props} transition:fly={{ duration: 150, y: -4 }}>
               <Combobox.Viewport class="p-0.5">
-                {#each filteredTerms as term, i (term.code)}
-                  {#if i === 1 && term.code !== currentTermCode && filteredTerms[0]?.code === currentTermCode}
+                {#each filteredTerms as term, i (term.slug)}
+                  {#if i === 1 && term.slug !== currentTermSlug && filteredTerms[0]?.slug === currentTermSlug}
                     <div class="mx-2 my-1 h-px bg-border"></div>
                   {/if}
                   <Combobox.Item
                     class="rounded-sm outline-hidden flex h-8 w-full select-none items-center px-2 text-sm
                            data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground
-                           {term.code === value ? 'cursor-default' : 'cursor-pointer'}
-                           {term.code === currentTermCode ? 'font-medium text-foreground' : 'text-foreground'}"
-                    value={term.code}
+                           {term.slug === value ? 'cursor-default' : 'cursor-pointer'}
+                           {term.slug === currentTermSlug ? 'font-medium text-foreground' : 'text-foreground'}"
+                    value={term.slug}
                     label={term.description}
                   >
                     {#snippet children({ selected })}
                       <span class="flex-1 truncate">
                         {term.description}
-                        {#if term.code === currentTermCode}
+                        {#if term.slug === currentTermSlug}
                           <span class="ml-1.5 text-xs text-muted-foreground font-normal">current</span>
                         {/if}
                       </span>

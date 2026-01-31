@@ -21,6 +21,7 @@ import type {
   SubjectResultEntry,
   SubjectSummary,
   SubjectsResponse,
+  TermResponse,
   TimeseriesPoint,
   TimeseriesResponse,
   TopCandidateResponse,
@@ -51,13 +52,14 @@ export type {
   SubjectResultEntry,
   SubjectSummary,
   SubjectsResponse,
+  TermResponse,
   TimeseriesPoint,
   TimeseriesResponse,
   TopCandidateResponse,
 };
 
-// Semantic aliases — these all share the CodeDescription shape
-export type Term = CodeDescription;
+// Semantic aliases
+export type Term = TermResponse;
 export type Subject = CodeDescription;
 export type ReferenceEntry = CodeDescription;
 
@@ -268,8 +270,8 @@ export class BannerApiClient {
     return this.request<Term[]>("/terms");
   }
 
-  async getSubjects(termCode: string): Promise<Subject[]> {
-    return this.request<Subject[]>(`/subjects?term=${encodeURIComponent(termCode)}`);
+  async getSubjects(term: string): Promise<Subject[]> {
+    return this.request<Subject[]>(`/subjects?term=${encodeURIComponent(term)}`);
   }
 
   async getReference(category: string): Promise<ReferenceEntry[]> {

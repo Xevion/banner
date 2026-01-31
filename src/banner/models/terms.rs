@@ -147,6 +147,37 @@ impl Term {
             },
         }
     }
+
+    /// URL-friendly slug, e.g. "spring-2026"
+    pub fn slug(&self) -> String {
+        format!("{}-{}", self.season.slug(), self.year)
+    }
+
+    /// Parse a slug like "spring-2026" into a Term
+    pub fn from_slug(s: &str) -> Option<Self> {
+        let (season_str, year_str) = s.rsplit_once('-')?;
+        let season = Season::from_slug(season_str)?;
+        let year = year_str.parse::<u32>().ok()?;
+        if !VALID_YEARS.contains(&year) {
+            return None;
+        }
+        Some(Term { year, season })
+    }
+
+    /// Human-readable description, e.g. "Spring 2026"
+    pub fn description(&self) -> String {
+        format!("{} {}", self.season, self.year)
+    }
+
+    /// Resolve a string that is either a term code ("202620") or a slug ("spring-2026") to a term code.
+    pub fn resolve_to_code(s: &str) -> Option<String> {
+        // Try parsing as a 6-digit code first
+        if let Ok(term) = s.parse::<Term>() {
+            return Some(term.to_string());
+        }
+        // Try parsing as a slug
+        Term::from_slug(s).map(|t| t.to_string())
+    }
 }
 
 impl TermPoint {
@@ -193,6 +224,25 @@ impl Season {
             Season::Fall => "10",
             Season::Spring => "20",
             Season::Summer => "30",
+        }
+    }
+
+    /// Returns the lowercase slug for URL-friendly representation
+    pub fn slug(self) -> &'static str {
+        match self {
+            Season::Fall => "fall",
+            Season::Spring => "spring",
+            Season::Summer => "summer",
+        }
+    }
+
+    /// Parse a slug like "spring", "summer", "fall" into a Season
+    pub fn from_slug(s: &str) -> Option<Self> {
+        match s {
+            "fall" => Some(Season::Fall),
+            "spring" => Some(Season::Spring),
+            "summer" => Some(Season::Summer),
+            _ => None,
         }
     }
 }
@@ -444,5 +494,80 @@ mod tests {
                 season: Season::Spring
             }
         );
+    }
+
+    // --- Season::slug / from_slug ---
+
+    #[test]
+    fn test_season_slug_roundtrip() {
+        for season in [Season::Fall, Season::Spring, Season::Summer] {
+            assert_eq!(Season::from_slug(season.slug()), Some(season));
+        }
+    }
+
+    #[test]
+    fn test_season_from_slug_invalid() {
+        assert_eq!(Season::from_slug("winter"), None);
+        assert_eq!(Season::from_slug(""), None);
+        assert_eq!(Season::from_slug("Spring"), None); // case-sensitive
+    }
+
+    // --- Term::slug / from_slug ---
+
+    #[test]
+    fn test_term_slug() {
+        let term = Term {
+            year: 2026,
+            season: Season::Spring,
+        };
+        assert_eq!(term.slug(), "spring-2026");
+    }
+
+    #[test]
+    fn test_term_from_slug_roundtrip() {
+        for code in ["202510", "202520", "202530"] {
+            let term = Term::from_str(code).unwrap();
+            let slug = term.slug();
+            let parsed = Term::from_slug(&slug).unwrap();
+            assert_eq!(parsed, term);
+        }
+    }
+
+    #[test]
+    fn test_term_from_slug_invalid() {
+        assert_eq!(Term::from_slug("winter-2026"), None);
+        assert_eq!(Term::from_slug("spring"), None);
+        assert_eq!(Term::from_slug(""), None);
+    }
+
+    // --- Term::description ---
+
+    #[test]
+    fn test_term_description() {
+        let term = Term {
+            year: 2026,
+            season: Season::Spring,
+        };
+        assert_eq!(term.description(), "Spring 2026");
+    }
+
+    // --- Term::resolve_to_code ---
+
+    #[test]
+    fn test_resolve_to_code_from_code() {
+        assert_eq!(Term::resolve_to_code("202620"), Some("202620".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_to_code_from_slug() {
+        assert_eq!(
+            Term::resolve_to_code("spring-2026"),
+            Some("202620".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resolve_to_code_invalid() {
+        assert_eq!(Term::resolve_to_code("garbage"), None);
     }
 }

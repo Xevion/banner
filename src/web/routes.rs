@@ -9,13 +9,13 @@ use axum::{
     routing::{get, post, put},
 };
 
-use crate::web::admin;
-use crate::web::admin_rmp;
 use crate::web::admin_scraper;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::calendar;
 use crate::web::timeline;
 use crate::web::ws;
+use crate::{data, web::admin};
+use crate::{data::models, web::admin_rmp};
 #[cfg(feature = "embed-assets")]
 use axum::{
     http::{HeaderMap, StatusCode, Uri},
@@ -468,7 +468,7 @@ pub struct CourseResponse {
     link_identifier: Option<String>,
     is_section_linked: Option<bool>,
     part_of_term: Option<String>,
-    meeting_times: Vec<crate::data::models::DbMeetingTime>,
+    meeting_times: Vec<models::DbMeetingTime>,
     attributes: Vec<String>,
     instructors: Vec<InstructorResponse>,
 }
@@ -505,10 +505,19 @@ pub struct CodeDescription {
     description: String,
 }
 
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TermResponse {
+    code: String,
+    slug: String,
+    description: String,
+}
+
 /// Build a `CourseResponse` from a DB course with pre-fetched instructor details.
 fn build_course_response(
-    course: &crate::data::models::Course,
-    instructors: Vec<crate::data::models::CourseInstructorDetail>,
+    course: &models::Course,
+    instructors: Vec<models::CourseInstructorDetail>,
 ) -> CourseResponse {
     let instructors = instructors
         .into_iter()
@@ -557,12 +566,20 @@ async fn search_courses(
     State(state): State<AppState>,
     axum_extra::extract::Query(params): axum_extra::extract::Query<SearchParams>,
 ) -> Result<Json<SearchResponse>, (AxumStatusCode, String)> {
+    use crate::banner::models::terms::Term;
+
+    let term_code = Term::resolve_to_code(&params.term).ok_or_else(|| {
+        (
+            AxumStatusCode::BAD_REQUEST,
+            format!("Invalid term: {}", params.term),
+        )
+    })?;
     let limit = params.limit.clamp(1, 100);
     let offset = params.offset.max(0);
 
-    let (courses, total_count) = crate::data::courses::search_courses(
+    let (courses, total_count) = data::courses::search_courses(
         &state.db_pool,
-        &params.term,
+        &term_code,
         if params.subject.is_empty() {
             None
         } else {
@@ -591,7 +608,7 @@ async fn search_courses(
     // Batch-fetch all instructors in a single query instead of N+1
     let course_ids: Vec<i32> = courses.iter().map(|c| c.id).collect();
     let mut instructor_map =
-        crate::data::courses::get_instructors_for_courses(&state.db_pool, &course_ids)
+        data::courses::get_instructors_for_courses(&state.db_pool, &course_ids)
             .await
             .unwrap_or_default();
 
@@ -616,7 +633,7 @@ async fn get_course(
     State(state): State<AppState>,
     Path((term, crn)): Path<(String, String)>,
 ) -> Result<Json<CourseResponse>, (AxumStatusCode, String)> {
-    let course = crate::data::courses::get_course_by_crn(&state.db_pool, &crn, &term)
+    let course = data::courses::get_course_by_crn(&state.db_pool, &crn, &term)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Course lookup failed");
@@ -627,7 +644,7 @@ async fn get_course(
         })?
         .ok_or_else(|| (AxumStatusCode::NOT_FOUND, "Course not found".to_string()))?;
 
-    let instructors = crate::data::courses::get_course_instructors(&state.db_pool, course.id)
+    let instructors = data::courses::get_course_instructors(&state.db_pool, course.id)
         .await
         .unwrap_or_default();
     Ok(Json(build_course_response(&course, instructors)))
@@ -636,9 +653,10 @@ async fn get_course(
 /// `GET /api/terms`
 async fn get_terms(
     State(state): State<AppState>,
-) -> Result<Json<Vec<CodeDescription>>, (AxumStatusCode, String)> {
-    let cache = state.reference_cache.read().await;
-    let term_codes = crate::data::courses::get_available_terms(&state.db_pool)
+) -> Result<Json<Vec<TermResponse>>, (AxumStatusCode, String)> {
+    use crate::banner::models::terms::Term;
+
+    let term_codes = data::courses::get_available_terms(&state.db_pool)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to get terms");
@@ -648,14 +666,15 @@ async fn get_terms(
             )
         })?;
 
-    let terms: Vec<CodeDescription> = term_codes
+    let terms: Vec<TermResponse> = term_codes
         .into_iter()
-        .map(|code| {
-            let description = cache
-                .lookup("term", &code)
-                .unwrap_or("Unknown Term")
-                .to_string();
-            CodeDescription { code, description }
+        .filter_map(|code| {
+            let term: Term = code.parse().ok()?;
+            Some(TermResponse {
+                code,
+                slug: term.slug(),
+                description: term.description(),
+            })
         })
         .collect();
 
@@ -667,7 +686,15 @@ async fn get_subjects(
     State(state): State<AppState>,
     Query(params): Query<SubjectsParams>,
 ) -> Result<Json<Vec<CodeDescription>>, (AxumStatusCode, String)> {
-    let rows = crate::data::courses::get_subjects_by_enrollment(&state.db_pool, &params.term)
+    use crate::banner::models::terms::Term;
+
+    let term_code = Term::resolve_to_code(&params.term).ok_or_else(|| {
+        (
+            AxumStatusCode::BAD_REQUEST,
+            format!("Invalid term: {}", params.term),
+        )
+    })?;
+    let rows = data::courses::get_subjects_by_enrollment(&state.db_pool, &term_code)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to get subjects");
@@ -696,7 +723,7 @@ async fn get_reference(
     if entries.is_empty() {
         // Fall back to DB query in case cache doesn't have this category
         drop(cache);
-        let rows = crate::data::reference::get_by_category(&category, &state.db_pool)
+        let rows = data::reference::get_by_category(&category, &state.db_pool)
             .await
             .map_err(|e| {
                 tracing::error!(error = %e, category = %category, "Reference lookup failed");
