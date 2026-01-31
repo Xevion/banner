@@ -439,23 +439,19 @@ async function performSearch() {
       };
     };
 
+    // Scoped view transitions only affect the table element, so filters and
+    // other controls remain fully interactive. Document-level transitions
+    // apply visibility:hidden to the entire page for the transition duration,
+    // blocking all pointer interactions — so we skip those entirely and let
+    // Svelte's animate:flip / in:fade handle the visual update instead.
     const tableEl = document.querySelector("[data-search-results]") as HTMLElement | null;
-    const scopedSupport = tableEl && "startViewTransition" in tableEl;
 
-    if (scopedSupport) {
-      // Scoped transition — no top-layer issue, no need for filter-overlay workaround
+    if (tableEl && "startViewTransition" in tableEl) {
       const transition = (tableEl as any).startViewTransition(async () => {
         applyUpdate();
         await tick();
       });
-      await transition.finished;
-    } else if (document.startViewTransition) {
-      // Document-level fallback with z-index layering for filter overlays
-      const transition = document.startViewTransition(async () => {
-        applyUpdate();
-        await tick();
-      });
-      await transition.finished;
+      await transition.updateCallbackDone;
     } else {
       applyUpdate();
     }

@@ -96,7 +96,7 @@ $effect(() => {
     >
       {#snippet child({ wrapperProps, props, open: isOpen })}
         {#if isOpen}
-          <div {...wrapperProps} style:view-transition-name="filter-overlay">
+          <div {...wrapperProps}>
             <div {...props} transition:fly={{ duration: 150, y: -4 }}>
               <Combobox.Viewport class="p-0.5">
                 {#each filteredTerms as term, i (term.slug)}

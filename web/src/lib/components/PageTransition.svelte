@@ -48,7 +48,8 @@ function inTransition(_node: HTMLElement): TransitionConfig {
 
 function outTransition(_node: HTMLElement): TransitionConfig {
   const dir = navigationStore.direction;
-  const base = "position: absolute; top: 0; left: 0; width: 100%; height: 100%";
+  const base =
+    "position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none";
   if (dir === "fade") {
     return {
       duration: DURATION,

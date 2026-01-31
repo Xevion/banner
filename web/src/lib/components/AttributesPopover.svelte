@@ -82,7 +82,7 @@ function toggle(key: "instructionalMethod" | "campus" | "partOfTerm" | "attribut
   >
     {#snippet child({ wrapperProps, props, open })}
       {#if open}
-        <div {...wrapperProps} style:view-transition-name="filter-overlay">
+        <div {...wrapperProps}>
           <div {...props} transition:fly={{ duration: 150, y: -4 }}>
             <div class="flex flex-col gap-3">
               {#each sections as { label, key, dataKey }, i (key)}

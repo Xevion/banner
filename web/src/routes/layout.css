@@ -133,7 +133,7 @@ input[type="checkbox"]:checked::before {
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
 }
 
-/* View Transitions API - disable default cross-fade so JS can animate clip-path */
+/* View Transitions API - disable default cross-fade for scoped table transitions */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
@@ -250,13 +250,4 @@ body::-webkit-scrollbar {
 }
 ::view-transition-new(search-results) {
   animation-duration: 200ms;
-}
-
-/* Keep filter overlays above view-transition snapshots */
-::view-transition-group(filter-overlay) {
-  z-index: 100;
-}
-::view-transition-old(filter-overlay),
-::view-transition-new(filter-overlay) {
-  animation: none;
 }
