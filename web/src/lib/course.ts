@@ -152,6 +152,13 @@ export function isTimeTBA(mt: DbMeetingTime): boolean {
   return !mt.begin_time || mt.begin_time.length !== 4;
 }
 
+/** Check if course is asynchronous online (INT building with no meeting times) */
+export function isAsyncOnline(course: CourseResponse): boolean {
+  if (course.meetingTimes.length === 0) return false;
+  const mt = course.meetingTimes[0];
+  return mt.building === "INT" && isTimeTBA(mt);
+}
+
 /** Format a date string to "January 20, 2026". Accepts YYYY-MM-DD or MM/DD/YYYY. */
 export function formatDate(dateStr: string): string {
   let year: number, month: number, day: number;
@@ -170,6 +177,8 @@ export function formatDate(dateStr: string): string {
 /** Short location string from first meeting time: "MH 2.206" or campus fallback */
 export function formatLocation(course: CourseResponse): string | null {
   for (const mt of course.meetingTimes) {
+    // Skip INT building - handled by formatLocationDisplay
+    if (mt.building === "INT") continue;
     if (mt.building && mt.room) return `${mt.building} ${mt.room}`;
     if (mt.building) return mt.building;
   }
@@ -307,13 +316,19 @@ export function concernAccentColor(concern: DeliveryConcern): string | null {
 
 /**
  * Location display text for the table cell.
- * Falls back to "Online" for online courses instead of showing a dash.
+ * Shows "Online" for internet class (INT building) or other online courses.
  */
 export function formatLocationDisplay(course: CourseResponse): string | null {
+  // Check for Internet Class building first
+  const hasIntBuilding = course.meetingTimes.some((mt) => mt.building === "INT");
+  if (hasIntBuilding) return "Online";
+
   const loc = formatLocation(course);
   if (loc) return loc;
+
   const concern = getDeliveryConcern(course);
-  if (concern === "online") return "Online";
+  if (concern === "online" || concern === "internet") return "Online";
+
   return null;
 }
 

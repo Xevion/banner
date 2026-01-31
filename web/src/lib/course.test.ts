@@ -4,6 +4,7 @@ import {
   formatCreditHours,
   formatDate,
   formatDateShort,
+  formatLocationDisplay,
   formatMeetingDays,
   formatMeetingDaysLong,
   formatMeetingDaysVerbose,
@@ -13,6 +14,7 @@ import {
   formatTime,
   formatTimeRange,
   getPrimaryInstructor,
+  isAsyncOnline,
   isMeetingTimeTBA,
   isTimeTBA,
 } from "$lib/course";
@@ -409,5 +411,94 @@ describe("formatMeetingTimesTooltip", () => {
     expect(result).toContain("Mondays, Wednesdays & Fridays, 9:00–9:50 AM");
     expect(result).toContain("Thursdays, 1:00–2:00 PM\nLab 101");
     expect(result).toContain("\n\n");
+  });
+});
+
+describe("isAsyncOnline", () => {
+  it("returns true for INT building with no times", () => {
+    const course = {
+      meetingTimes: [
+        makeMeetingTime({
+          building: "INT",
+          building_description: "Internet Class",
+          begin_time: null,
+          end_time: null,
+        }),
+      ],
+    } as CourseResponse;
+    expect(isAsyncOnline(course)).toBe(true);
+  });
+  it("returns false for INT building with meeting times", () => {
+    const course = {
+      meetingTimes: [
+        makeMeetingTime({
+          building: "INT",
+          building_description: "Internet Class",
+          tuesday: true,
+          thursday: true,
+          begin_time: "1000",
+          end_time: "1115",
+        }),
+      ],
+    } as CourseResponse;
+    expect(isAsyncOnline(course)).toBe(false);
+  });
+  it("returns false for non-INT building", () => {
+    const course = {
+      meetingTimes: [
+        makeMeetingTime({
+          building: "MH",
+          building_description: "Main Hall",
+          begin_time: null,
+          end_time: null,
+        }),
+      ],
+    } as CourseResponse;
+    expect(isAsyncOnline(course)).toBe(false);
+  });
+  it("returns false for empty meeting times", () => {
+    const course = { meetingTimes: [] } as unknown as CourseResponse;
+    expect(isAsyncOnline(course)).toBe(false);
+  });
+});
+
+describe("formatLocationDisplay", () => {
+  it("returns 'Online' for INT building", () => {
+    const course = {
+      meetingTimes: [
+        makeMeetingTime({
+          building: "INT",
+          building_description: "Internet Class",
+        }),
+      ],
+      campus: "9",
+    } as CourseResponse;
+    expect(formatLocationDisplay(course)).toBe("Online");
+  });
+  it("returns building and room for physical location", () => {
+    const course = {
+      meetingTimes: [
+        makeMeetingTime({
+          building: "MH",
+          building_description: "Main Hall",
+          room: "2.206",
+        }),
+      ],
+      campus: "11",
+    } as CourseResponse;
+    expect(formatLocationDisplay(course)).toBe("MH 2.206");
+  });
+  it("returns building only when no room", () => {
+    const course = {
+      meetingTimes: [
+        makeMeetingTime({
+          building: "MH",
+          building_description: "Main Hall",
+          room: null,
+        }),
+      ],
+      campus: "11",
+    } as CourseResponse;
+    expect(formatLocationDisplay(course)).toBe("MH");
   });
 });

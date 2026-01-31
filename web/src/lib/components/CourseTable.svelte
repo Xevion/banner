@@ -14,6 +14,7 @@ import {
   formatTimeRange,
   getDeliveryConcern,
   getPrimaryInstructor,
+  isAsyncOnline,
   isMeetingTimeTBA,
   isTimeTBA,
   openSeats,
@@ -611,7 +612,12 @@ const table = createSvelteTable({
                                                 )}
                                                 passthrough
                                             >
-                                                {#if timeIsTBA(course)}
+                                                {#if isAsyncOnline(course)}
+                                                    <span
+                                                        class="text-xs text-muted-foreground/60"
+                                                        >Async</span
+                                                    >
+                                                {:else if timeIsTBA(course)}
                                                     <span
                                                         class="text-xs text-muted-foreground/60"
                                                         >TBA</span
