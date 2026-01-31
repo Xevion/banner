@@ -31,6 +31,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  Info,
   LoaderCircle,
   ArrowUp,
   ArrowDown,
@@ -375,7 +376,12 @@ $effect(() => {
         {/if}
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
-        <p class="text-muted-foreground text-xs">Avg Duration</p>
+        <div class="flex items-center gap-1">
+          <p class="text-muted-foreground text-xs">Avg Duration</p>
+          <SimpleTooltip text="Average time per successful subject scrape (API fetch + database update)" side="top" passthrough>
+            <Info class="size-3 text-muted-foreground/60" />
+          </SimpleTooltip>
+        </div>
         {#if stats.avgDurationMs != null}
           <p class="text-2xl font-bold">{formatDurationMs(stats.avgDurationMs)}</p>
         {:else}
@@ -383,23 +389,48 @@ $effect(() => {
         {/if}
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
-        <p class="text-muted-foreground text-xs">Courses Changed</p>
+        <div class="flex items-center gap-1">
+          <p class="text-muted-foreground text-xs">Courses Changed</p>
+          <SimpleTooltip text="Total courses that had enrollment or schedule updates detected" side="top" passthrough>
+            <Info class="size-3 text-muted-foreground/60" />
+          </SimpleTooltip>
+        </div>
         <p class="text-2xl font-bold">{formatNumber(stats.totalCoursesChanged)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
-        <p class="text-muted-foreground text-xs">Pending Jobs</p>
+        <div class="flex items-center gap-1">
+          <p class="text-muted-foreground text-xs">Pending Jobs</p>
+          <SimpleTooltip text="Scrape jobs queued but not yet started (unlocked jobs waiting for a worker)" side="top" passthrough>
+            <Info class="size-3 text-muted-foreground/60" />
+          </SimpleTooltip>
+        </div>
         <p class="text-2xl font-bold">{formatNumber(stats.pendingJobs)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
-        <p class="text-muted-foreground text-xs">Locked Jobs</p>
+        <div class="flex items-center gap-1">
+          <p class="text-muted-foreground text-xs">Locked Jobs</p>
+          <SimpleTooltip text="Scrape jobs currently being processed by a worker" side="top" passthrough>
+            <Info class="size-3 text-muted-foreground/60" />
+          </SimpleTooltip>
+        </div>
         <p class="text-2xl font-bold">{formatNumber(stats.lockedJobs)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
-        <p class="text-muted-foreground text-xs">Courses Fetched</p>
+        <div class="flex items-center gap-1">
+          <p class="text-muted-foreground text-xs">Courses Fetched</p>
+          <SimpleTooltip text="Total courses retrieved from Banner API across all successful scrapes" side="top" passthrough>
+            <Info class="size-3 text-muted-foreground/60" />
+          </SimpleTooltip>
+        </div>
         <p class="text-2xl font-bold">{formatNumber(stats.totalCoursesFetched)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
-        <p class="text-muted-foreground text-xs">Audits Generated</p>
+        <div class="flex items-center gap-1">
+          <p class="text-muted-foreground text-xs">Audits Generated</p>
+          <SimpleTooltip text="Change records created when course enrollment or schedule data changes" side="top" passthrough>
+            <Info class="size-3 text-muted-foreground/60" />
+          </SimpleTooltip>
+        </div>
         <p class="text-2xl font-bold">{formatNumber(stats.totalAuditsGenerated)}</p>
       </div>
     </div>
