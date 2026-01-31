@@ -21,12 +21,12 @@ let { data } = $props();
 const initialParams = untrack(() => new URLSearchParams(data.url.search));
 
 // The default term is the first one returned by the backend (most current)
-const defaultTermSlug = data.terms[0]?.slug ?? "";
+const defaultTermSlug = untrack(() => data.terms[0]?.slug ?? "");
 
 // Default to the first term when no URL param is present
 const urlTerm = initialParams.get("term");
 let selectedTerm = $state(
-  urlTerm && data.terms.some((t) => t.slug === urlTerm) ? urlTerm : defaultTermSlug
+  untrack(() => (urlTerm && data.terms.some((t) => t.slug === urlTerm) ? urlTerm : defaultTermSlug))
 );
 let selectedSubjects: string[] = $state(untrack(() => initialParams.getAll("subject")));
 let query = $state(initialParams.get("q") ?? "");
@@ -67,6 +67,9 @@ let searchMeta: SearchMeta | null = $state(null);
 let loading = $state(false);
 let error = $state<string | null>(null);
 
+// Track if we're validating subjects to prevent cascading search
+let validatingSubjects = false;
+
 // Fetch subjects when term changes
 $effect(() => {
   const term = selectedTerm;
@@ -76,7 +79,12 @@ $effect(() => {
     .then((s) => {
       subjects = s;
       const validCodes = new Set(s.map((sub) => sub.code));
-      selectedSubjects = selectedSubjects.filter((code) => validCodes.has(code));
+      const filtered = selectedSubjects.filter((code) => validCodes.has(code));
+      if (filtered.length !== selectedSubjects.length) {
+        validatingSubjects = true;
+        selectedSubjects = filtered;
+        validatingSubjects = false;
+      }
     })
     .catch((e) => {
       console.error("Failed to fetch subjects:", e);
@@ -111,7 +119,9 @@ $effect(() => {
 
 $effect(() => {
   selectedSubjects;
-  scheduleSearch("subjects");
+  if (!validatingSubjects) {
+    scheduleSearch("subjects");
+  }
   return () => clearTimeout(searchTimeout);
 });
 
@@ -160,6 +170,7 @@ async function performSearch(
   if (!term) return;
   loading = true;
   error = null;
+  searchMeta = null;
 
   const sortBy = sort.length > 0 ? SORT_COLUMN_MAP[sort[0].id] : undefined;
   const sortDir: SortDirection | undefined =

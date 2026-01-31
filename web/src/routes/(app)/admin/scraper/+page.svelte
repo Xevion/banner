@@ -71,12 +71,14 @@ function scheduleTick() {
 const MIN_INTERVAL = 5_000;
 const MAX_INTERVAL = 60_000;
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+let destroyed = false;
 
 const MIN_SPIN_MS = 700;
 let spinnerVisible = $state(false);
 let spinHoldTimer: ReturnType<typeof setTimeout> | undefined;
 
 async function fetchAll() {
+  if (destroyed) return;
   refreshError = false;
   spinnerVisible = true;
   clearTimeout(spinHoldTimer);
@@ -88,16 +90,19 @@ async function fetchAll() {
       client.getScraperTimeseries(selectedPeriod),
       client.getScraperSubjects(),
     ]);
+    if (destroyed) return;
     stats = statsRes;
     timeseries = timeseriesRes;
     subjects = subjectsRes.subjects;
     error = null;
     refreshInterval = MIN_INTERVAL;
   } catch (e) {
+    if (destroyed) return;
     error = e instanceof Error ? e.message : "Failed to load scraper data";
     refreshError = true;
     refreshInterval = Math.min(refreshInterval * 2, MAX_INTERVAL);
   } finally {
+    if (destroyed) return;
     const elapsed = performance.now() - startedAt;
     const remaining = MIN_SPIN_MS - elapsed;
     if (remaining > 0) {
@@ -112,6 +117,7 @@ async function fetchAll() {
 }
 
 function scheduleRefresh() {
+  if (destroyed) return;
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(fetchAll, refreshInterval);
 }
@@ -302,20 +308,27 @@ const detailGridCols = "grid-cols-[7fr_5fr_3fr_4fr_4fr_3fr_4fr_minmax(6rem,1fr)]
 // --- Lifecycle ---
 
 onMount(() => {
+  destroyed = false;
+  mounted = true;
   fetchAll();
   scheduleTick();
 });
 
 onDestroy(() => {
+  destroyed = true;
+  mounted = false;
   clearTimeout(tickTimer);
   clearTimeout(refreshTimer);
   clearTimeout(spinHoldTimer);
 });
 
-// Refetch when period changes
+// Refetch when period changes (skip initial run since onMount handles it)
+let mounted = false;
 $effect(() => {
   void selectedPeriod;
-  fetchAll();
+  if (mounted && !destroyed) {
+    fetchAll();
+  }
 });
 </script>
 
