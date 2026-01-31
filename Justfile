@@ -13,115 +13,26 @@ check *flags:
       else { console.error(`Unknown flag: ${arg}`); process.exit(1); }
     }
 
+    // --- Helpers ---
+
+    const useColor = process.stdout.isTTY ?? false;
+    const stderrTTY = process.stderr.isTTY ?? false;
+    const c = (code, text) => useColor ? `\x1b[${code}m${text}\x1b[0m` : text;
+    const since = (t) => ((Date.now() - t) / 1000).toFixed(1);
+
+    /** Sync spawn with inherited stdio (for --fix path). */
     const run = (cmd) => {
       const proc = Bun.spawnSync(cmd, { stdio: ["inherit", "inherit", "inherit"] });
       if (proc.exitCode !== 0) process.exit(proc.exitCode);
     };
 
-    if (fix) {
-      console.log("\x1b[1;36m→ Fixing...\x1b[0m");
-      run(["cargo", "fmt", "--all"]);
-      run(["bun", "run", "--cwd", "web", "format"]);
-      run(["cargo", "clippy", "--all-features", "--fix", "--allow-dirty", "--allow-staged",
-           "--", "--deny", "warnings"]);
-      console.log("\x1b[1;36m→ Verifying...\x1b[0m");
-    }
-
-    // Domain groups: format check name → { peers (other checks), formatter, sanity re-check }
-    const domains = {
-      rustfmt: {
-        peers: ["clippy", "rust-test"],
-        format: () => run(["cargo", "fmt", "--all"]),
-        recheck: [
-          { name: "rustfmt",    cmd: ["cargo", "fmt", "--all", "--", "--check"] },
-          { name: "cargo-check", cmd: ["cargo", "check", "--all-features"] },
-        ],
-      },
-      biome: {
-        peers: ["svelte-check", "biome-lint", "web-test"],
-        format: () => run(["bun", "run", "--cwd", "web", "format"]),
-        recheck: [
-          { name: "biome",        cmd: ["bun", "run", "--cwd", "web", "format:check"] },
-          { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
-        ],
-      },
-    };
-
-    const checks = [
-      { name: "rustfmt",      cmd: ["cargo", "fmt", "--all", "--", "--check"], terse: true },
-      { name: "clippy",       cmd: ["cargo", "clippy", "--all-features", "--", "--deny", "warnings"] },
-      { name: "rust-test",    cmd: ["cargo", "nextest", "run", "-E", "not test(export_bindings)"] },
-      { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
-      { name: "biome",        cmd: ["bun", "run", "--cwd", "web", "format:check"] },
-      { name: "biome-lint",   cmd: ["bun", "run", "--cwd", "web", "lint"] },
-      { name: "web-test",     cmd: ["bun", "run", "--cwd", "web", "test"] },
-      { name: "actionlint",  cmd: ["actionlint"] },
-      // { name: "sqlx-prepare", cmd: ["cargo", "sqlx", "prepare", "--check"] },
-    ];
-
-    const isTTY = process.stderr.isTTY;
-    const start = Date.now();
-    const remaining = new Set(checks.map(c => c.name));
-
-    const promises = checks.map(async (check) => {
-      const proc = Bun.spawn(check.cmd, {
-        env: { ...process.env, FORCE_COLOR: "1" },
-        stdout: "pipe", stderr: "pipe",
-      });
-      const [stdout, stderr] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-      ]);
-      await proc.exited;
-      return { ...check, stdout, stderr, exitCode: proc.exitCode,
-               elapsed: ((Date.now() - start) / 1000).toFixed(1) };
-    });
-
-    const interval = isTTY ? setInterval(() => {
-      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-      process.stderr.write(`\r\x1b[K${elapsed}s [${Array.from(remaining).join(", ")}]`);
-    }, 100) : null;
-
-    // Phase 1: collect all results, eagerly displaying whichever finishes first
-    const results = {};
-    let anyFailed = false;
-    const tagged = promises.map((p, i) => p.then(r => ({ i, r })));
-    for (let n = 0; n < checks.length; n++) {
-      const { i, r } = await Promise.race(tagged);
-      tagged[i] = new Promise(() => {}); // sentinel: never resolves
-      results[r.name] = r;
-      remaining.delete(r.name);
-      if (isTTY) process.stderr.write(`\r\x1b[K`);
-      if (r.exitCode !== 0) {
-        anyFailed = true;
-        process.stdout.write(`\x1b[31m✗ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
-        if (!r.terse) {
-          if (r.stdout) process.stdout.write(r.stdout);
-          if (r.stderr) process.stderr.write(r.stderr);
-        }
-      } else {
-        process.stdout.write(`\x1b[32m✓ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
-      }
-    }
-
-    if (interval) clearInterval(interval);
-    if (isTTY) process.stderr.write(`\r\x1b[K`);
-
-    // Phase 2: auto-fix formatting if it's the only failure in a domain
-    let autoFixed = false;
-    for (const [fmtName, domain] of Object.entries(domains)) {
-      const fmtResult = results[fmtName];
-      if (!fmtResult || fmtResult.exitCode === 0) continue;
-      const peersAllPassed = domain.peers.every(p => results[p]?.exitCode === 0);
-      if (!peersAllPassed) continue;
-
-      process.stdout.write(`\n\x1b[1;36m→ Auto-formatting ${fmtName} (peers passed, only formatting failed)...\x1b[0m\n`);
-      domain.format();
-
-      // Re-verify format + sanity check in parallel
-      const recheckStart = Date.now();
-      const recheckPromises = domain.recheck.map(async (check) => {
-        const proc = Bun.spawn(check.cmd, {
+    /**
+     * Spawn a command, collect stdout/stderr, return a result object.
+     * Catches spawn failures (e.g. missing binary) instead of throwing.
+     */
+    const spawnCollect = async (cmd, startTime) => {
+      try {
+        const proc = Bun.spawn(cmd, {
           env: { ...process.env, FORCE_COLOR: "1" },
           stdout: "pipe", stderr: "pipe",
         });
@@ -130,35 +41,236 @@ check *flags:
           new Response(proc.stderr).text(),
         ]);
         await proc.exited;
-        return { ...check, stdout, stderr, exitCode: proc.exitCode,
-                 elapsed: ((Date.now() - recheckStart) / 1000).toFixed(1) };
-      });
+        return { stdout, stderr, exitCode: proc.exitCode, elapsed: since(startTime) };
+      } catch (err) {
+        return { stdout: "", stderr: String(err), exitCode: 1, elapsed: since(startTime) };
+      }
+    };
 
-      let recheckFailed = false;
-      for (const p of recheckPromises) {
-        const r = await p;
-        if (r.exitCode !== 0) {
-          recheckFailed = true;
-          process.stdout.write(`\x1b[31m  ✗ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
-          if (r.stdout) process.stdout.write(r.stdout);
-          if (r.stderr) process.stderr.write(r.stderr);
-        } else {
-          process.stdout.write(`\x1b[32m  ✓ ${r.name}\x1b[0m (${r.elapsed}s)\n`);
+    /**
+     * Sync spawn with piped stdio. Returns { exitCode, stdout, stderr }.
+     * Used for Phase 2 formatters so output doesn't spill into structured results.
+     */
+    const runPiped = (cmd) => {
+      const proc = Bun.spawnSync(cmd, { stdout: "pipe", stderr: "pipe" });
+      return {
+        exitCode: proc.exitCode,
+        stdout: proc.stdout?.toString() ?? "",
+        stderr: proc.stderr?.toString() ?? "",
+      };
+    };
+
+    /**
+     * Race all promises, yielding results in completion order via callback.
+     * Every promise gets a .catch() wrapper so spawn failures become results, not unhandled rejections.
+     */
+    const raceInOrder = async (promises, fallbacks, onResult) => {
+      const tagged = promises.map((p, i) =>
+        p.then(r => ({ i, r }))
+         .catch(err => ({ i, r: {
+           ...fallbacks[i], exitCode: 1, stdout: "", stderr: String(err), elapsed: "?",
+         }}))
+      );
+      for (let n = 0; n < promises.length; n++) {
+        const { i, r } = await Promise.race(tagged);
+        tagged[i] = new Promise(() => {}); // sentinel: never resolves
+        onResult(r);
+      }
+    };
+
+    // --- Fix path ---
+
+    if (fix) {
+      console.log(c("1;36", "→ Fixing..."));
+      run(["cargo", "fmt", "--all"]);
+      run(["bun", "run", "--cwd", "web", "format"]);
+      run(["cargo", "clippy", "--all-features", "--fix", "--allow-dirty", "--allow-staged",
+           "--", "--deny", "warnings"]);
+      console.log(c("1;36", "→ Verifying..."));
+    }
+
+    // --- Domain groups: formatter → { peers, format command, sanity rechecks } ---
+
+    const domains = {
+      rustfmt: {
+        peers: ["clippy", "cargo-check", "rust-test"],
+        format: () => runPiped(["cargo", "fmt", "--all"]),
+        recheck: [
+          { name: "rustfmt",     cmd: ["cargo", "fmt", "--all", "--", "--check"] },
+          { name: "cargo-check", cmd: ["cargo", "check", "--all-features"] },
+        ],
+      },
+      biome: {
+        peers: ["svelte-check", "biome-lint", "web-test"],
+        format: () => runPiped(["bun", "run", "--cwd", "web", "format"]),
+        recheck: [
+          { name: "biome",        cmd: ["bun", "run", "--cwd", "web", "format:check"] },
+          { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
+        ],
+      },
+    };
+
+    // --- Ensure TypeScript bindings are up-to-date before frontend checks ---
+
+    {
+      const { statSync, existsSync, readdirSync, writeFileSync, rmSync } = await import("fs");
+      const BINDINGS_DIR = "web/src/lib/bindings";
+
+      // Find newest Rust source mtime (src/**/*.rs + Cargo.toml + Cargo.lock)
+      let newestSrcMtime = 0;
+      for (const file of new Bun.Glob("src/**/*.rs").scanSync(".")) {
+        const mt = statSync(file).mtimeMs;
+        if (mt > newestSrcMtime) newestSrcMtime = mt;
+      }
+      for (const f of ["Cargo.toml", "Cargo.lock"]) {
+        if (existsSync(f)) {
+          const mt = statSync(f).mtimeMs;
+          if (mt > newestSrcMtime) newestSrcMtime = mt;
         }
       }
 
-      if (!recheckFailed) {
-        process.stdout.write(`\x1b[32m  ✓ ${fmtName} auto-fix succeeded\x1b[0m\n`);
-        results[fmtName].exitCode = 0;
-        autoFixed = true;
+      // Find newest binding output mtime
+      let newestBindingMtime = 0;
+      if (existsSync(BINDINGS_DIR)) {
+        for (const file of new Bun.Glob("**/*").scanSync(BINDINGS_DIR)) {
+          const mt = statSync(`${BINDINGS_DIR}/${file}`).mtimeMs;
+          if (mt > newestBindingMtime) newestBindingMtime = mt;
+        }
+      }
+
+      const stale = newestBindingMtime === 0 || newestSrcMtime > newestBindingMtime;
+      if (stale) {
+        const t = Date.now();
+        process.stdout.write(c("1;36", "→ Regenerating TypeScript bindings (Rust sources changed)...") + "\n");
+        // Build test binary first (slow part) — fail before deleting anything
+        const build = Bun.spawnSync(["cargo", "test", "--no-run"], {
+          stdio: ["inherit", "inherit", "inherit"],
+        });
+        if (build.exitCode !== 0) process.exit(build.exitCode);
+        // Clean slate, then run export (fast, already compiled)
+        rmSync(BINDINGS_DIR, { recursive: true, force: true });
+        const gen = Bun.spawnSync(["cargo", "test", "export_bindings"], {
+          stdio: ["inherit", "inherit", "inherit"],
+        });
+        if (gen.exitCode !== 0) process.exit(gen.exitCode);
+
+        // Auto-generate index.ts
+        const types = readdirSync(BINDINGS_DIR)
+          .filter(f => f.endsWith(".ts") && f !== "index.ts")
+          .map(f => f.replace(/\.ts$/, ""))
+          .sort();
+        writeFileSync(`${BINDINGS_DIR}/index.ts`, types.map(t => `export type { ${t} } from "./${t}";`).join("\n") + "\n");
+
+        process.stdout.write(c("32", `✓ bindings`) + ` (${since(t)}s, ${types.length} types)\n`);
       } else {
-        process.stdout.write(`\x1b[31m  ✗ ${fmtName} auto-fix failed sanity check\x1b[0m\n`);
+        process.stdout.write(c("2", "· bindings up-to-date, skipped") + "\n");
       }
     }
 
-    const finalFailed = Object.values(results).some(r => r.exitCode !== 0);
-    if (autoFixed && !finalFailed) {
-      process.stdout.write(`\n\x1b[1;32m✓ All checks passed (formatting was auto-fixed)\x1b[0m\n`);
+    // --- Check definitions ---
+
+    const checks = [
+      { name: "rustfmt",      cmd: ["cargo", "fmt", "--all", "--", "--check"],
+        hint: "Run 'cargo fmt --all' to see and fix formatting issues." },
+      { name: "clippy",       cmd: ["cargo", "clippy", "--all-features", "--", "--deny", "warnings"] },
+      { name: "cargo-check",  cmd: ["cargo", "check", "--all-features"] },
+      { name: "rust-test",    cmd: ["cargo", "nextest", "run", "-E", "not test(export_bindings)"] },
+      { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
+      { name: "biome",        cmd: ["bun", "run", "--cwd", "web", "format:check"] },
+      { name: "biome-lint",   cmd: ["bun", "run", "--cwd", "web", "lint"] },
+      { name: "web-test",     cmd: ["bun", "run", "--cwd", "web", "test"] },
+      { name: "actionlint",   cmd: ["actionlint"] },
+      // { name: "sqlx-prepare", cmd: ["cargo", "sqlx", "prepare", "--check"] },
+    ];
+
+    // --- Phase 1: run all checks in parallel, display results in completion order ---
+
+    const start = Date.now();
+    const remaining = new Set(checks.map(ch => ch.name));
+
+    const promises = checks.map(async (check) => {
+      if (check.fn) {
+        return { ...check, ...(await check.fn(start)) };
+      }
+      return { ...check, ...(await spawnCollect(check.cmd, start)) };
+    });
+
+    const interval = stderrTTY ? setInterval(() => {
+      process.stderr.write(`\r\x1b[K${since(start)}s [${Array.from(remaining).join(", ")}]`);
+    }, 100) : null;
+
+    const results = {};
+    await raceInOrder(promises, checks, (r) => {
+      results[r.name] = r;
+      remaining.delete(r.name);
+      if (stderrTTY) process.stderr.write(`\r\x1b[K`);
+
+      if (r.exitCode !== 0) {
+        process.stdout.write(c("31", `✗ ${r.name}`) + ` (${r.elapsed}s)\n`);
+        if (r.hint) {
+          process.stdout.write(c("2", `  ${r.hint}`) + `\n`);
+        } else {
+          if (r.stdout) process.stdout.write(r.stdout);
+          if (r.stderr) process.stderr.write(r.stderr);
+        }
+      } else {
+        process.stdout.write(c("32", `✓ ${r.name}`) + ` (${r.elapsed}s)\n`);
+      }
+    });
+
+    if (interval) clearInterval(interval);
+    if (stderrTTY) process.stderr.write(`\r\x1b[K`);
+
+    // --- Phase 2: auto-fix formatting if it's the only failure in its domain ---
+
+    const autoFixedDomains = new Set();
+    for (const [fmtName, domain] of Object.entries(domains)) {
+      const fmtResult = results[fmtName];
+      if (!fmtResult || fmtResult.exitCode === 0) continue;
+      if (!domain.peers.every(p => results[p]?.exitCode === 0)) continue;
+
+      process.stdout.write(`\n` + c("1;36", `→ Auto-formatting ${fmtName} (peers passed, only formatting failed)...`) + `\n`);
+      const fmtOut = domain.format();
+      if (fmtOut.exitCode !== 0) {
+        process.stdout.write(c("31", `  ✗ ${fmtName} formatter failed`) + `\n`);
+        if (fmtOut.stdout) process.stdout.write(fmtOut.stdout);
+        if (fmtOut.stderr) process.stderr.write(fmtOut.stderr);
+        continue;
+      }
+
+      // Re-verify in parallel, display in completion order
+      const recheckStart = Date.now();
+      const recheckPromises = domain.recheck.map(async (ch) => ({
+        ...ch, ...(await spawnCollect(ch.cmd, recheckStart)),
+      }));
+
+      let recheckFailed = false;
+      await raceInOrder(recheckPromises, domain.recheck, (r) => {
+        if (r.exitCode !== 0) {
+          recheckFailed = true;
+          process.stdout.write(c("31", `  ✗ ${r.name}`) + ` (${r.elapsed}s)\n`);
+          if (r.stdout) process.stdout.write(r.stdout);
+          if (r.stderr) process.stderr.write(r.stderr);
+        } else {
+          process.stdout.write(c("32", `  ✓ ${r.name}`) + ` (${r.elapsed}s)\n`);
+        }
+      });
+
+      if (!recheckFailed) {
+        process.stdout.write(c("32", `  ✓ ${fmtName} auto-fix succeeded`) + `\n`);
+        autoFixedDomains.add(fmtName);
+      } else {
+        process.stdout.write(c("31", `  ✗ ${fmtName} auto-fix failed sanity check`) + `\n`);
+      }
+    }
+
+    // --- Final verdict ---
+
+    const finalFailed = Object.entries(results).some(
+      ([name, r]) => r.exitCode !== 0 && !autoFixedDomains.has(name)
+    );
+    if (autoFixedDomains.size > 0 && !finalFailed) {
+      process.stdout.write(`\n` + c("1;32", "✓ All checks passed (formatting was auto-fixed)") + `\n`);
     }
     process.exit(finalFailed ? 1 : 0);
 
@@ -187,8 +299,29 @@ test *args:
     }
 
 # Generate TypeScript bindings from Rust types (ts-rs)
+[script("bun")]
 bindings:
-    cargo test export_bindings
+    const { readdirSync, writeFileSync, rmSync } = await import("fs");
+    const dir = "web/src/lib/bindings";
+    const run = (cmd) => {
+      const r = Bun.spawnSync(cmd, { stdio: ["inherit", "inherit", "inherit"] });
+      if (r.exitCode !== 0) process.exit(r.exitCode);
+    };
+
+    // Build test binary first (slow part) — fail before deleting anything
+    run(["cargo", "test", "--no-run"]);
+    // Clean slate
+    rmSync(dir, { recursive: true, force: true });
+    // Run the export (fast, already compiled)
+    run(["cargo", "test", "export_bindings"]);
+
+    // Auto-generate index.ts from emitted .ts files
+    const types = readdirSync(dir)
+      .filter(f => f.endsWith(".ts") && f !== "index.ts")
+      .map(f => f.replace(/\.ts$/, ""))
+      .sort();
+    writeFileSync(`${dir}/index.ts`, types.map(t => `export type { ${t} } from "./${t}";`).join("\n") + "\n");
+    console.log(`Generated ${dir}/index.ts (${types.length} types)`);
 
 # Run the Banner API search demo (hits live UTSA API, ~20s)
 search *ARGS:
