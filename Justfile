@@ -1,5 +1,16 @@
 set dotenv-load
 
+# Aliases
+alias c := check
+alias d := dev
+alias t := test
+alias f := format
+alias fmt := format
+alias s := search
+alias bld := build
+alias bind := bindings
+alias b := bun
+
 default:
     just --list
 
@@ -38,7 +49,6 @@ build *flags:
 db cmd="start":
     bun scripts/db.ts {{cmd}}
 
-alias b := bun
 bun *ARGS:
 	cd web && bun {{ ARGS }}
 
