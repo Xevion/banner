@@ -91,25 +91,6 @@ pub async fn batch_upsert_rmp_professors(
     Ok(())
 }
 
-/// Normalize a name for matching: lowercase, trim, strip trailing periods.
-pub(crate) fn normalize(s: &str) -> String {
-    s.trim().to_lowercase().trim_end_matches('.').to_string()
-}
-
-/// Parse Banner's "Last, First Middle" display name into (last, first) tokens.
-///
-/// Returns `None` if the format is unparseable (no comma, empty parts).
-pub(crate) fn parse_display_name(display_name: &str) -> Option<(String, String)> {
-    let (last_part, first_part) = display_name.split_once(',')?;
-    let last = normalize(last_part);
-    // Take only the first token of the first-name portion to drop middle names/initials.
-    let first = normalize(first_part.split_whitespace().next()?);
-    if last.is_empty() || first.is_empty() {
-        return None;
-    }
-    Some((last, first))
-}
-
 /// Retrieve RMP rating data for an instructor by instructor id.
 ///
 /// Returns `(avg_rating, num_ratings)` for the best linked RMP profile
@@ -136,74 +117,76 @@ pub async fn get_instructor_rmp_data(
     Ok(row)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Unmatch an instructor from an RMP profile.
+///
+/// Removes the link from `instructor_rmp_links` and updates the instructor's
+/// `rmp_match_status` to 'unmatched' if no links remain.
+///
+/// If `rmp_legacy_id` is `Some`, removes only that specific link.
+/// If `None`, removes all links for the instructor.
+pub async fn unmatch_instructor(
+    db_pool: &PgPool,
+    instructor_id: i32,
+    rmp_legacy_id: Option<i32>,
+) -> Result<()> {
+    let mut tx = db_pool.begin().await?;
 
-    #[test]
-    fn parse_standard_name() {
-        assert_eq!(
-            parse_display_name("Smith, John"),
-            Some(("smith".into(), "john".into()))
-        );
+    // Delete specific link or all links
+    if let Some(legacy_id) = rmp_legacy_id {
+        sqlx::query(
+            "DELETE FROM instructor_rmp_links WHERE instructor_id = $1 AND rmp_legacy_id = $2",
+        )
+        .bind(instructor_id)
+        .bind(legacy_id)
+        .execute(&mut *tx)
+        .await?;
+    } else {
+        sqlx::query("DELETE FROM instructor_rmp_links WHERE instructor_id = $1")
+            .bind(instructor_id)
+            .execute(&mut *tx)
+            .await?;
     }
 
-    #[test]
-    fn parse_name_with_middle() {
-        assert_eq!(
-            parse_display_name("Smith, John David"),
-            Some(("smith".into(), "john".into()))
-        );
+    // Check if any links remain
+    let (remaining,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM instructor_rmp_links WHERE instructor_id = $1")
+            .bind(instructor_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+    // Update instructor status if no links remain
+    if remaining == 0 {
+        sqlx::query("UPDATE instructors SET rmp_match_status = 'unmatched' WHERE id = $1")
+            .bind(instructor_id)
+            .execute(&mut *tx)
+            .await?;
     }
 
-    #[test]
-    fn parse_name_with_middle_initial() {
-        assert_eq!(
-            parse_display_name("Garcia, Maria L."),
-            Some(("garcia".into(), "maria".into()))
-        );
+    // Reset accepted candidates back to pending when unmatching
+    // This allows the candidates to be re-matched later
+    if let Some(legacy_id) = rmp_legacy_id {
+        // Reset only the specific candidate
+        sqlx::query(
+            "UPDATE rmp_match_candidates 
+             SET status = 'pending', resolved_at = NULL, resolved_by = NULL 
+             WHERE instructor_id = $1 AND rmp_legacy_id = $2 AND status = 'accepted'",
+        )
+        .bind(instructor_id)
+        .bind(legacy_id)
+        .execute(&mut *tx)
+        .await?;
+    } else {
+        // Reset all accepted candidates for this instructor
+        sqlx::query(
+            "UPDATE rmp_match_candidates 
+             SET status = 'pending', resolved_at = NULL, resolved_by = NULL 
+             WHERE instructor_id = $1 AND status = 'accepted'",
+        )
+        .bind(instructor_id)
+        .execute(&mut *tx)
+        .await?;
     }
 
-    #[test]
-    fn parse_name_with_suffix_in_last() {
-        // Banner may encode "Jr." as part of the last name.
-        // normalize() strips trailing periods so "Jr." becomes "jr".
-        assert_eq!(
-            parse_display_name("Smith Jr., James"),
-            Some(("smith jr".into(), "james".into()))
-        );
-    }
-
-    #[test]
-    fn parse_no_comma_returns_none() {
-        assert_eq!(parse_display_name("SingleName"), None);
-    }
-
-    #[test]
-    fn parse_empty_first_returns_none() {
-        assert_eq!(parse_display_name("Smith,"), None);
-    }
-
-    #[test]
-    fn parse_empty_last_returns_none() {
-        assert_eq!(parse_display_name(", John"), None);
-    }
-
-    #[test]
-    fn parse_extra_whitespace() {
-        assert_eq!(
-            parse_display_name("  Doe ,  Jane   Marie  "),
-            Some(("doe".into(), "jane".into()))
-        );
-    }
-
-    #[test]
-    fn normalize_trims_and_lowercases() {
-        assert_eq!(normalize("  FOO  "), "foo");
-    }
-
-    #[test]
-    fn normalize_strips_trailing_period() {
-        assert_eq!(normalize("Jr."), "jr");
-    }
+    tx.commit().await?;
+    Ok(())
 }

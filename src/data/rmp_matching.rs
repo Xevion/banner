@@ -1,6 +1,6 @@
 //! Confidence scoring and candidate generation for RMP instructor matching.
 
-use crate::data::rmp::{normalize, parse_display_name};
+use crate::data::names::{matching_keys, parse_banner_name, parse_rmp_name};
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -14,6 +14,7 @@ use tracing::{debug, info};
 /// Breakdown of individual scoring signals.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ScoreBreakdown {
+    pub name: f32,
     pub department: f32,
     pub uniqueness: f32,
     pub volume: f32,
@@ -37,12 +38,13 @@ const MIN_CANDIDATE_THRESHOLD: f32 = 0.40;
 const AUTO_ACCEPT_THRESHOLD: f32 = 0.85;
 
 // ---------------------------------------------------------------------------
-// Weights
+// Weights (must sum to 1.0)
 // ---------------------------------------------------------------------------
 
-const WEIGHT_DEPARTMENT: f32 = 0.50;
-const WEIGHT_UNIQUENESS: f32 = 0.30;
-const WEIGHT_VOLUME: f32 = 0.20;
+const WEIGHT_NAME: f32 = 0.50;
+const WEIGHT_DEPARTMENT: f32 = 0.25;
+const WEIGHT_UNIQUENESS: f32 = 0.15;
+const WEIGHT_VOLUME: f32 = 0.10;
 
 // ---------------------------------------------------------------------------
 // Pure scoring functions
@@ -199,35 +201,39 @@ fn matches_known_abbreviation(subject: &str, department: &str) -> bool {
 
 /// Compute match confidence score (0.0–1.0) for an instructor–RMP pair.
 ///
-/// Name matching is handled by the caller via pre-filtering on exact
-/// normalized `(last, first)`, so only department, uniqueness, and volume
-/// signals are scored here.
+/// The name signal is always 1.0 since candidates are only generated for
+/// exact normalized name matches. The effective score range is 0.50–1.0.
 pub fn compute_match_score(
     instructor_subjects: &[String],
     rmp_department: Option<&str>,
     candidate_count: usize,
     rmp_num_ratings: i32,
 ) -> MatchScore {
-    // --- Department (0.50) ---
+    // --- Name (0.50) — always 1.0, candidates only exist for exact matches ---
+    let name_score = 1.0;
+
+    // --- Department (0.25) ---
     let dept_score = department_similarity(instructor_subjects, rmp_department);
 
-    // --- Uniqueness (0.30) ---
+    // --- Uniqueness (0.15) ---
     let uniqueness_score = match candidate_count {
         0 | 1 => 1.0,
         2 => 0.5,
         _ => 0.2,
     };
 
-    // --- Volume (0.20) ---
+    // --- Volume (0.10) ---
     let volume_score = ((rmp_num_ratings as f32).ln_1p() / 5.0_f32.ln_1p()).clamp(0.0, 1.0);
 
-    let composite = dept_score * WEIGHT_DEPARTMENT
+    let composite = name_score * WEIGHT_NAME
+        + dept_score * WEIGHT_DEPARTMENT
         + uniqueness_score * WEIGHT_UNIQUENESS
         + volume_score * WEIGHT_VOLUME;
 
     MatchScore {
         score: composite,
         breakdown: ScoreBreakdown {
+            name: name_score,
             department: dept_score,
             uniqueness: uniqueness_score,
             volume: volume_score,
@@ -260,8 +266,8 @@ struct RmpProfForMatching {
 /// Generate match candidates for all unmatched instructors.
 ///
 /// For each unmatched instructor:
-/// 1. Parse `display_name` into (last, first).
-/// 2. Find RMP professors with matching normalized name.
+/// 1. Parse `display_name` into [`NameParts`] and generate matching keys.
+/// 2. Find RMP professors with matching normalized name keys.
 /// 3. Score each candidate.
 /// 4. Store candidates scoring above [`MIN_CANDIDATE_THRESHOLD`].
 /// 5. Auto-accept if the top candidate scores ≥ [`AUTO_ACCEPT_THRESHOLD`]
@@ -309,7 +315,7 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
         subject_map.entry(iid).or_default().push(subject);
     }
 
-    // 3. Load all RMP professors
+    // 3. Load all RMP professors and build multi-key name index
     let prof_rows: Vec<(i32, String, String, Option<String>, i32)> = sqlx::query_as(
         "SELECT legacy_id, first_name, last_name, department, num_ratings FROM rmp_professors",
     )
@@ -317,14 +323,36 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
     .await?;
 
     // Build name index: (normalized_last, normalized_first) -> Vec<RmpProfForMatching>
+    // Each professor may appear under multiple keys (nicknames, token variants).
     let mut name_index: HashMap<(String, String), Vec<RmpProfForMatching>> = HashMap::new();
-    for (legacy_id, first_name, last_name, department, num_ratings) in prof_rows {
-        let key = (normalize(&last_name), normalize(&first_name));
-        name_index.entry(key).or_default().push(RmpProfForMatching {
-            legacy_id,
-            department,
-            num_ratings,
-        });
+    let mut rmp_parse_failures = 0usize;
+    for (legacy_id, first_name, last_name, department, num_ratings) in &prof_rows {
+        match parse_rmp_name(first_name, last_name) {
+            Some(parts) => {
+                let keys = matching_keys(&parts);
+                for key in keys {
+                    name_index.entry(key).or_default().push(RmpProfForMatching {
+                        legacy_id: *legacy_id,
+                        department: department.clone(),
+                        num_ratings: *num_ratings,
+                    });
+                }
+            }
+            None => {
+                rmp_parse_failures += 1;
+                debug!(
+                    legacy_id,
+                    first_name, last_name, "Unparseable RMP professor name, skipping"
+                );
+            }
+        }
+    }
+
+    if rmp_parse_failures > 0 {
+        debug!(
+            count = rmp_parse_failures,
+            "RMP professors with unparseable names"
+        );
     }
 
     // 4. Load existing candidate pairs — only skip resolved (accepted/rejected) pairs.
@@ -360,7 +388,7 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
     let mut skipped_no_candidates = 0usize;
 
     for (instructor_id, display_name) in &instructors {
-        let Some((norm_last, norm_first)) = parse_display_name(display_name) else {
+        let Some(instructor_parts) = parse_banner_name(display_name) else {
             skipped_unparseable += 1;
             debug!(
                 instructor_id,
@@ -371,16 +399,31 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
 
         let subjects = subject_map.get(instructor_id).unwrap_or(&empty_subjects);
 
-        let key = (norm_last.clone(), norm_first.clone());
-        let Some(rmp_candidates) = name_index.get(&key) else {
+        // Generate all matching keys for this instructor and collect candidate
+        // RMP professors across all key variants (deduplicated by legacy_id).
+        let instructor_keys = matching_keys(&instructor_parts);
+        let mut seen_profs: HashSet<i32> = HashSet::new();
+        let mut matched_profs: Vec<&RmpProfForMatching> = Vec::new();
+
+        for key in &instructor_keys {
+            if let Some(profs) = name_index.get(key) {
+                for prof in profs {
+                    if seen_profs.insert(prof.legacy_id) {
+                        matched_profs.push(prof);
+                    }
+                }
+            }
+        }
+
+        if matched_profs.is_empty() {
             skipped_no_candidates += 1;
             continue;
-        };
+        }
 
-        let candidate_count = rmp_candidates.len();
+        let candidate_count = matched_profs.len();
         let mut best: Option<(f32, i32)> = None;
 
-        for prof in rmp_candidates {
+        for prof in &matched_profs {
             let pair = (*instructor_id, prof.legacy_id);
             if resolved_pairs.contains(&pair) {
                 continue;
@@ -582,8 +625,9 @@ mod tests {
             1,  // unique candidate
             50, // decent ratings
         );
-        // dept 1.0*0.50 + unique 1.0*0.30 + volume ~0.97*0.20 ≈ 0.99
+        // name 1.0*0.50 + dept 1.0*0.25 + unique 1.0*0.15 + volume ~0.97*0.10 ≈ 0.997
         assert!(ms.score >= 0.85, "Expected score >= 0.85, got {}", ms.score);
+        assert_eq!(ms.breakdown.name, 1.0);
         assert_eq!(ms.breakdown.uniqueness, 1.0);
         assert_eq!(ms.breakdown.department, 1.0);
     }

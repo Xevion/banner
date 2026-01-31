@@ -769,16 +769,10 @@ pub async fn unmatch_instructor(
 ) -> Result<Json<OkResponse>, (StatusCode, Json<Value>)> {
     let rmp_legacy_id = body.and_then(|b| b.rmp_legacy_id);
 
-    let mut tx = state
-        .db_pool
-        .begin()
-        .await
-        .map_err(|e| db_error("failed to begin transaction", e))?;
-
     // Verify instructor exists
     let exists: Option<(i32,)> = sqlx::query_as("SELECT id FROM instructors WHERE id = $1")
         .bind(id)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&state.db_pool)
         .await
         .map_err(|e| db_error("failed to check instructor", e))?;
 
@@ -789,50 +783,16 @@ pub async fn unmatch_instructor(
         ));
     }
 
-    // Delete specific link or all links
-    if let Some(legacy_id) = rmp_legacy_id {
-        let result = sqlx::query(
-            "DELETE FROM instructor_rmp_links WHERE instructor_id = $1 AND rmp_legacy_id = $2",
-        )
-        .bind(id)
-        .bind(legacy_id)
-        .execute(&mut *tx)
+    // Use the data layer function to perform the unmatch
+    crate::data::rmp::unmatch_instructor(&state.db_pool, id, rmp_legacy_id)
         .await
-        .map_err(|e| db_error("failed to remove rmp link", e))?;
-
-        if result.rows_affected() == 0 {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": "link not found for this instructor"})),
-            ));
-        }
-    } else {
-        sqlx::query("DELETE FROM instructor_rmp_links WHERE instructor_id = $1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| db_error("failed to remove rmp links", e))?;
-    }
-
-    // Check if any links remain; update status accordingly
-    let (remaining,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM instructor_rmp_links WHERE instructor_id = $1")
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|e| db_error("failed to count remaining links", e))?;
-
-    if remaining == 0 {
-        sqlx::query("UPDATE instructors SET rmp_match_status = 'unmatched' WHERE id = $1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| db_error("failed to update instructor status", e))?;
-    }
-
-    tx.commit()
-        .await
-        .map_err(|e| db_error("failed to commit transaction", e))?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to unmatch instructor");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "failed to unmatch instructor"})),
+            )
+        })?;
 
     Ok(Json(OkResponse { ok: true }))
 }

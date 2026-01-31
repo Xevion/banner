@@ -14,7 +14,7 @@ use sqlx::postgres::PgPoolOptions;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// Main application struct containing all necessary components
 pub struct App {
@@ -69,6 +69,11 @@ impl App {
             .await
             .context("Failed to run database migrations")?;
         info!("Database migrations completed successfully");
+
+        // Backfill structured name columns for existing instructors
+        if let Err(e) = crate::data::names::backfill_instructor_names(&db_pool).await {
+            warn!(error = ?e, "Failed to backfill instructor names (non-fatal)");
+        }
 
         // Create BannerApi and AppState
         let banner_api = BannerApi::new_with_config(

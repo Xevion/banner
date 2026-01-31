@@ -3,6 +3,7 @@
 pub mod batch;
 pub mod courses;
 pub mod models;
+pub mod names;
 pub mod reference;
 pub mod rmp;
 pub mod rmp_matching;

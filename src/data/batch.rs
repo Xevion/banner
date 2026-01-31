@@ -2,6 +2,7 @@
 
 use crate::banner::Course;
 use crate::data::models::{DbMeetingTime, UpsertCounts};
+use crate::data::names::parse_banner_name;
 use crate::error::Result;
 use sqlx::PgConnection;
 use sqlx::PgPool;
@@ -628,6 +629,8 @@ async fn upsert_instructors(
 ) -> Result<HashMap<String, i32>> {
     let mut seen = HashSet::new();
     let mut display_names: Vec<&str> = Vec::new();
+    let mut first_names: Vec<Option<String>> = Vec::new();
+    let mut last_names: Vec<Option<String>> = Vec::new();
     let mut emails_lower: Vec<String> = Vec::new();
     let mut skipped_no_email = 0u32;
 
@@ -636,7 +639,10 @@ async fn upsert_instructors(
             if let Some(email) = &faculty.email_address {
                 let email_lower = email.to_lowercase();
                 if seen.insert(email_lower.clone()) {
+                    let parts = parse_banner_name(&faculty.display_name);
                     display_names.push(faculty.display_name.as_str());
+                    first_names.push(parts.as_ref().map(|p| p.first.clone()));
+                    last_names.push(parts.as_ref().map(|p| p.last.clone()));
                     emails_lower.push(email_lower);
                 }
             } else {
@@ -657,18 +663,25 @@ async fn upsert_instructors(
     }
 
     let email_refs: Vec<&str> = emails_lower.iter().map(|s| s.as_str()).collect();
+    let first_name_refs: Vec<Option<&str>> = first_names.iter().map(|s| s.as_deref()).collect();
+    let last_name_refs: Vec<Option<&str>> = last_names.iter().map(|s| s.as_deref()).collect();
 
     let rows: Vec<(i32, String)> = sqlx::query_as(
         r#"
-        INSERT INTO instructors (display_name, email)
-        SELECT * FROM UNNEST($1::text[], $2::text[])
+        INSERT INTO instructors (display_name, email, first_name, last_name)
+        SELECT * FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[])
         ON CONFLICT (email)
-        DO UPDATE SET display_name = EXCLUDED.display_name
+        DO UPDATE SET
+            display_name = EXCLUDED.display_name,
+            first_name = EXCLUDED.first_name,
+            last_name = EXCLUDED.last_name
         RETURNING id, email
         "#,
     )
     .bind(&display_names)
     .bind(&email_refs)
+    .bind(&first_name_refs)
+    .bind(&last_name_refs)
     .fetch_all(&mut *conn)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to batch upsert instructors: {}", e))?;
