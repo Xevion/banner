@@ -240,3 +240,23 @@ body::-webkit-scrollbar {
 .animate-pulse {
   animation: pulse 2s ease-in-out infinite;
 }
+
+/* View Transitions: scope crossfade to search results table */
+::view-transition-group(search-results) {
+  z-index: 1;
+}
+::view-transition-old(search-results) {
+  animation-duration: 150ms;
+}
+::view-transition-new(search-results) {
+  animation-duration: 200ms;
+}
+
+/* Keep filter overlays above view-transition snapshots */
+::view-transition-group(filter-overlay) {
+  z-index: 100;
+}
+::view-transition-old(filter-overlay),
+::view-transition-new(filter-overlay) {
+  animation: none;
+}

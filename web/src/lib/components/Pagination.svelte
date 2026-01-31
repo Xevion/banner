@@ -20,11 +20,13 @@ let {
   totalCount,
   offset,
   limit,
+  loading = false,
   onPageChange,
 }: {
   totalCount: number;
   offset: number;
   limit: number;
+  loading?: boolean;
   onPageChange: (newOffset: number) => void;
 } = $props();
 
@@ -88,7 +90,8 @@ const selectValue = $derived(String(currentPage));
                        border border-border bg-card text-foreground
                        hover:bg-muted/50 active:bg-muted transition-colors
                        cursor-pointer select-none outline-none
-                       focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                       focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
+                       {loading ? 'animate-pulse' : ''}"
                 aria-label="Page {currentPage} of {totalPages}, click to select page"
               >
                 <span use:slideIn={direction}>{currentPage}</span>
@@ -139,12 +142,13 @@ const selectValue = $derived(String(currentPage));
                      hover:bg-muted/50 hover:text-foreground active:bg-muted transition-colors
                      cursor-pointer select-none
                      focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
-                     {isSlotVisible(page) ? '' : 'invisible pointer-events-none'}"
+                     {!isSlotVisible(page) ? 'invisible' : loading ? 'opacity-40' : ''}
+                     {!isSlotVisible(page) || loading ? 'pointer-events-none' : ''}"
               onclick={() => goToPage(page)}
               aria-label="Go to page {page}"
               aria-hidden={!isSlotVisible(page)}
               tabindex={isSlotVisible(page) ? 0 : -1}
-              disabled={!isSlotVisible(page)}
+              disabled={!isSlotVisible(page) || loading}
             use:slideIn={direction}
           >
               {page}

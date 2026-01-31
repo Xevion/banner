@@ -49,8 +49,6 @@ describe("BannerApiClient", () => {
     const mockResponse = {
       courses: [],
       totalCount: 0,
-      offset: 0,
-      limit: 25,
     };
 
     vi.mocked(fetch).mockResolvedValueOnce({
@@ -77,8 +75,6 @@ describe("BannerApiClient", () => {
     const mockResponse = {
       courses: [],
       totalCount: 0,
-      offset: 0,
-      limit: 25,
     };
 
     vi.mocked(fetch).mockResolvedValueOnce({

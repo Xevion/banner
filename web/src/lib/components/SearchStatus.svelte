@@ -3,6 +3,7 @@ import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import { relativeTime } from "$lib/time";
 import { formatNumber } from "$lib/utils";
 import { onMount } from "svelte";
+import { fade } from "svelte/transition";
 
 export interface SearchMeta {
   totalCount: number;
@@ -10,7 +11,7 @@ export interface SearchMeta {
   timestamp: Date;
 }
 
-let { meta }: { meta: SearchMeta | null } = $props();
+let { meta, loading = false }: { meta: SearchMeta | null; loading?: boolean } = $props();
 
 let now = $state(new Date());
 
@@ -51,18 +52,23 @@ onMount(() => {
 });
 </script>
 
-<SimpleTooltip
-    text={tooltipText}
-    contentClass="whitespace-nowrap text-[12px] px-2 py-1"
-    triggerClass="self-start"
-    sideOffset={0}
->
-    <span
-        class="pl-1 text-xs transition-opacity duration-200"
-        style:opacity={meta ? 1 : 0}
+{#if meta}
+    <SimpleTooltip
+        text={tooltipText}
+        contentClass="whitespace-nowrap text-[12px] px-2 py-1"
+        triggerClass="self-start"
+        sideOffset={0}
     >
-        <span class="text-muted-foreground/70">{countLabel}</span>
-        <span class="text-muted-foreground/35">{resultNoun} in</span>
-        <span class="text-muted-foreground/70">{durationLabel}</span>
-    </span>
-</SimpleTooltip>
+        <span
+            class="pl-1 text-xs transition-opacity duration-200 {loading ? 'opacity-40' : ''}"
+            in:fade={{ duration: 300 }}
+        >
+            <span class="text-muted-foreground/70">{countLabel}</span>
+            <span class="text-muted-foreground/35">{resultNoun} in</span>
+            <span class="text-muted-foreground/70">{durationLabel}</span>
+        </span>
+    </SimpleTooltip>
+{:else}
+    <!-- Invisible placeholder to maintain layout height -->
+    <span class="pl-1 text-xs opacity-0 pointer-events-none" aria-hidden="true">&nbsp;</span>
+{/if}

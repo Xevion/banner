@@ -46,6 +46,7 @@ import {
 } from "@tanstack/table-core";
 import { ContextMenu, DropdownMenu, Tooltip } from "bits-ui";
 import { flip } from "svelte/animate";
+import { cubicOut } from "svelte/easing";
 import { fade, fly, slide } from "svelte/transition";
 import CourseDetail from "./CourseDetail.svelte";
 import SimpleTooltip from "./SimpleTooltip.svelte";
@@ -57,6 +58,7 @@ let {
   onSortingChange,
   manualSorting = false,
   subjectMap = {},
+  limit = 25,
 }: {
   courses: CourseResponse[];
   loading: boolean;
@@ -64,11 +66,33 @@ let {
   onSortingChange?: (sorting: SortingState) => void;
   manualSorting?: boolean;
   subjectMap?: Record<string, string>;
+  limit?: number;
 } = $props();
 
 let expandedCrn: string | null = $state(null);
 let tableWrapper: HTMLDivElement = undefined!;
+let tableElement: HTMLTableElement = undefined!;
 const clipboard = useClipboard(1000);
+
+// Track previous row count so skeleton matches expected result size
+let previousRowCount = $state(0);
+$effect(() => {
+  if (courses.length > 0) {
+    previousRowCount = courses.length;
+  }
+});
+let skeletonRowCount = $derived(previousRowCount > 0 ? previousRowCount : limit);
+
+// Animate container height via ResizeObserver
+let contentHeight = $state<number | null>(null);
+$effect(() => {
+  if (!tableElement) return;
+  const observer = new ResizeObserver(([entry]) => {
+    contentHeight = entry.contentRect.height;
+  });
+  observer.observe(tableElement);
+  return () => observer.disconnect();
+});
 
 // Collapse expanded row when the dataset changes to avoid stale detail rows
 // and FLIP position calculation glitches from lingering expanded content
@@ -305,10 +329,17 @@ const table = createSvelteTable({
 </div>
 
 <!-- Table with context menu on header -->
-<div bind:this={tableWrapper} class="overflow-x-auto">
+<div
+    bind:this={tableWrapper}
+    class="overflow-x-auto overflow-y-hidden transition-[height] duration-200"
+    style:height={contentHeight != null ? `${contentHeight}px` : undefined}
+    style:view-transition-name="search-results"
+    style:contain="layout"
+    data-search-results
+>
     <ContextMenu.Root>
         <ContextMenu.Trigger class="contents">
-            <table class="w-full min-w-160 border-collapse text-sm">
+            <table bind:this={tableElement} class="w-full min-w-160 border-collapse text-sm">
                 <thead>
                     {#each table.getHeaderGroups() as headerGroup}
                         <tr
@@ -368,7 +399,7 @@ const table = createSvelteTable({
                 </thead>
                 {#if loading && courses.length === 0}
                     <tbody>
-                        {#each Array(5) as _}
+                        {#each Array(skeletonRowCount) as _}
                             <tr class="border-b border-border">
                                 {#each table.getVisibleLeafColumns() as col}
                                     <td class="py-2.5 px-2">
@@ -387,7 +418,7 @@ const table = createSvelteTable({
                             </tr>
                         {/each}
                     </tbody>
-                {:else if courses.length === 0}
+                {:else if courses.length === 0 && !loading}
                     <tbody>
                         <tr>
                             <td
@@ -403,10 +434,12 @@ const table = createSvelteTable({
                     {#each table.getRowModel().rows as row, i (row.id)}
                         {@const course = row.original}
                         <tbody
+                            class="transition-opacity duration-200 {loading ? 'opacity-45 pointer-events-none' : ''}"
                             animate:flip={{ duration: 300 }}
                             in:fade={{
                                 duration: 200,
-                                delay: Math.min(i * 20, 400),
+                                delay: Math.min(i * 25, 300),
+                                easing: cubicOut,
                             }}
                         >
                             <tr

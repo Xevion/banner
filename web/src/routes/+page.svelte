@@ -13,7 +13,7 @@ import Pagination from "$lib/components/Pagination.svelte";
 import SearchFilters from "$lib/components/SearchFilters.svelte";
 import SearchStatus, { type SearchMeta } from "$lib/components/SearchStatus.svelte";
 import type { SortingState } from "@tanstack/table-core";
-import { untrack } from "svelte";
+import { tick, untrack } from "svelte";
 
 let { data } = $props();
 
@@ -102,10 +102,24 @@ const THROTTLE_MS = {
 } as const;
 
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
+let lastSearchKey = "";
+
+function searchKey(
+  term: string,
+  subjects: string[],
+  q: string,
+  open: boolean,
+  off: number,
+  sort: SortingState
+): string {
+  return `${term}|${subjects.join(",")}|${q}|${open}|${off}|${JSON.stringify(sort)}`;
+}
 
 function scheduleSearch(source: keyof typeof THROTTLE_MS) {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
+    const key = searchKey(selectedTerm, selectedSubjects, query, openOnly, offset, sorting);
+    if (key === lastSearchKey) return;
     performSearch(selectedTerm, selectedSubjects, query, openOnly, offset, sorting);
   }, THROTTLE_MS[source]);
 }
@@ -168,9 +182,10 @@ async function performSearch(
   sort: SortingState
 ) {
   if (!term) return;
+  const key = searchKey(term, subjects, q, open, off, sort);
+  lastSearchKey = key;
   loading = true;
   error = null;
-  searchMeta = null;
 
   const sortBy = sort.length > 0 ? SORT_COLUMN_MAP[sort[0].id] : undefined;
   const sortDir: SortDirection | undefined =
@@ -195,7 +210,7 @@ async function performSearch(
 
   const t0 = performance.now();
   try {
-    searchResult = await client.searchCourses({
+    const result = await client.searchCourses({
       term,
       subjects: subjects.length > 0 ? subjects : undefined,
       q: q || undefined,
@@ -205,11 +220,36 @@ async function performSearch(
       sort_by: sortBy,
       sort_dir: sortDir,
     });
-    searchMeta = {
-      totalCount: searchResult.totalCount,
-      durationMs: performance.now() - t0,
-      timestamp: new Date(),
+
+    const applyUpdate = () => {
+      searchResult = result;
+      searchMeta = {
+        totalCount: result.totalCount,
+        durationMs: performance.now() - t0,
+        timestamp: new Date(),
+      };
     };
+
+    const tableEl = document.querySelector("[data-search-results]") as HTMLElement | null;
+    const scopedSupport = tableEl && "startViewTransition" in tableEl;
+
+    if (scopedSupport) {
+      // Scoped transition — no top-layer issue, no need for filter-overlay workaround
+      const transition = (tableEl as any).startViewTransition(async () => {
+        applyUpdate();
+        await tick();
+      });
+      await transition.finished;
+    } else if (document.startViewTransition) {
+      // Document-level fallback with z-index layering for filter overlays
+      const transition = document.startViewTransition(async () => {
+        applyUpdate();
+        await tick();
+      });
+      await transition.finished;
+    } else {
+      applyUpdate();
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : "Search failed";
   } finally {
@@ -227,7 +267,7 @@ function handlePageChange(newOffset: number) {
 
     <!-- Search status + Filters -->
     <div class="flex flex-col gap-1.5">
-      <SearchStatus meta={searchMeta} />
+      <SearchStatus meta={searchMeta} {loading} />
       <!-- Filters -->
     <SearchFilters
       terms={data.terms}
@@ -258,13 +298,15 @@ function handlePageChange(newOffset: number) {
         onSortingChange={handleSortingChange}
         manualSorting={true}
         {subjectMap}
+        {limit}
       />
 
       {#if searchResult}
         <Pagination
           totalCount={searchResult.totalCount}
-          offset={searchResult.offset}
+          {offset}
           {limit}
+          {loading}
           onPageChange={handlePageChange}
         />
       {/if}

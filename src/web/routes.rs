@@ -493,8 +493,6 @@ pub struct InstructorResponse {
 pub struct SearchResponse {
     courses: Vec<CourseResponse>,
     total_count: i32,
-    offset: i32,
-    limit: i32,
 }
 
 #[derive(Serialize, TS)]
@@ -623,8 +621,6 @@ async fn search_courses(
     Ok(Json(SearchResponse {
         courses: course_responses,
         total_count: total_count as i32,
-        offset,
-        limit,
     }))
 }
 
