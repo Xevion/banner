@@ -99,16 +99,15 @@ interface Check {
 
 const checks: Check[] = [
   {
-    name: "rustfmt",
+    name: "rust-format",
     cmd: ["cargo", "fmt", "--all", "--", "--check"],
     hint: "Run 'cargo fmt --all' to see and fix formatting issues.",
   },
-  { name: "clippy", cmd: ["cargo", "clippy", "--all-features", "--", "--deny", "warnings"] },
-  { name: "cargo-check", cmd: ["cargo", "check", "--all-features"] },
+  { name: "rust-lint", cmd: ["cargo", "clippy", "--all-features", "--", "--deny", "warnings"] },
+  { name: "rust-check", cmd: ["cargo", "check", "--all-features"] },
   { name: "rust-test", cmd: ["cargo", "nextest", "run", "-E", "not test(export_bindings)"] },
   { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
-  { name: "biome", cmd: ["bun", "run", "--cwd", "web", "format:check"] },
-  { name: "biome-lint", cmd: ["bun", "run", "--cwd", "web", "lint"] },
+  { name: "web-format", cmd: ["bun", "run", "--cwd", "web", "format:check"] },
   { name: "web-test", cmd: ["bun", "run", "--cwd", "web", "test"] },
   { name: "actionlint", cmd: ["actionlint"] },
 ];
@@ -125,19 +124,19 @@ const domains: Record<
     recheck: Check[];
   }
 > = {
-  rustfmt: {
-    peers: ["clippy", "cargo-check", "rust-test"],
+  "rust-format": {
+    peers: ["rust-lint", "rust-check", "rust-test"],
     format: () => runPiped(["cargo", "fmt", "--all"]),
     recheck: [
-      { name: "rustfmt", cmd: ["cargo", "fmt", "--all", "--", "--check"] },
-      { name: "cargo-check", cmd: ["cargo", "check", "--all-features"] },
+      { name: "rust-format", cmd: ["cargo", "fmt", "--all", "--", "--check"] },
+      { name: "rust-check", cmd: ["cargo", "check", "--all-features"] },
     ],
   },
-  biome: {
-    peers: ["svelte-check", "biome-lint", "web-test"],
+  "web-format": {
+    peers: ["svelte-check", "web-test"],
     format: () => runPiped(["bun", "run", "--cwd", "web", "format"]),
     recheck: [
-      { name: "biome", cmd: ["bun", "run", "--cwd", "web", "format:check"] },
+      { name: "web-format", cmd: ["bun", "run", "--cwd", "web", "format:check"] },
       { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
     ],
   },

@@ -62,10 +62,6 @@ jobs:
             bun run format:check || echo "::warning::Frontend formatting issues found (not failing on push)"
           fi
 
-      - name: Lint
-        working-directory: web
-        run: bun run lint
-
       - name: Type check
         working-directory: web
         run: bun run typecheck

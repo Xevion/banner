@@ -8,7 +8,7 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "lint": "biome check .",
+    "lint": "biome lint .",
     "test": "vitest run",
     "format": "biome format --write .",
     "format:check": "biome format ."
