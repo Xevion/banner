@@ -9,11 +9,7 @@
 //! [`ScheduleCache`]) that refreshes hourly in the background with
 //! stale-while-revalidate semantics.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::{IntoResponse, Json, Response},
-};
+use axum::{extract::State, response::Json};
 use chrono::{DateTime, Datelike, Duration, NaiveTime, Timelike, Utc};
 use chrono_tz::US::Central;
 use serde::{Deserialize, Serialize};
@@ -21,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ts_rs::TS;
 
 use crate::state::AppState;
+use crate::web::error::ApiError;
 use crate::web::schedule_cache::weekday_bit;
 
 /// 15 minutes in seconds, matching the frontend `SLOT_INTERVAL_MS`.
@@ -49,7 +46,11 @@ pub struct TimelineRequest {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct TimeRange {
+    /// ISO-8601 UTC timestamp (e.g., "2024-01-15T10:30:00Z")
+    #[ts(type = "string")]
     start: DateTime<Utc>,
+    /// ISO-8601 UTC timestamp (e.g., "2024-01-15T12:30:00Z")
+    #[ts(type = "string")]
     end: DateTime<Utc>,
 }
 
@@ -67,37 +68,12 @@ pub struct TimelineResponse {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct TimelineSlot {
-    /// ISO-8601 timestamp at the start of this 15-minute bucket.
+    /// ISO-8601 UTC timestamp at the start of this 15-minute bucket (e.g., "2024-01-15T10:30:00Z")
+    #[ts(type = "string")]
     time: DateTime<Utc>,
     /// Subject code → total enrollment in this slot.
     #[ts(type = "Record<string, number>")]
     subjects: BTreeMap<String, i64>,
-}
-
-// ── Error type ──────────────────────────────────────────────────────
-
-pub(crate) struct TimelineError {
-    status: StatusCode,
-    message: String,
-}
-
-impl TimelineError {
-    fn bad_request(msg: impl Into<String>) -> Self {
-        Self {
-            status: StatusCode::BAD_REQUEST,
-            message: msg.into(),
-        }
-    }
-}
-
-impl IntoResponse for TimelineError {
-    fn into_response(self) -> Response {
-        (
-            self.status,
-            Json(serde_json::json!({ "error": self.message })),
-        )
-            .into_response()
-    }
 }
 
 // ── Alignment helpers ───────────────────────────────────────────────
@@ -166,13 +142,13 @@ fn generate_slots(merged: &[AlignedRange]) -> BTreeSet<DateTime<Utc>> {
 pub(crate) async fn timeline(
     State(state): State<AppState>,
     Json(body): Json<TimelineRequest>,
-) -> Result<Json<TimelineResponse>, TimelineError> {
+) -> Result<Json<TimelineResponse>, ApiError> {
     // ── Validate ────────────────────────────────────────────────────
     if body.ranges.is_empty() {
-        return Err(TimelineError::bad_request("At least one range is required"));
+        return Err(ApiError::bad_request("At least one range is required"));
     }
     if body.ranges.len() > MAX_RANGES {
-        return Err(TimelineError::bad_request(format!(
+        return Err(ApiError::bad_request(format!(
             "Too many ranges (max {MAX_RANGES})"
         )));
     }
@@ -180,14 +156,14 @@ pub(crate) async fn timeline(
     let mut aligned: Vec<AlignedRange> = Vec::with_capacity(body.ranges.len());
     for r in &body.ranges {
         if r.end <= r.start {
-            return Err(TimelineError::bad_request(format!(
+            return Err(ApiError::bad_request(format!(
                 "Range end ({}) must be after start ({})",
                 r.end, r.start
             )));
         }
         let span = r.end - r.start;
         if span > MAX_RANGE_SPAN {
-            return Err(TimelineError::bad_request(format!(
+            return Err(ApiError::bad_request(format!(
                 "Range span ({} hours) exceeds maximum ({} hours)",
                 span.num_hours(),
                 MAX_RANGE_SPAN.num_hours()
@@ -204,7 +180,7 @@ pub(crate) async fn timeline(
     // Validate total span
     let total_span: Duration = merged.iter().map(|r| r.end - r.start).sum();
     if total_span > MAX_TOTAL_SPAN {
-        return Err(TimelineError::bad_request(format!(
+        return Err(ApiError::bad_request(format!(
             "Total time span ({} hours) exceeds maximum ({} hours)",
             total_span.num_hours(),
             MAX_TOTAL_SPAN.num_hours()

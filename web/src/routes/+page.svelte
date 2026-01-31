@@ -212,13 +212,13 @@ async function performSearch(
   try {
     const result = await client.searchCourses({
       term,
-      subjects: subjects.length > 0 ? subjects : undefined,
+      subject: subjects.length > 0 ? subjects : [],
       q: q || undefined,
-      open_only: open || undefined,
+      openOnly: open || false,
       limit,
       offset: off,
-      sort_by: sortBy,
-      sort_dir: sortDir,
+      sortBy,
+      sortDir,
     });
 
     const applyUpdate = () => {

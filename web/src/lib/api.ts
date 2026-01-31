@@ -1,6 +1,7 @@
 import { authStore } from "$lib/auth.svelte";
 import type {
   AdminStatusResponse,
+  ApiError,
   AuditLogEntry,
   AuditLogResponse,
   CandidateResponse,
@@ -15,15 +16,19 @@ import type {
   LinkedRmpProfile,
   ListInstructorsResponse,
   MetricEntry,
+  MetricsParams as MetricsParamsGenerated,
   MetricsResponse,
   RescoreResponse,
   ScrapeJobDto,
   ScrapeJobEvent,
   ScrapeJobsResponse,
   ScraperStatsResponse,
+  SearchParams as SearchParamsGenerated,
   SearchResponse as SearchResponseGenerated,
   ServiceInfo,
   ServiceStatus,
+  SortColumn,
+  SortDirection,
   StatusResponse,
   SubjectDetailResponse,
   SubjectResultEntry,
@@ -45,6 +50,7 @@ const API_BASE_URL = "/api";
 // Re-export generated types under their canonical names
 export type {
   AdminStatusResponse,
+  ApiError,
   AuditLogEntry,
   AuditLogResponse,
   CandidateResponse,
@@ -67,6 +73,8 @@ export type {
   ScraperStatsResponse,
   ServiceInfo,
   ServiceStatus,
+  SortColumn,
+  SortDirection,
   StatusResponse,
   SubjectDetailResponse,
   SubjectResultEntry,
@@ -87,33 +95,12 @@ export type Term = TermResponse;
 export type Subject = CodeDescription;
 export type ReferenceEntry = CodeDescription;
 
-// SearchResponse re-exported (aliased to strip the "Generated" suffix)
+// Re-export with simplified names
 export type SearchResponse = SearchResponseGenerated;
+export type SearchParams = SearchParamsGenerated;
+export type MetricsParams = MetricsParamsGenerated;
 
 export type ScraperPeriod = "1h" | "6h" | "24h" | "7d" | "30d";
-
-// Client-side only — not generated from Rust
-export type SortColumn = "course_code" | "title" | "instructor" | "time" | "seats";
-export type SortDirection = "asc" | "desc";
-
-export interface MetricsParams {
-  course_id?: number;
-  term?: string;
-  crn?: string;
-  range?: "1h" | "6h" | "24h" | "7d" | "30d";
-  limit?: number;
-}
-
-export interface SearchParams {
-  term: string;
-  subjects?: string[];
-  q?: string;
-  open_only?: boolean;
-  limit?: number;
-  offset?: number;
-  sort_by?: SortColumn;
-  sort_dir?: SortDirection;
-}
 
 // Admin instructor query params (client-only, not generated)
 export interface AdminInstructorListParams {
@@ -122,6 +109,35 @@ export interface AdminInstructorListParams {
   page?: number;
   per_page?: number;
   sort?: string;
+}
+
+/**
+ * API error class that wraps the structured ApiError response from the backend.
+ */
+export class ApiErrorClass extends Error {
+  public readonly code: string;
+  public readonly details: unknown | null;
+
+  constructor(apiError: ApiError) {
+    super(apiError.message);
+    this.name = "ApiError";
+    this.code = apiError.code;
+    this.details = apiError.details;
+  }
+
+  isNotFound(): boolean {
+    return this.code === "NOT_FOUND";
+  }
+
+  isBadRequest(): boolean {
+    return (
+      this.code === "BAD_REQUEST" || this.code === "INVALID_TERM" || this.code === "INVALID_RANGE"
+    );
+  }
+
+  isInternalError(): boolean {
+    return this.code === "INTERNAL_ERROR";
+  }
 }
 
 export class BannerApiClient {
@@ -163,7 +179,17 @@ export class BannerApiClient {
     }
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      let apiError: ApiError;
+      try {
+        apiError = (await response.json()) as ApiError;
+      } catch {
+        apiError = {
+          code: "UNKNOWN_ERROR",
+          message: `API request failed: ${response.status} ${response.statusText}`,
+          details: null,
+        };
+      }
+      throw new ApiErrorClass(apiError);
     }
 
     return (await response.json()) as T;
@@ -184,7 +210,17 @@ export class BannerApiClient {
     }
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      let apiError: ApiError;
+      try {
+        apiError = (await response.json()) as ApiError;
+      } catch {
+        apiError = {
+          code: "UNKNOWN_ERROR",
+          message: `API request failed: ${response.status} ${response.statusText}`,
+          details: null,
+        };
+      }
+      throw new ApiErrorClass(apiError);
     }
   }
 
@@ -192,20 +228,28 @@ export class BannerApiClient {
     return this.request<StatusResponse>("/status");
   }
 
-  async searchCourses(params: SearchParams): Promise<SearchResponse> {
+  async searchCourses(params: Partial<SearchParams> & { term: string }): Promise<SearchResponse> {
     const query = new URLSearchParams();
     query.set("term", params.term);
-    if (params.subjects) {
-      for (const s of params.subjects) {
+    if (params.subject && params.subject.length > 0) {
+      for (const s of params.subject) {
         query.append("subject", s);
       }
     }
     if (params.q) query.set("q", params.q);
-    if (params.open_only) query.set("open_only", "true");
+    if (params.openOnly) query.set("open_only", "true");
+    if (params.courseNumberLow !== undefined && params.courseNumberLow !== null) {
+      query.set("course_number_low", String(params.courseNumberLow));
+    }
+    if (params.courseNumberHigh !== undefined && params.courseNumberHigh !== null) {
+      query.set("course_number_high", String(params.courseNumberHigh));
+    }
+    if (params.instructionalMethod) query.set("instructional_method", params.instructionalMethod);
+    if (params.campus) query.set("campus", params.campus);
     if (params.limit !== undefined) query.set("limit", String(params.limit));
     if (params.offset !== undefined) query.set("offset", String(params.offset));
-    if (params.sort_by) query.set("sort_by", params.sort_by);
-    if (params.sort_dir) query.set("sort_dir", params.sort_dir);
+    if (params.sortBy) query.set("sort_by", params.sortBy);
+    if (params.sortDir) query.set("sort_dir", params.sortDir);
     return this.request<SearchResponse>(`/courses/search?${query.toString()}`);
   }
 
@@ -281,9 +325,11 @@ export class BannerApiClient {
     });
   }
 
-  async getMetrics(params?: MetricsParams): Promise<MetricsResponse> {
+  async getMetrics(params?: Partial<MetricsParams>): Promise<MetricsResponse> {
     const query = new URLSearchParams();
-    if (params?.course_id !== undefined) query.set("course_id", String(params.course_id));
+    if (params?.courseId !== undefined && params.courseId !== null) {
+      query.set("course_id", String(params.courseId));
+    }
     if (params?.term) query.set("term", params.term);
     if (params?.crn) query.set("crn", params.crn);
     if (params?.range) query.set("range", params.range);

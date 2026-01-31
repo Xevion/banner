@@ -4,10 +4,12 @@ use crate::data::models::{Course, CourseInstructorDetail};
 use crate::error::Result;
 use sqlx::PgPool;
 use std::collections::HashMap;
+use ts_rs::TS;
 
 /// Column to sort search results by.
-#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum SortColumn {
     CourseCode,
     Title,
@@ -17,8 +19,9 @@ pub enum SortColumn {
 }
 
 /// Sort direction.
-#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum SortDirection {
     Asc,
     Desc,

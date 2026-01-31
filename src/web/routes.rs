@@ -4,7 +4,6 @@ use axum::{
     Extension, Router,
     body::Body,
     extract::{Path, Query, Request, State},
-    http::StatusCode as AxumStatusCode,
     response::{Json, Response},
     routing::{get, post, put},
 };
@@ -12,6 +11,7 @@ use axum::{
 use crate::web::admin_scraper;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::calendar;
+use crate::web::error::{ApiError, db_error};
 use crate::web::timeline;
 use crate::web::ws;
 use crate::{data, web::admin};
@@ -291,7 +291,7 @@ async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
 async fn metrics(
     State(state): State<AppState>,
     Query(params): Query<MetricsParams>,
-) -> Result<Json<MetricsResponse>, (AxumStatusCode, String)> {
+) -> Result<Json<MetricsResponse>, ApiError> {
     let limit = params.limit.clamp(1, 5000);
 
     // Parse range shorthand, defaulting to 24h
@@ -303,8 +303,8 @@ async fn metrics(
         "7d" => chrono::Duration::days(7),
         "30d" => chrono::Duration::days(30),
         _ => {
-            return Err((
-                AxumStatusCode::BAD_REQUEST,
+            return Err(ApiError::new(
+                "INVALID_RANGE",
                 format!("Invalid range '{range_str}'. Valid: 1h, 6h, 24h, 7d, 30d"),
             ));
         }
@@ -321,13 +321,7 @@ async fn metrics(
                 .bind(crn)
                 .fetch_optional(&state.db_pool)
                 .await
-                .map_err(|e| {
-                    tracing::error!(error = %e, "Course lookup for metrics failed");
-                    (
-                        AxumStatusCode::INTERNAL_SERVER_ERROR,
-                        "Course lookup failed".to_string(),
-                    )
-                })?;
+                .map_err(|e| db_error("Course lookup for metrics", e.into()))?;
         row.map(|(id,)| id)
     } else {
         None
@@ -361,13 +355,7 @@ async fn metrics(
             .fetch_all(&state.db_pool)
             .await
         }
-        .map_err(|e| {
-            tracing::error!(error = %e, "Metrics query failed");
-            (
-                AxumStatusCode::INTERNAL_SERVER_ERROR,
-                "Metrics query failed".to_string(),
-            )
-        })?;
+        .map_err(|e| db_error("Metrics query", e.into()))?;
 
     let count = metrics.len();
     let metrics_entries: Vec<MetricEntry> = metrics
@@ -416,44 +404,60 @@ pub struct MetricsResponse {
     pub timestamp: String,
 }
 
-#[derive(Deserialize)]
-struct MetricsParams {
-    course_id: Option<i32>,
-    term: Option<String>,
-    crn: Option<String>,
-    /// Shorthand durations: "1h", "6h", "24h", "7d", "30d"
-    range: Option<String>,
+#[derive(Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MetricsParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub term: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crn: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range: Option<String>,
     #[serde(default = "default_metrics_limit")]
-    limit: i32,
+    pub limit: i32,
 }
 
 fn default_metrics_limit() -> i32 {
     500
 }
 
-#[derive(Deserialize)]
-struct SubjectsParams {
-    term: String,
+#[derive(Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SubjectsParams {
+    pub term: String,
 }
 
-#[derive(Deserialize)]
-struct SearchParams {
-    term: String,
+#[derive(Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SearchParams {
+    pub term: String,
     #[serde(default)]
-    subject: Vec<String>,
-    q: Option<String>,
-    course_number_low: Option<i32>,
-    course_number_high: Option<i32>,
+    pub subject: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub q: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_number_low: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_number_high: Option<i32>,
     #[serde(default)]
-    open_only: bool,
-    instructional_method: Option<String>,
-    campus: Option<String>,
+    pub open_only: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instructional_method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub campus: Option<String>,
     #[serde(default = "default_limit")]
-    limit: i32,
+    pub limit: i32,
     #[serde(default)]
-    offset: i32,
-    sort_by: Option<SortColumn>,
-    sort_dir: Option<SortDirection>,
+    pub offset: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_by: Option<SortColumn>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_dir: Option<SortDirection>,
 }
 
 use crate::data::courses::{SortColumn, SortDirection};
@@ -550,6 +554,32 @@ fn build_course_response(
         })
         .collect();
 
+    let meeting_times = serde_json::from_value(course.meeting_times.clone())
+        .map_err(|e| {
+            tracing::error!(
+                course_id = course.id,
+                crn = %course.crn,
+                term = %course.term_code,
+                error = %e,
+                "Failed to deserialize meeting_times JSONB"
+            );
+            e
+        })
+        .unwrap_or_default();
+
+    let attributes = serde_json::from_value(course.attributes.clone())
+        .map_err(|e| {
+            tracing::error!(
+                course_id = course.id,
+                crn = %course.crn,
+                term = %course.term_code,
+                error = %e,
+                "Failed to deserialize attributes JSONB"
+            );
+            e
+        })
+        .unwrap_or_default();
+
     CourseResponse {
         crn: course.crn.clone(),
         subject: course.subject.clone(),
@@ -572,8 +602,8 @@ fn build_course_response(
         link_identifier: course.link_identifier.clone(),
         is_section_linked: course.is_section_linked,
         part_of_term: course.part_of_term.clone(),
-        meeting_times: serde_json::from_value(course.meeting_times.clone()).unwrap_or_default(),
-        attributes: serde_json::from_value(course.attributes.clone()).unwrap_or_default(),
+        meeting_times,
+        attributes,
         instructors,
     }
 }
@@ -582,15 +612,11 @@ fn build_course_response(
 async fn search_courses(
     State(state): State<AppState>,
     axum_extra::extract::Query(params): axum_extra::extract::Query<SearchParams>,
-) -> Result<Json<SearchResponse>, (AxumStatusCode, String)> {
+) -> Result<Json<SearchResponse>, ApiError> {
     use crate::banner::models::terms::Term;
 
-    let term_code = Term::resolve_to_code(&params.term).ok_or_else(|| {
-        (
-            AxumStatusCode::BAD_REQUEST,
-            format!("Invalid term: {}", params.term),
-        )
-    })?;
+    let term_code =
+        Term::resolve_to_code(&params.term).ok_or_else(|| ApiError::invalid_term(&params.term))?;
     let limit = params.limit.clamp(1, 100);
     let offset = params.offset.max(0);
 
@@ -614,13 +640,7 @@ async fn search_courses(
         params.sort_dir,
     )
     .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "Course search failed");
-        (
-            AxumStatusCode::INTERNAL_SERVER_ERROR,
-            "Search failed".to_string(),
-        )
-    })?;
+    .map_err(|e| db_error("Course search", e))?;
 
     // Batch-fetch all instructors in a single query instead of N+1
     let course_ids: Vec<i32> = courses.iter().map(|c| c.id).collect();
@@ -647,17 +667,11 @@ async fn search_courses(
 async fn get_course(
     State(state): State<AppState>,
     Path((term, crn)): Path<(String, String)>,
-) -> Result<Json<CourseResponse>, (AxumStatusCode, String)> {
+) -> Result<Json<CourseResponse>, ApiError> {
     let course = data::courses::get_course_by_crn(&state.db_pool, &crn, &term)
         .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Course lookup failed");
-            (
-                AxumStatusCode::INTERNAL_SERVER_ERROR,
-                "Lookup failed".to_string(),
-            )
-        })?
-        .ok_or_else(|| (AxumStatusCode::NOT_FOUND, "Course not found".to_string()))?;
+        .map_err(|e| db_error("Course lookup", e))?
+        .ok_or_else(|| ApiError::not_found("Course not found"))?;
 
     let instructors = data::courses::get_course_instructors(&state.db_pool, course.id)
         .await
@@ -666,20 +680,12 @@ async fn get_course(
 }
 
 /// `GET /api/terms`
-async fn get_terms(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<TermResponse>>, (AxumStatusCode, String)> {
+async fn get_terms(State(state): State<AppState>) -> Result<Json<Vec<TermResponse>>, ApiError> {
     use crate::banner::models::terms::Term;
 
     let term_codes = data::courses::get_available_terms(&state.db_pool)
         .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to get terms");
-            (
-                AxumStatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get terms".to_string(),
-            )
-        })?;
+        .map_err(|e| db_error("Get terms", e))?;
 
     let terms: Vec<TermResponse> = term_codes
         .into_iter()
@@ -700,24 +706,14 @@ async fn get_terms(
 async fn get_subjects(
     State(state): State<AppState>,
     Query(params): Query<SubjectsParams>,
-) -> Result<Json<Vec<CodeDescription>>, (AxumStatusCode, String)> {
+) -> Result<Json<Vec<CodeDescription>>, ApiError> {
     use crate::banner::models::terms::Term;
 
-    let term_code = Term::resolve_to_code(&params.term).ok_or_else(|| {
-        (
-            AxumStatusCode::BAD_REQUEST,
-            format!("Invalid term: {}", params.term),
-        )
-    })?;
+    let term_code =
+        Term::resolve_to_code(&params.term).ok_or_else(|| ApiError::invalid_term(&params.term))?;
     let rows = data::courses::get_subjects_by_enrollment(&state.db_pool, &term_code)
         .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to get subjects");
-            (
-                AxumStatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get subjects".to_string(),
-            )
-        })?;
+        .map_err(|e| db_error("Get subjects", e))?;
 
     let subjects: Vec<CodeDescription> = rows
         .into_iter()
@@ -731,7 +727,7 @@ async fn get_subjects(
 async fn get_reference(
     State(state): State<AppState>,
     Path(category): Path<String>,
-) -> Result<Json<Vec<CodeDescription>>, (AxumStatusCode, String)> {
+) -> Result<Json<Vec<CodeDescription>>, ApiError> {
     let cache = state.reference_cache.read().await;
     let entries = cache.entries_for_category(&category);
 
@@ -740,13 +736,7 @@ async fn get_reference(
         drop(cache);
         let rows = data::reference::get_by_category(&category, &state.db_pool)
             .await
-            .map_err(|e| {
-                tracing::error!(error = %e, category = %category, "Reference lookup failed");
-                (
-                    AxumStatusCode::INTERNAL_SERVER_ERROR,
-                    "Lookup failed".to_string(),
-                )
-            })?;
+            .map_err(|e| db_error(&format!("Reference lookup for {}", category), e))?;
 
         return Ok(Json(
             rows.into_iter()

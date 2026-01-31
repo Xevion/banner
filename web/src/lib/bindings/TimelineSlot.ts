@@ -2,7 +2,7 @@
 
 export type TimelineSlot = { 
 /**
- * ISO-8601 timestamp at the start of this 15-minute bucket.
+ * ISO-8601 UTC timestamp at the start of this 15-minute bucket (e.g., "2024-01-15T10:30:00Z")
  */
 time: string, 
 /**

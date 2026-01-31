@@ -14,25 +14,34 @@ use crate::web::extractors::AdminUser;
 // Query / body types
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ListInstructorsParams {
-    status: Option<String>,
-    search: Option<String>,
-    page: Option<i32>,
-    per_page: Option<i32>,
-    sort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_page: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct MatchBody {
-    rmp_legacy_id: i32,
+    pub rmp_legacy_id: i32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RejectCandidateBody {
-    rmp_legacy_id: i32,
+    pub rmp_legacy_id: i32,
 }
 
 // ---------------------------------------------------------------------------

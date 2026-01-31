@@ -77,10 +77,12 @@ fn default_bucket_for_period(period: &str) -> &'static str {
 // Endpoint 1: GET /api/admin/scraper/stats
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct StatsParams {
     #[serde(default = "default_period")]
-    period: String,
+    pub period: String,
 }
 
 fn default_period() -> String {
@@ -195,11 +197,14 @@ pub async fn scraper_stats(
 // Endpoint 2: GET /api/admin/scraper/timeseries
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct TimeseriesParams {
     #[serde(default = "default_period")]
-    period: String,
-    bucket: Option<String>,
+    pub period: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bucket: Option<String>,
 }
 
 #[derive(Serialize, TS)]
@@ -215,6 +220,8 @@ pub struct TimeseriesResponse {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeseriesPoint {
+    /// ISO-8601 UTC timestamp for this data point (e.g., "2024-01-15T10:00:00Z")
+    #[ts(type = "string")]
     timestamp: DateTime<Utc>,
     #[ts(type = "number")]
     scrape_count: i64,
@@ -328,7 +335,11 @@ pub struct SubjectSummary {
     #[ts(type = "number")]
     current_interval_secs: u64,
     time_multiplier: u32,
+    /// ISO-8601 UTC timestamp of last scrape (e.g., "2024-01-15T10:30:00Z")
+    #[ts(type = "string")]
     last_scraped: DateTime<Utc>,
+    /// ISO-8601 UTC timestamp when next scrape is eligible (e.g., "2024-01-15T11:00:00Z")
+    #[ts(type = "string | null")]
     next_eligible_at: Option<DateTime<Utc>>,
     #[ts(type = "number | null")]
     cooldown_remaining_secs: Option<u64>,
@@ -439,10 +450,12 @@ pub async fn scraper_subjects(
 // Endpoint 4: GET /api/admin/scraper/subjects/{subject}
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SubjectDetailParams {
     #[serde(default = "default_detail_limit")]
-    limit: i32,
+    pub limit: i32,
 }
 
 fn default_detail_limit() -> i32 {
@@ -463,6 +476,8 @@ pub struct SubjectDetailResponse {
 pub struct SubjectResultEntry {
     #[ts(type = "number")]
     id: i64,
+    /// ISO-8601 UTC timestamp when the scrape job completed (e.g., "2024-01-15T10:30:00Z")
+    #[ts(type = "string")]
     completed_at: DateTime<Utc>,
     duration_ms: i32,
     success: bool,
