@@ -185,11 +185,8 @@ function successRateColor(rate: number): string {
 }
 
 /** Muted class for zero/default values, foreground for interesting ones. */
-function emphasisClass(value: number, zeroIsDefault = true): string {
-  if (zeroIsDefault) {
-    return value === 0 ? "text-muted-foreground" : "text-foreground";
-  }
-  return value === 1 ? "text-muted-foreground" : "text-foreground";
+function emphasisClass(value: number): string {
+  return value === 0 ? "text-muted-foreground" : "text-foreground";
 }
 
 function xAxisFormat(period: ScraperPeriod) {
@@ -212,64 +209,64 @@ function handleSortingChange(updater: Updater<SortingState>) {
   sorting = typeof updater === "function" ? updater(sorting) : updater;
 }
 
-  const columns: ColumnDef<SubjectSummary, unknown>[] = [
-    {
-      id: "subject",
-      accessorKey: "subject",
-      header: "Subject",
-      enableSorting: true,
-      sortingFn: (a, b) => a.original.subject.localeCompare(b.original.subject),
+const columns: ColumnDef<SubjectSummary, unknown>[] = [
+  {
+    id: "subject",
+    accessorKey: "subject",
+    header: "Subject",
+    enableSorting: true,
+    sortingFn: (a, b) => a.original.subject.localeCompare(b.original.subject),
+  },
+  {
+    id: "status",
+    accessorFn: (row) => row.scheduleState,
+    header: "Scrape in",
+    enableSorting: true,
+    sortingFn: (a, b) => {
+      const order: Record<string, number> = { eligible: 0, cooldown: 1, paused: 2, read_only: 3 };
+      const sa = order[a.original.scheduleState] ?? 4;
+      const sb = order[b.original.scheduleState] ?? 4;
+      if (sa !== sb) return sa - sb;
+      return (a.original.cooldownRemainingSecs ?? Infinity) - (b.original.cooldownRemainingSecs ?? Infinity);
     },
-    {
-      id: "status",
-      accessorFn: (row) => row.scheduleState,
-      header: "Status",
-      enableSorting: true,
-      sortingFn: (a, b) => {
-        const order: Record<string, number> = { eligible: 0, cooldown: 1, paused: 2, read_only: 3 };
-        const sa = order[a.original.scheduleState] ?? 4;
-        const sb = order[b.original.scheduleState] ?? 4;
-        if (sa !== sb) return sa - sb;
-        return (a.original.cooldownRemainingSecs ?? Infinity) - (b.original.cooldownRemainingSecs ?? Infinity);
-      },
-    },
-    {
-      id: "interval",
-      accessorFn: (row) => row.currentIntervalSecs * row.timeMultiplier,
-      header: "Interval",
-      enableSorting: true,
-    },
-    {
-      id: "lastScraped",
-      accessorKey: "lastScraped",
-      header: "Last Scraped",
-      enableSorting: true,
-    },
-    {
-      id: "changeRate",
-      accessorKey: "avgChangeRatio",
-      header: "Change %",
-      enableSorting: true,
-    },
-    {
-      id: "zeros",
-      accessorKey: "consecutiveZeroChanges",
-      header: "Zeros",
-      enableSorting: true,
-    },
-    {
-      id: "runs",
-      accessorKey: "recentRuns",
-      header: "Runs",
-      enableSorting: true,
-    },
-    {
-      id: "fails",
-      accessorKey: "recentFailures",
-      header: "Fails",
-      enableSorting: true,
-    },
-  ];
+  },
+  {
+    id: "interval",
+    accessorFn: (row) => row.currentIntervalSecs * row.timeMultiplier,
+    header: "Interval",
+    enableSorting: true,
+  },
+  {
+    id: "lastScraped",
+    accessorKey: "lastScraped",
+    header: "Last Scraped",
+    enableSorting: true,
+  },
+  {
+    id: "changeRate",
+    accessorKey: "avgChangeRatio",
+    header: "Change %",
+    enableSorting: true,
+  },
+  {
+    id: "zeros",
+    accessorKey: "consecutiveZeroChanges",
+    header: "Zeros",
+    enableSorting: true,
+  },
+  {
+    id: "runs",
+    accessorKey: "recentRuns",
+    header: "Runs",
+    enableSorting: true,
+  },
+  {
+    id: "fails",
+    accessorKey: "recentFailures",
+    header: "Fails",
+    enableSorting: true,
+  },
+];
 
 const table = createSvelteTable({
   get data() {
@@ -288,18 +285,19 @@ const table = createSvelteTable({
   enableSortingRemoval: true,
 });
 
-  const skeletonWidths: Record<string, string> = {
-    subject: "w-24",
-    status: "w-20",
-    interval: "w-14",
-    lastScraped: "w-20",
-    changeRate: "w-12",
-    zeros: "w-8",
-    runs: "w-8",
-    fails: "w-8",
-  };
+const skeletonWidths: Record<string, string> = {
+  subject: "w-24",
+  status: "w-20",
+  interval: "w-14",
+  lastScraped: "w-20",
+  changeRate: "w-12",
+  zeros: "w-8",
+  runs: "w-8",
+  fails: "w-8",
+};
 
 const columnCount = columns.length;
+const detailGridCols = "grid-cols-[7fr_5fr_3fr_4fr_4fr_3fr_4fr_minmax(6rem,1fr)]";
 
 // --- Lifecycle ---
 
@@ -361,9 +359,6 @@ $effect(() => {
       <div class="bg-card border-border rounded-lg border p-3">
         <p class="text-muted-foreground text-xs">Total Scrapes</p>
         <p class="text-2xl font-bold">{formatNumber(stats.totalScrapes)}</p>
-        <p class="text-muted-foreground mt-1 text-[10px]">
-          {formatNumber(stats.successfulScrapes)} ok / {formatNumber(stats.failedScrapes)} failed
-        </p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
         <p class="text-muted-foreground text-xs">Success Rate</p>
@@ -558,13 +553,13 @@ $effect(() => {
         Subjects ({subjects.length})
       </h2>
       <div class="overflow-x-auto">
-        <table class="w-full text-xs">
+        <table class="w-full min-w-160 border-collapse text-xs">
           <thead>
             {#each table.getHeaderGroups() as headerGroup}
               <tr class="border-border border-b text-left text-muted-foreground">
                 {#each headerGroup.headers as header}
                   <th
-                    class="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider"
+                    class="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider whitespace-nowrap"
                     class:cursor-pointer={header.column.getCanSort()}
                     class:select-none={header.column.getCanSort()}
                     onclick={header.column.getToggleSortingHandler()}
@@ -704,64 +699,85 @@ $effect(() => {
                   <tr class="border-border border-b last:border-b-0">
                     <td colspan={columnCount} class="p-0">
                       <div transition:slide={{ duration: 200 }}>
-                        <div class="bg-muted/20 px-4 py-3">
-                          {#if detailLoading}
-                            <p class="text-muted-foreground text-sm">Loading results...</p>
-                          {:else if subjectDetail && subjectDetail.results.length > 0}
-                            <div class="overflow-x-auto">
-                              <table class="w-full text-xs">
-                                <thead>
-                                  <tr class="text-muted-foreground text-left">
-                                    <th class="px-3 py-1.5 font-medium">Time</th>
-                                    <th class="px-3 py-1.5 font-medium">Duration</th>
-                                    <th class="px-3 py-1.5 font-medium">Status</th>
-                                    <th class="px-3 py-1.5 font-medium">Fetched</th>
-                                    <th class="px-3 py-1.5 font-medium">Changed</th>
-                                    <th class="px-3 py-1.5 font-medium">Unchanged</th>
-                                    <th class="px-3 py-1.5 font-medium">Audits</th>
-                                    <th class="px-3 py-1.5 font-medium">Error</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
+                        <div class="bg-muted/40 px-4 py-3">
+                            <div class="text-xs overflow-x-auto">
+                              <div class="min-w-fit">
+                              <!-- Header (outside scroll region) -->
+                              <div class="grid {detailGridCols} text-muted-foreground border-border/50 border-b">
+                                <div class="px-3 py-1.5 font-medium">Time</div>
+                                <div class="px-3 py-1.5 font-medium">Duration</div>
+                                <div class="px-3 py-1.5 font-medium">Status</div>
+                                <div class="px-3 py-1.5 font-medium">Fetched</div>
+                                <div class="px-3 py-1.5 font-medium">Changed</div>
+                                <div class="px-3 py-1.5 font-medium">%</div>
+                                <div class="px-3 py-1.5 font-medium">Audits</div>
+                                <div class="px-3 py-1.5 font-medium">Error</div>
+                              </div>
+                              <!-- Body (scrollable vertically, horizontal clipped to match header) -->
+                              <div class="max-h-[280px] overflow-y-auto overflow-x-hidden">
+                                {#if detailLoading}
+                                  {#each Array(8) as _}
+                                    <div class="grid {detailGridCols} border-border/50 border-t">
+                                      <div class="px-3 py-1.5"><div class="h-3.5 w-16 rounded bg-muted animate-pulse"></div></div>
+                                      <div class="px-3 py-1.5"><div class="h-3.5 w-12 rounded bg-muted animate-pulse"></div></div>
+                                      <div class="px-3 py-1.5"><div class="h-3.5 w-8 rounded bg-muted animate-pulse"></div></div>
+                                      <div class="px-3 py-1.5"><div class="h-3.5 w-10 rounded bg-muted animate-pulse"></div></div>
+                                      <div class="px-3 py-1.5"><div class="h-3.5 w-10 rounded bg-muted animate-pulse"></div></div>
+                                      <div class="px-3 py-1.5"><div class="h-3.5 w-8 rounded bg-muted animate-pulse"></div></div>
+                                      <div class="px-3 py-1.5"><div class="h-3.5 w-8 rounded bg-muted animate-pulse"></div></div>
+                                      <div class="px-3 py-1.5"><div class="h-3.5 w-16 rounded bg-muted animate-pulse"></div></div>
+                                    </div>
+                                  {/each}
+                                {:else if subjectDetail && subjectDetail.results.length > 0}
                                   {#each subjectDetail.results as result (result.id)}
                                     {@const detailRel = relativeTime(new Date(result.completedAt), now)}
-                                    <tr class="border-border/50 border-t">
-                                      <td class="px-3 py-1.5">
+                                    <div class="grid {detailGridCols} border-border/50 border-t">
+                                      <div class="px-3 py-1.5">
                                         <SimpleTooltip text={formatAbsoluteDate(result.completedAt)} side="top" passthrough>
-                                          <span class="text-muted-foreground">{detailRel.text === "now" ? "just now" : detailRel.text}</span>
+                                          <span class="inline-block min-w-[4.5rem] text-muted-foreground">{detailRel.text === "now" ? "just now" : detailRel.text}</span>
                                         </SimpleTooltip>
-                                      </td>
-                                      <td class="px-3 py-1.5">{formatDurationMs(result.durationMs)}</td>
-                                      <td class="px-3 py-1.5">
+                                      </div>
+                                      <div class="px-3 py-1.5">{formatDurationMs(result.durationMs)}</div>
+                                      <div class="px-3 py-1.5">
                                         {#if result.success}
                                           <span class="text-green-600 dark:text-green-400">ok</span>
                                         {:else}
                                           <span class="text-red-600 dark:text-red-400">fail</span>
                                         {/if}
-                                      </td>
-                                      <td class="px-3 py-1.5">
+                                      </div>
+                                      <div class="px-3 py-1.5">
                                         <span class={emphasisClass(result.coursesFetched ?? 0)}>{result.coursesFetched ?? "\u2014"}</span>
-                                      </td>
-                                      <td class="px-3 py-1.5">
+                                      </div>
+                                      <div class="px-3 py-1.5">
                                         <span class={emphasisClass(result.coursesChanged ?? 0)}>{result.coursesChanged ?? "\u2014"}</span>
-                                      </td>
-                                      <td class="px-3 py-1.5">
-                                        <span class="text-muted-foreground">{result.coursesUnchanged ?? "\u2014"}</span>
-                                      </td>
-                                      <td class="px-3 py-1.5">
+                                      </div>
+                                      <div class="px-3 py-1.5">
+                                        {#if result.coursesFetched != null && result.coursesFetched > 0 && result.coursesChanged != null}
+                                          <span class={emphasisClass(result.coursesChanged)}>{(result.coursesChanged / result.coursesFetched * 100).toFixed(1)}%</span>
+                                        {:else}
+                                          <span class="text-muted-foreground">{"\u2014"}</span>
+                                        {/if}
+                                      </div>
+                                      <div class="px-3 py-1.5">
                                         <span class={emphasisClass(result.auditsGenerated ?? 0)}>{result.auditsGenerated ?? "\u2014"}</span>
-                                      </td>
-                                      <td class="text-muted-foreground max-w-[200px] truncate px-3 py-1.5">
-                                        {result.errorMessage ?? ""}
-                                      </td>
-                                    </tr>
+                                      </div>
+                                      <div class="px-3 py-1.5">
+                                        {#if !result.success && result.errorMessage}
+                                          <SimpleTooltip text={result.errorMessage} side="top" passthrough>
+                                            <span class="text-red-600 dark:text-red-400 max-w-[12rem] truncate inline-block align-middle">{result.errorMessage}</span>
+                                          </SimpleTooltip>
+                                        {:else}
+                                          <span class="text-muted-foreground">{"\u2014"}</span>
+                                        {/if}
+                                      </div>
+                                    </div>
                                   {/each}
-                                </tbody>
-                              </table>
+                                {:else}
+                                  <div class="px-3 py-4 text-center text-muted-foreground text-sm">No recent results.</div>
+                                {/if}
+                              </div>
+                              </div>
                             </div>
-                          {:else}
-                            <p class="text-muted-foreground text-sm">No recent results.</p>
-                          {/if}
                         </div>
                       </div>
                     </td>
