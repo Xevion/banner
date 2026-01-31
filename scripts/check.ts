@@ -8,7 +8,17 @@ import { c, elapsed, isStderrTTY } from "./lib/fmt";
 import { run, runPiped, spawnCollect, raceInOrder, type CollectResult } from "./lib/proc";
 import { existsSync, statSync, readdirSync, writeFileSync, rmSync } from "fs";
 
-const fix = process.argv.includes("--fix") || process.argv.includes("-f");
+const args = process.argv.slice(2);
+let fix = false;
+
+for (const arg of args) {
+  if (arg === "-f" || arg === "--fix") {
+    fix = true;
+  } else {
+    console.error(`Unknown flag: ${arg}`);
+    process.exit(1);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Fix path: format + clippy fix, then fall through to verification
