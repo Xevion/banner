@@ -654,7 +654,7 @@ $effect(() => {
                           <span class="text-muted-foreground">read only</span>
                         {:else if subject.nextEligibleAt}
                           {@const remainingMs = new Date(subject.nextEligibleAt).getTime() - now.getTime()}
-                          {#if remainingMs > 0}
+                          {#if remainingMs >= 1000}
                             <span class="text-muted-foreground">{formatDuration(remainingMs)}</span>
                           {:else}
                             <span class="text-green-600 dark:text-green-400 font-medium">ready</span>
