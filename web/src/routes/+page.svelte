@@ -177,6 +177,7 @@ const THROTTLE_MS = {
 
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 let lastSearchKey = "";
+let lastNavigationTime = 0;
 
 function buildSearchKey(): string {
   return [
@@ -401,11 +402,20 @@ async function performSearch() {
   if (selectedTerm !== defaultTermSlug || hasOtherParams) {
     params.set("term", selectedTerm);
   }
+
+  // Smart batching: batch rapid changes (<2.5s) into one history entry,
+  // but create new entries for deliberate filter changes
+  const BATCH_WINDOW_MS = 2500;
+  const now = Date.now();
+  const shouldBatch = now - lastNavigationTime < BATCH_WINDOW_MS;
+
   goto(`?${params.toString()}`, {
-    replaceState: true,
+    replaceState: shouldBatch,
     noScroll: true,
     keepFocus: true,
   });
+
+  lastNavigationTime = now;
 
   const t0 = performance.now();
   try {
