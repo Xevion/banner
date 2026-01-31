@@ -1,4 +1,5 @@
 .env
 /target
+/scripts/node_modules
 
 
