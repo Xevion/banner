@@ -1,14 +1,10 @@
 <script lang="ts">
-import { X } from "@lucide/svelte";
-
 let {
   segments,
   onRemoveSegment,
-  onRemoveAll,
 }: {
   segments: string[];
   onRemoveSegment: (segment: string) => void;
-  onRemoveAll: () => void;
 } = $props();
 </script>
 
@@ -22,21 +18,12 @@ let {
       {/if}
       <button
         type="button"
-        class="px-2 py-0.5 hover:bg-muted/60 transition-colors cursor-pointer first:rounded-l-full"
+        class="px-2 py-0.5 hover:bg-muted/60 transition-colors cursor-pointer first:rounded-l-full last:rounded-r-full"
         onclick={() => onRemoveSegment(segment)}
         aria-label="Remove {segment} filter"
       >
         {segment}
       </button>
     {/each}
-    <span class="w-px self-stretch bg-border"></span>
-    <button
-      type="button"
-      class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-r-full hover:bg-muted/60 transition-colors cursor-pointer"
-      onclick={onRemoveAll}
-      aria-label="Remove all subject filters"
-    >
-      <X class="size-3" />
-    </button>
   </span>
 {/if}

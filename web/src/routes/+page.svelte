@@ -545,10 +545,6 @@ function removeSubject(code: string) {
   selectedSubjects = selectedSubjects.filter((s) => s !== code);
 }
 
-function clearAllSubjects() {
-  selectedSubjects = [];
-}
-
 function clearAllFilters() {
   selectedSubjects = [];
   openOnly = false;
@@ -582,7 +578,6 @@ function clearAllFilters() {
                     <SegmentedChip
                         segments={selectedSubjects}
                         onRemoveSegment={removeSubject}
-                        onRemoveAll={clearAllSubjects}
                     />
                 {/if}
                 {#if openOnly}
@@ -690,13 +685,14 @@ function clearAllFilters() {
             </div>
 
             <!-- View columns dropdown (moved from CourseTable) -->
-            <DropdownMenu.Root>
-                <DropdownMenu.Trigger
-                    class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer shrink-0"
-                >
-                    <Columns3 class="size-3.5" />
-                    View
-                </DropdownMenu.Trigger>
+            <div class="pb-1.5">
+                <DropdownMenu.Root>
+                    <DropdownMenu.Trigger
+                        class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer shrink-0"
+                    >
+                        <Columns3 class="size-3.5" />
+                        View
+                    </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
                     <DropdownMenu.Content
                         class="z-50 min-w-40 rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
@@ -772,6 +768,7 @@ function clearAllFilters() {
                     </DropdownMenu.Content>
                 </DropdownMenu.Portal>
             </DropdownMenu.Root>
+            </div>
         </div>
 
         <!-- Filter bar -->
