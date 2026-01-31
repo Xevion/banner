@@ -42,12 +42,16 @@ pub struct FilterRanges {
 /// Shared WHERE clause for course search filters.
 ///
 /// Parameters $1-$17 match the bind order in `search_courses`.
+///
+/// Note: Course number filtering extracts numeric prefix to support alphanumeric
+/// course numbers (e.g., "015X", "399H"). The numeric part is compared against
+/// the range, so "399H" matches a search for courses 300-400.
 const SEARCH_WHERE: &str = r#"
     WHERE term_code = $1
       AND ($2::text[] IS NULL OR subject = ANY($2))
       AND ($3::text IS NULL OR title_search @@ plainto_tsquery('simple', $3) OR title ILIKE '%' || $3 || '%')
-      AND ($4::int IS NULL OR course_number::int >= $4)
-      AND ($5::int IS NULL OR course_number::int <= $5)
+      AND ($4::int IS NULL OR (substring(course_number from '^\d+'))::int >= $4)
+      AND ($5::int IS NULL OR (substring(course_number from '^\d+'))::int <= $5)
       AND ($6::bool = false OR max_enrollment > enrollment)
       AND ($7::text[] IS NULL OR instructional_method = ANY($7))
       AND ($8::text[] IS NULL OR campus = ANY($8))
