@@ -25,8 +25,8 @@ let {
   creditHourMin = $bindable(),
   creditHourMax = $bindable(),
   instructor = $bindable(),
-  courseNumberLow = $bindable(),
-  courseNumberHigh = $bindable(),
+  courseNumberMin = $bindable(),
+  courseNumberMax = $bindable(),
   referenceData,
   ranges,
 }: {
@@ -47,8 +47,8 @@ let {
   creditHourMin: number | null;
   creditHourMax: number | null;
   instructor: string;
-  courseNumberLow: number | null;
-  courseNumberHigh: number | null;
+  courseNumberMin: number | null;
+  courseNumberMax: number | null;
   referenceData: {
     instructionalMethods: CodeDescription[];
     campuses: CodeDescription[];
@@ -95,8 +95,8 @@ let {
     bind:creditHourMin
     bind:creditHourMax
     bind:instructor
-    bind:courseNumberLow
-    bind:courseNumberHigh
+    bind:courseNumberMin
+    bind:courseNumberMax
     ranges={{ courseNumber: ranges.courseNumber, creditHours: ranges.creditHours }}
   />
 </div>

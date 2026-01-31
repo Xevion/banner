@@ -64,8 +64,8 @@ let attributes: string[] = $state(initialParams.getAll("attributes"));
 let creditHourMin = $state<number | null>(parseNumParam("credit_hour_min"));
 let creditHourMax = $state<number | null>(parseNumParam("credit_hour_max"));
 let instructor = $state(initialParams.get("instructor") ?? "");
-let courseNumberLow = $state<number | null>(parseNumParam("course_number_low"));
-let courseNumberHigh = $state<number | null>(parseNumParam("course_number_high"));
+let courseNumberMin = $state<number | null>(parseNumParam("course_number_low"));
+let courseNumberMax = $state<number | null>(parseNumParam("course_number_high"));
 
 let searchOptions = $state<SearchOptionsResponse | null>(null);
 
@@ -171,8 +171,8 @@ const THROTTLE_MS = {
   creditHourMin: 300,
   creditHourMax: 300,
   instructor: 300,
-  courseNumberLow: 300,
-  courseNumberHigh: 300,
+  courseNumberMin: 300,
+  courseNumberMax: 300,
 } as const;
 
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -198,8 +198,8 @@ function buildSearchKey(): string {
     creditHourMin,
     creditHourMax,
     instructor,
-    courseNumberLow,
-    courseNumberHigh,
+    courseNumberMin,
+    courseNumberMax,
   ].join("|");
 }
 
@@ -318,14 +318,14 @@ $effect(() => {
 });
 
 $effect(() => {
-  courseNumberLow;
-  scheduleSearch("courseNumberLow");
+  courseNumberMin;
+  scheduleSearch("courseNumberMin");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  courseNumberHigh;
-  scheduleSearch("courseNumberHigh");
+  courseNumberMax;
+  scheduleSearch("courseNumberMax");
   return () => clearTimeout(searchTimeout);
 });
 
@@ -347,8 +347,8 @@ function buildFilterKey(): string {
     creditHourMin,
     creditHourMax,
     instructor,
-    courseNumberLow,
-    courseNumberHigh,
+    courseNumberMin,
+    courseNumberMax,
   ].join("|");
 }
 
@@ -394,8 +394,8 @@ async function performSearch() {
   if (creditHourMin !== null) params.set("credit_hour_min", String(creditHourMin));
   if (creditHourMax !== null) params.set("credit_hour_max", String(creditHourMax));
   if (instructor) params.set("instructor", instructor);
-  if (courseNumberLow !== null) params.set("course_number_low", String(courseNumberLow));
-  if (courseNumberHigh !== null) params.set("course_number_high", String(courseNumberHigh));
+  if (courseNumberMin !== null) params.set("course_number_low", String(courseNumberMin));
+  if (courseNumberMax !== null) params.set("course_number_high", String(courseNumberMax));
 
   // Include term in URL only when it differs from the default or other params are active
   const hasOtherParams = params.size > 0;
@@ -439,8 +439,8 @@ async function performSearch() {
       creditHourMin: creditHourMin ?? undefined,
       creditHourMax: creditHourMax ?? undefined,
       instructor: instructor || undefined,
-      courseNumberLow: courseNumberLow ?? undefined,
-      courseNumberHigh: courseNumberHigh ?? undefined,
+      courseNumberLow: courseNumberMin ?? undefined,
+      courseNumberHigh: courseNumberMax ?? undefined,
     });
 
     const applyUpdate = () => {
@@ -548,7 +548,7 @@ let activeFilterCount = $derived(
     (attributes.length > 0 ? 1 : 0) +
     (creditHourMin !== null || creditHourMax !== null ? 1 : 0) +
     (instructor !== "" ? 1 : 0) +
-    (courseNumberLow !== null || courseNumberHigh !== null ? 1 : 0)
+    (courseNumberMin !== null || courseNumberMax !== null ? 1 : 0)
 );
 
 function removeSubject(code: string) {
@@ -569,8 +569,8 @@ function clearAllFilters() {
   creditHourMin = null;
   creditHourMax = null;
   instructor = "";
-  courseNumberLow = null;
-  courseNumberHigh = null;
+  courseNumberMin = null;
+  courseNumberMax = null;
 }
 </script>
 
@@ -669,17 +669,17 @@ function clearAllFilters() {
                         onRemove={() => (instructor = "")}
                     />
                 {/if}
-                {#if courseNumberLow !== null || courseNumberHigh !== null}
+                {#if courseNumberMin !== null || courseNumberMax !== null}
                     <FilterChip
-                        label={courseNumberLow !== null &&
-                        courseNumberHigh !== null
-                            ? `Course ${courseNumberLow}–${courseNumberHigh}`
-                            : courseNumberLow !== null
-                              ? `Course ≥ ${courseNumberLow}`
-                              : `Course ≤ ${courseNumberHigh}`}
+                        label={courseNumberMin !== null &&
+                        courseNumberMax !== null
+                            ? `Course ${courseNumberMin}–${courseNumberMax}`
+                            : courseNumberMin !== null
+                              ? `Course ≥ ${courseNumberMin}`
+                              : `Course ≤ ${courseNumberMax}`}
                         onRemove={() => {
-                            courseNumberLow = null;
-                            courseNumberHigh = null;
+                            courseNumberMin = null;
+                            courseNumberMax = null;
                         }}
                     />
                 {/if}
@@ -801,8 +801,8 @@ function clearAllFilters() {
                 bind:creditHourMin
                 bind:creditHourMax
                 bind:instructor
-                bind:courseNumberLow
-                bind:courseNumberHigh
+                bind:courseNumberMin
+                bind:courseNumberMax
                 {referenceData}
                 ranges={{
                     courseNumber: { min: ranges.courseNumberMin, max: ranges.courseNumberMax },
