@@ -52,9 +52,8 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
             get(calendar::course_ics),
         )
         .route("/courses/{term}/{crn}/gcal", get(calendar::course_gcal))
-        .route("/terms", get(get_terms))
-        .route("/subjects", get(get_subjects))
         .route("/reference/{category}", get(get_reference))
+        .route("/search-options", get(get_search_options))
         .route("/timeline", post(timeline::timeline))
         .with_state(app_state.clone());
 
@@ -427,13 +426,6 @@ fn default_metrics_limit() -> i32 {
 #[derive(Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
-pub struct SubjectsParams {
-    pub term: String,
-}
-
-#[derive(Deserialize, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct SearchParams {
     pub term: String,
     #[serde(default)]
@@ -536,7 +528,7 @@ pub struct SearchResponse {
     total_count: i32,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct CodeDescription {
@@ -544,13 +536,39 @@ pub struct CodeDescription {
     description: String,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct TermResponse {
     code: String,
     slug: String,
     description: String,
+}
+
+/// Response for the consolidated search-options endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SearchOptionsResponse {
+    pub terms: Vec<TermResponse>,
+    pub subjects: Vec<CodeDescription>,
+    pub reference: SearchOptionsReference,
+    pub ranges: data::courses::FilterRanges,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SearchOptionsReference {
+    pub instructional_methods: Vec<CodeDescription>,
+    pub campuses: Vec<CodeDescription>,
+    pub parts_of_term: Vec<CodeDescription>,
+    pub attributes: Vec<CodeDescription>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchOptionsParams {
+    pub term: Option<String>,
 }
 
 /// Build a `CourseResponse` from a DB course with pre-fetched instructor details.
@@ -726,50 +744,6 @@ async fn get_course(
     Ok(Json(build_course_response(&course, instructors)))
 }
 
-/// `GET /api/terms`
-async fn get_terms(State(state): State<AppState>) -> Result<Json<Vec<TermResponse>>, ApiError> {
-    use crate::banner::models::terms::Term;
-
-    let term_codes = data::courses::get_available_terms(&state.db_pool)
-        .await
-        .map_err(|e| db_error("Get terms", e))?;
-
-    let terms: Vec<TermResponse> = term_codes
-        .into_iter()
-        .filter_map(|code| {
-            let term: Term = code.parse().ok()?;
-            Some(TermResponse {
-                code,
-                slug: term.slug(),
-                description: term.description(),
-            })
-        })
-        .collect();
-
-    Ok(Json(terms))
-}
-
-/// `GET /api/subjects?term=202620`
-async fn get_subjects(
-    State(state): State<AppState>,
-    Query(params): Query<SubjectsParams>,
-) -> Result<Json<Vec<CodeDescription>>, ApiError> {
-    use crate::banner::models::terms::Term;
-
-    let term_code =
-        Term::resolve_to_code(&params.term).ok_or_else(|| ApiError::invalid_term(&params.term))?;
-    let rows = data::courses::get_subjects_by_enrollment(&state.db_pool, &term_code)
-        .await
-        .map_err(|e| db_error("Get subjects", e))?;
-
-    let subjects: Vec<CodeDescription> = rows
-        .into_iter()
-        .map(|(code, description, _enrollment)| CodeDescription { code, description })
-        .collect();
-
-    Ok(Json(subjects))
-}
-
 /// `GET /api/reference/:category`
 async fn get_reference(
     State(state): State<AppState>,
@@ -804,4 +778,107 @@ async fn get_reference(
             })
             .collect(),
     ))
+}
+
+/// `GET /api/search-options?term={slug}` (term optional, defaults to latest)
+async fn get_search_options(
+    State(state): State<AppState>,
+    Query(params): Query<SearchOptionsParams>,
+) -> Result<Json<SearchOptionsResponse>, ApiError> {
+    use crate::banner::models::terms::Term;
+    use std::time::Instant;
+
+    // If no term specified, get the latest term
+    let term_slug = if let Some(ref t) = params.term {
+        t.clone()
+    } else {
+        // Fetch available terms to get the default (latest)
+        let term_codes = data::courses::get_available_terms(&state.db_pool)
+            .await
+            .map_err(|e| db_error("Get terms for default", e))?;
+
+        let first_term: Term = term_codes
+            .first()
+            .and_then(|code| code.parse().ok())
+            .ok_or_else(|| ApiError::new("NO_TERMS", "No terms available".to_string()))?;
+
+        first_term.slug()
+    };
+
+    let term_code =
+        Term::resolve_to_code(&term_slug).ok_or_else(|| ApiError::invalid_term(&term_slug))?;
+
+    // Check cache (10-minute TTL)
+    if let Some(entry) = state.search_options_cache.get(&term_code) {
+        let (cached_at, ref cached_value) = *entry;
+        if cached_at.elapsed() < Duration::from_secs(600) {
+            let response: SearchOptionsResponse = serde_json::from_value(cached_value.clone())
+                .map_err(|e| {
+                    ApiError::internal_error(format!("Cache deserialization error: {e}"))
+                })?;
+            return Ok(Json(response));
+        }
+    }
+
+    // Fetch all data in parallel
+    let (term_codes, subject_rows, ranges) = tokio::try_join!(
+        data::courses::get_available_terms(&state.db_pool),
+        data::courses::get_subjects_by_enrollment(&state.db_pool, &term_code),
+        data::courses::get_filter_ranges(&state.db_pool, &term_code),
+    )
+    .map_err(|e| db_error("Search options", e))?;
+
+    // Build terms
+    let terms: Vec<TermResponse> = term_codes
+        .into_iter()
+        .filter_map(|code| {
+            let term: Term = code.parse().ok()?;
+            Some(TermResponse {
+                code,
+                slug: term.slug(),
+                description: term.description(),
+            })
+        })
+        .collect();
+
+    // Build subjects
+    let subjects: Vec<CodeDescription> = subject_rows
+        .into_iter()
+        .map(|(code, description, _enrollment)| CodeDescription { code, description })
+        .collect();
+
+    // Build reference data from in-memory cache
+    let ref_cache = state.reference_cache.read().await;
+    let build_ref = |category: &str| -> Vec<CodeDescription> {
+        ref_cache
+            .entries_for_category(category)
+            .into_iter()
+            .map(|(code, desc)| CodeDescription {
+                code: code.to_string(),
+                description: desc.to_string(),
+            })
+            .collect()
+    };
+
+    let reference = SearchOptionsReference {
+        instructional_methods: build_ref("instructional_method"),
+        campuses: build_ref("campus"),
+        parts_of_term: build_ref("part_of_term"),
+        attributes: build_ref("attribute"),
+    };
+
+    let response = SearchOptionsResponse {
+        terms,
+        subjects,
+        reference,
+        ranges,
+    };
+
+    // Cache the response
+    let cached_value = serde_json::to_value(&response).unwrap_or_default();
+    state
+        .search_options_cache
+        .insert(term_code, (Instant::now(), cached_value));
+
+    Ok(Json(response))
 }

@@ -2,6 +2,7 @@
 import { goto } from "$app/navigation";
 import {
   type CodeDescription,
+  type SearchOptionsResponse,
   type SearchResponse,
   type SortColumn,
   type SortDirection,
@@ -18,7 +19,7 @@ import SegmentedChip from "$lib/components/SegmentedChip.svelte";
 import { Check, Columns3, RotateCcw } from "@lucide/svelte";
 import type { SortingState, VisibilityState } from "@tanstack/table-core";
 import { DropdownMenu } from "bits-ui";
-import { onMount, tick, untrack } from "svelte";
+import { tick, untrack } from "svelte";
 import { fly } from "svelte/transition";
 
 let { data } = $props();
@@ -27,7 +28,7 @@ let { data } = $props();
 const initialParams = untrack(() => new URLSearchParams(data.url.search));
 
 // The default term is the first one returned by the backend (most current)
-const defaultTermSlug = untrack(() => data.terms[0]?.slug ?? "");
+const defaultTermSlug = untrack(() => data.searchOptions?.terms[0]?.slug ?? "");
 
 // Helper to parse a URL param as a number or null
 function parseNumParam(key: string): number | null {
@@ -40,7 +41,10 @@ function parseNumParam(key: string): number | null {
 // Default to the first term when no URL param is present
 const urlTerm = initialParams.get("term");
 let selectedTerm = $state(
-  untrack(() => (urlTerm && data.terms.some((t) => t.slug === urlTerm) ? urlTerm : defaultTermSlug))
+  untrack(() => {
+    const terms = data.searchOptions?.terms ?? [];
+    return urlTerm && terms.some((t) => t.slug === urlTerm) ? urlTerm : defaultTermSlug;
+  })
 );
 let selectedSubjects: string[] = $state(untrack(() => initialParams.getAll("subject")));
 let query = $state(initialParams.get("q") ?? "");
@@ -63,34 +67,36 @@ let instructor = $state(initialParams.get("instructor") ?? "");
 let courseNumberLow = $state<number | null>(parseNumParam("course_number_low"));
 let courseNumberHigh = $state<number | null>(parseNumParam("course_number_high"));
 
-// Reference data for AttributesPopover (fetched once on mount)
-let referenceData = $state<{
-  instructionalMethods: CodeDescription[];
-  campuses: CodeDescription[];
-  partsOfTerm: CodeDescription[];
-  attributes: CodeDescription[];
-}>({
-  instructionalMethods: [],
-  campuses: [],
-  partsOfTerm: [],
-  attributes: [],
+let searchOptions = $state<SearchOptionsResponse | null>(null);
+
+// Sync data prop to local state
+$effect(() => {
+  searchOptions = data.searchOptions;
 });
 
-onMount(() => {
-  Promise.all([
-    client.getReference("instructional_method"),
-    client.getReference("campus"),
-    client.getReference("part_of_term"),
-    client.getReference("attribute"),
-  ]).then(([methods, campuses, parts, attrs]) => {
-    referenceData = {
-      instructionalMethods: methods,
-      campuses: campuses,
-      partsOfTerm: parts,
-      attributes: attrs,
-    };
-  });
+// Derived from search options
+const terms = $derived(searchOptions?.terms ?? []);
+const subjects: Subject[] = $derived(searchOptions?.subjects ?? []);
+let subjectMap: Record<string, string> = $derived(
+  Object.fromEntries(subjects.map((s) => [s.code, s.description]))
+);
+
+const referenceData = $derived({
+  instructionalMethods: searchOptions?.reference.instructionalMethods ?? [],
+  campuses: searchOptions?.reference.campuses ?? [],
+  partsOfTerm: searchOptions?.reference.partsOfTerm ?? [],
+  attributes: searchOptions?.reference.attributes ?? [],
 });
+
+const ranges = $derived(
+  searchOptions?.ranges ?? {
+    courseNumberMin: 1000,
+    courseNumberMax: 9000,
+    creditHourMin: 0,
+    creditHourMax: 8,
+    waitCountMax: 0,
+  }
+);
 
 // Sorting state — maps TanStack column IDs to server sort params
 const SORT_COLUMN_MAP: Record<string, SortColumn> = {
@@ -116,10 +122,6 @@ function handleSortingChange(newSorting: SortingState) {
 }
 
 // Data state
-let subjects: Subject[] = $state([]);
-let subjectMap: Record<string, string> = $derived(
-  Object.fromEntries(subjects.map((s) => [s.code, s.description]))
-);
 let searchResult: SearchResponse | null = $state(null);
 let searchMeta: SearchMeta | null = $state(null);
 let loading = $state(false);
@@ -128,15 +130,16 @@ let error = $state<string | null>(null);
 // Track if we're validating subjects to prevent cascading search
 let validatingSubjects = false;
 
-// Fetch subjects when term changes
+// Fetch new search options when term changes
 $effect(() => {
   const term = selectedTerm;
   if (!term) return;
   client
-    .getSubjects(term)
-    .then((s) => {
-      subjects = s;
-      const validCodes = new Set(s.map((sub) => sub.code));
+    .getSearchOptions(term)
+    .then((opts) => {
+      searchOptions = opts;
+      // Validate selected subjects against new term's subjects
+      const validCodes = new Set(opts.subjects.map((s) => s.code));
       const filtered = selectedSubjects.filter((code) => validCodes.has(code));
       if (filtered.length !== selectedSubjects.length) {
         validatingSubjects = true;
@@ -145,7 +148,7 @@ $effect(() => {
       }
     })
     .catch((e) => {
-      console.error("Failed to fetch subjects:", e);
+      console.error("Failed to fetch search options:", e);
     });
 });
 
@@ -774,7 +777,7 @@ function clearAllFilters() {
         <!-- Filter bar -->
         <div class="flex flex-col gap-2 pb-4">
             <SearchFilters
-                terms={data.terms}
+                {terms}
                 {subjects}
                 bind:selectedTerm
                 bind:selectedSubjects
@@ -794,6 +797,11 @@ function clearAllFilters() {
                 bind:courseNumberLow
                 bind:courseNumberHigh
                 {referenceData}
+                ranges={{
+                    courseNumber: { min: ranges.courseNumberMin, max: ranges.courseNumberMax },
+                    creditHours: { min: ranges.creditHourMin, max: ranges.creditHourMax },
+                    waitCount: { max: ranges.waitCountMax },
+                }}
             />
         </div>
 

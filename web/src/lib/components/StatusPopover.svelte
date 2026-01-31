@@ -2,14 +2,19 @@
 import { ChevronDown } from "@lucide/svelte";
 import { Popover } from "bits-ui";
 import { fly } from "svelte/transition";
+import RangeSlider from "./RangeSlider.svelte";
 
 let {
   openOnly = $bindable(false),
   waitCountMax = $bindable<number | null>(null),
+  waitCountMaxRange = 0,
 }: {
   openOnly: boolean;
   waitCountMax: number | null;
+  waitCountMaxRange: number;
 } = $props();
+
+let _dummyLow = $state<number | null>(null);
 
 const hasActiveFilters = $derived(openOnly || waitCountMax !== null);
 </script>
@@ -53,26 +58,23 @@ const hasActiveFilters = $derived(openOnly || waitCountMax !== null);
 
               <div class="h-px bg-border"></div>
 
-              <div class="flex flex-col gap-1.5">
-                <label for="wait-count-max" class="text-xs font-medium text-muted-foreground">
-                  Max waitlist
-                </label>
-                <input
-                  id="wait-count-max"
-                  type="number"
-                  min="0"
-                  placeholder="Any"
-                  value={waitCountMax ?? ""}
-                  oninput={(e) => {
-                    const v = e.currentTarget.value;
-                    if (v === "") { waitCountMax = null; return; }
-                    const n = Number(v);
-                    waitCountMax = Number.isNaN(n) ? null : n;
-                  }}
-                  class="h-8 w-20 border border-border bg-card text-foreground rounded-md px-2 text-sm
-                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              {#if waitCountMaxRange > 0}
+                <RangeSlider
+                  min={0}
+                  max={waitCountMaxRange}
+                  step={10}
+                  bind:valueLow={_dummyLow}
+                  bind:valueHigh={waitCountMax}
+                  label="Max waitlist"
+                  dual={false}
+                  formatValue={(v) => v === 0 ? "Off" : String(v)}
                 />
-              </div>
+              {:else}
+                <div class="flex flex-col gap-1.5">
+                  <span class="text-xs font-medium text-muted-foreground">Max waitlist</span>
+                  <span class="text-xs text-muted-foreground">No waitlisted courses</span>
+                </div>
+              {/if}
             </div>
           </div>
         </div>

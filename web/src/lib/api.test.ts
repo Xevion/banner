@@ -87,40 +87,6 @@ describe("BannerApiClient", () => {
     expect(fetch).toHaveBeenCalledWith("/api/courses/search?term=202420");
   });
 
-  it("should fetch terms", async () => {
-    const mockTerms = [
-      { code: "202420", description: "Fall 2024" },
-      { code: "202510", description: "Spring 2025" },
-    ];
-
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(mockTerms),
-    } as Response);
-
-    const result = await apiClient.getTerms();
-
-    expect(fetch).toHaveBeenCalledWith("/api/terms");
-    expect(result).toEqual(mockTerms);
-  });
-
-  it("should fetch subjects for a term", async () => {
-    const mockSubjects = [
-      { code: "CS", description: "Computer Science" },
-      { code: "MAT", description: "Mathematics" },
-    ];
-
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(mockSubjects),
-    } as Response);
-
-    const result = await apiClient.getSubjects("202420");
-
-    expect(fetch).toHaveBeenCalledWith("/api/subjects?term=202420");
-    expect(result).toEqual(mockSubjects);
-  });
-
   it("should fetch reference data", async () => {
     const mockRef = [
       { code: "F", description: "Face to Face" },

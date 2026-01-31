@@ -27,6 +27,18 @@ pub enum SortDirection {
     Desc,
 }
 
+/// Aggregate min/max ranges for filter sliders, computed per-term.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FilterRanges {
+    pub course_number_min: i32,
+    pub course_number_max: i32,
+    pub credit_hour_min: i32,
+    pub credit_hour_max: i32,
+    pub wait_count_max: i32,
+}
+
 /// Shared WHERE clause for course search filters.
 ///
 /// Parameters $1-$17 match the bind order in `search_courses`.
@@ -308,4 +320,57 @@ pub async fn get_available_terms(db_pool: &PgPool) -> Result<Vec<String>> {
             .fetch_all(db_pool)
             .await?;
     Ok(rows.into_iter().map(|(tc,)| tc).collect())
+}
+
+type RangeRow = (
+    Option<i32>,
+    Option<i32>,
+    Option<i32>,
+    Option<i32>,
+    Option<i32>,
+);
+
+/// Get aggregate filter ranges for a term (course number, credit hours, waitlist).
+pub async fn get_filter_ranges(db_pool: &PgPool, term_code: &str) -> Result<FilterRanges> {
+    let row: RangeRow = sqlx::query_as(
+        r#"
+        SELECT
+            MIN(course_number::int),
+            MAX(course_number::int),
+            MIN(COALESCE(credit_hours, credit_hour_low, 0)),
+            MAX(COALESCE(credit_hours, credit_hour_high, 0)),
+            MAX(wait_count)
+        FROM courses
+        WHERE term_code = $1
+          AND course_number ~ '^\d+$'
+        "#,
+    )
+    .bind(term_code)
+    .fetch_one(db_pool)
+    .await?;
+
+    let cn_min = row.0.unwrap_or(1000);
+    let cn_max = row.1.unwrap_or(9000);
+    let ch_min = row.2.unwrap_or(0);
+    let ch_max = row.3.unwrap_or(8);
+    let wc_max_raw = row.4.unwrap_or(0);
+
+    // Round course number to hundreds: floor min, ceil max
+    let cn_min_rounded = (cn_min / 100) * 100;
+    let cn_max_rounded = ((cn_max + 99) / 100) * 100;
+
+    // Waitlist ceiling: (max / 10 + 1) * 10
+    let wc_max = if wc_max_raw > 0 {
+        (wc_max_raw / 10 + 1) * 10
+    } else {
+        0
+    };
+
+    Ok(FilterRanges {
+        course_number_min: cn_min_rounded,
+        course_number_max: cn_max_rounded,
+        credit_hour_min: ch_min,
+        credit_hour_max: ch_max,
+        wait_count_max: wc_max,
+    })
 }

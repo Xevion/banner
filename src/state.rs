@@ -8,9 +8,11 @@ use crate::web::schedule_cache::ScheduleCache;
 use crate::web::session_cache::{OAuthStateStore, SessionCache};
 use crate::web::ws::ScrapeJobEvent;
 use anyhow::Result;
+use dashmap::DashMap;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::{RwLock, broadcast};
 
 /// In-memory cache for reference data (code→description lookups).
@@ -79,6 +81,7 @@ pub struct AppState {
     pub oauth_state_store: OAuthStateStore,
     pub schedule_cache: ScheduleCache,
     pub scrape_job_tx: broadcast::Sender<ScrapeJobEvent>,
+    pub search_options_cache: Arc<DashMap<String, (Instant, serde_json::Value)>>,
 }
 
 impl AppState {
@@ -94,6 +97,7 @@ impl AppState {
             reference_cache: Arc::new(RwLock::new(ReferenceCache::new())),
             schedule_cache,
             scrape_job_tx,
+            search_options_cache: Arc::new(DashMap::new()),
         }
     }
 

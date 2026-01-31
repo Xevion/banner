@@ -1,69 +1,67 @@
 <script lang="ts">
-    import { formatNumber } from "$lib/utils";
-    import { ChevronDown, ChevronUp } from "@lucide/svelte";
-    import { Select } from "bits-ui";
-    import type { Action } from "svelte/action";
+import { formatNumber } from "$lib/utils";
+import { ChevronDown, ChevronUp } from "@lucide/svelte";
+import { Select } from "bits-ui";
+import type { Action } from "svelte/action";
 
-    const slideIn: Action<HTMLElement, number> = (node, direction) => {
-        if (direction !== 0) {
-            node.animate(
-                [
-                    {
-                        transform: `translateX(${direction * 20}px)`,
-                        opacity: 0,
-                    },
-                    { transform: "translateX(0)", opacity: 1 },
-                ],
-                { duration: 200, easing: "ease-out" },
-            );
-        }
-    };
-
-    let {
-        totalCount,
-        offset,
-        limit,
-        loading = false,
-        onPageChange,
-    }: {
-        totalCount: number;
-        offset: number;
-        limit: number;
-        loading?: boolean;
-        onPageChange: (newOffset: number) => void;
-    } = $props();
-
-    const currentPage = $derived(Math.floor(offset / limit) + 1);
-    const totalPages = $derived(Math.ceil(totalCount / limit));
-    const start = $derived(offset + 1);
-    const end = $derived(Math.min(offset + limit, totalCount));
-
-    // Track direction for slide animation
-    let direction = $state(0);
-
-    // 5 page slots: current-2, current-1, current, current+1, current+2
-    const pageSlots = $derived(
-        [-2, -1, 0, 1, 2].map((delta) => currentPage + delta),
+const slideIn: Action<HTMLElement, number> = (node, direction) => {
+  if (direction !== 0) {
+    node.animate(
+      [
+        {
+          transform: `translateX(${direction * 20}px)`,
+          opacity: 0,
+        },
+        { transform: "translateX(0)", opacity: 1 },
+      ],
+      { duration: 200, easing: "ease-out" }
     );
+  }
+};
 
-    function isSlotVisible(page: number): boolean {
-        return page >= 1 && page <= totalPages;
-    }
+let {
+  totalCount,
+  offset,
+  limit,
+  loading = false,
+  onPageChange,
+}: {
+  totalCount: number;
+  offset: number;
+  limit: number;
+  loading?: boolean;
+  onPageChange: (newOffset: number) => void;
+} = $props();
 
-    function goToPage(page: number) {
-        direction = page > currentPage ? 1 : -1;
-        onPageChange((page - 1) * limit);
-    }
+const currentPage = $derived(Math.floor(offset / limit) + 1);
+const totalPages = $derived(Math.ceil(totalCount / limit));
+const start = $derived(offset + 1);
+const end = $derived(Math.min(offset + limit, totalCount));
 
-    // Build items array for the Select dropdown
-    const pageItems = $derived(
-        Array.from({ length: totalPages }, (_, i) => ({
-            value: String(i + 1),
-            label: String(i + 1),
-        })),
-    );
+// Track direction for slide animation
+let direction = $state(0);
 
-    const selectValue = $derived(String(currentPage));
+// 5 page slots: current-2, current-1, current, current+1, current+2
+const pageSlots = $derived([-2, -1, 0, 1, 2].map((delta) => currentPage + delta));
+
+function isSlotVisible(page: number): boolean {
+  return page >= 1 && page <= totalPages;
+}
+
+function goToPage(page: number) {
+  direction = page > currentPage ? 1 : -1;
+  onPageChange((page - 1) * limit);
+}
+
+// Build items array for the Select dropdown
+const pageItems = $derived(
+  Array.from({ length: totalPages }, (_, i) => ({
+    value: String(i + 1),
+    label: String(i + 1),
+  }))
+);
+
+const selectValue = $derived(String(currentPage));
 </script>
 
 {#if totalCount > 0 && totalPages > 1}

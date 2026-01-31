@@ -28,6 +28,7 @@ let {
   courseNumberLow = $bindable(),
   courseNumberHigh = $bindable(),
   referenceData,
+  ranges,
 }: {
   terms: Term[];
   subjects: Subject[];
@@ -54,6 +55,11 @@ let {
     partsOfTerm: CodeDescription[];
     attributes: CodeDescription[];
   };
+  ranges: {
+    courseNumber: { min: number; max: number };
+    creditHours: { min: number; max: number };
+    waitCount: { max: number };
+  };
 } = $props();
 </script>
 
@@ -76,7 +82,7 @@ let {
 
 <!-- Row 2: Category popovers -->
 <div class="flex flex-wrap gap-2 items-center">
-  <StatusPopover bind:openOnly bind:waitCountMax />
+  <StatusPopover bind:openOnly bind:waitCountMax waitCountMaxRange={ranges.waitCount.max} />
   <SchedulePopover bind:days bind:timeStart bind:timeEnd />
   <AttributesPopover
     bind:instructionalMethod
@@ -91,5 +97,6 @@ let {
     bind:instructor
     bind:courseNumberLow
     bind:courseNumberHigh
+    ranges={{ courseNumber: ranges.courseNumber, creditHours: ranges.creditHours }}
   />
 </div>

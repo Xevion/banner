@@ -8,6 +8,7 @@ import type {
   CodeDescription,
   CourseResponse,
   DbMeetingTime,
+  FilterRanges,
   InstructorDetail,
   InstructorDetailResponse,
   InstructorListItem,
@@ -23,6 +24,8 @@ import type {
   ScrapeJobEvent,
   ScrapeJobsResponse,
   ScraperStatsResponse,
+  SearchOptionsReference,
+  SearchOptionsResponse,
   SearchParams as SearchParamsGenerated,
   SearchResponse as SearchResponseGenerated,
   ServiceInfo,
@@ -57,6 +60,7 @@ export type {
   CodeDescription,
   CourseResponse,
   DbMeetingTime,
+  FilterRanges,
   InstructorDetail,
   InstructorDetailResponse,
   InstructorListItem,
@@ -71,6 +75,8 @@ export type {
   ScrapeJobEvent,
   ScrapeJobsResponse,
   ScraperStatsResponse,
+  SearchOptionsReference,
+  SearchOptionsResponse,
   ServiceInfo,
   ServiceStatus,
   SortColumn,
@@ -298,6 +304,25 @@ export class BannerApiClient {
 
   async getReference(category: string): Promise<ReferenceEntry[]> {
     return this.request<ReferenceEntry[]>(`/reference/${encodeURIComponent(category)}`);
+  }
+
+  // In-memory cache for search options per term
+  private searchOptionsCache = new Map<
+    string,
+    { data: SearchOptionsResponse; fetchedAt: number }
+  >();
+  private static SEARCH_OPTIONS_TTL = 10 * 60 * 1000; // 10 minutes
+
+  async getSearchOptions(term?: string): Promise<SearchOptionsResponse> {
+    const cacheKey = term || "__default__";
+    const cached = this.searchOptionsCache.get(cacheKey);
+    if (cached && Date.now() - cached.fetchedAt < BannerApiClient.SEARCH_OPTIONS_TTL) {
+      return cached.data;
+    }
+    const url = term ? `/search-options?term=${encodeURIComponent(term)}` : "/search-options";
+    const data = await this.request<SearchOptionsResponse>(url);
+    this.searchOptionsCache.set(cacheKey, { data, fetchedAt: Date.now() });
+    return data;
   }
 
   // Admin endpoints
