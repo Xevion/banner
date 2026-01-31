@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-01-30
+
+### Added
+
+- User authentication system with Discord OAuth, sessions, admin roles, and login page with FAQ.
+- Interactive timeline visualization with D3 canvas, pan/zoom, touch gestures, and enrollment aggregation API.
+- Scraper analytics dashboard with timeseries charts, subject monitoring, and per-subject detail views.
+- Adaptive scraper scheduling with admin endpoints for monitoring and configuration.
+- Scrape job result persistence for effectiveness tracking.
+- WebSocket support for real-time scrape job monitoring with connection status indicators.
+- Course change auditing with field-level tracking and time-series metrics endpoint.
+- Audit log UI with smart JSON diffing, conditional request caching, and auto-refresh.
+- Calendar export web endpoints for ICS download and Google Calendar redirect.
+- Confidence-based RMP matching with manual review workflow and admin instructor UI.
+- RMP profile links and confidence-aware rating display.
+- Name parsing and normalization for improved instructor-RMP matching.
+- Mobile touch controls with gesture detection for timeline.
+- Worker timeout protection and crash recovery for job queue.
+- Build-time asset compression with encoding negotiation (gzip, brotli, zstd).
+- Smart page transitions with theme-aware element transitions.
+- Search duration and result count feedback.
+- Root error page handling.
+- Login page with FAQ section and improved styling.
+
+### Changed
+
+- Consolidated navigation with top nav bar and route groups.
+- Centralized number formatting with locale-aware utility.
+- Modernized Justfile commands and simplified service management.
+- Persisted audit log state in module scope for cross-navigation caching.
+- Relative time feedback and improved tooltip customization.
+
+### Fixed
+
+- Instructor/course mismatching via build-order-independent map for association.
+- Page content clipping.
+- Backend startup delays with retry logic in auth.
+- Banner API timeouts increased to handle slow responses.
+- i64 serialization for JavaScript compatibility, fixing avatar URL display.
+- Frontend build ordering with `-e` embed flag in Justfile.
+- Login page centering and unnecessary scrollbar.
+- ts-rs serde warnings.
+
 ## [0.5.0] - 2026-01-29
 
 ### Added
