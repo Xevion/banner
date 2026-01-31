@@ -10,6 +10,7 @@
  *   -n, --no-build        Run last compiled binary (no rebuild)
  *   -r, --release         Use release profile
  *   -e, --embed           Embed assets (implies -b)
+ *   -d, --dev-build       Use dev build for frontend (faster, no minification)
  *   --tracing <fmt>       Tracing format (default: pretty)
  */
 
@@ -26,9 +27,10 @@ const { flags, passthrough } = parseFlags(
     "no-build": "bool",
     release: "bool",
     embed: "bool",
+    "dev-build": "bool",
     tracing: "string",
   } as const,
-  { f: "frontend-only", b: "backend-only", W: "no-watch", n: "no-build", r: "release", e: "embed" },
+  { f: "frontend-only", b: "backend-only", W: "no-watch", n: "no-build", r: "release", e: "embed", d: "dev-build" },
   {
     "frontend-only": false,
     "backend-only": false,
@@ -36,6 +38,7 @@ const { flags, passthrough } = parseFlags(
     "no-build": false,
     release: false,
     embed: false,
+    "dev-build": false,
     tracing: "pretty",
   },
 );
@@ -46,6 +49,7 @@ let noWatch = flags["no-watch"];
 const noBuild = flags["no-build"];
 const release = flags.release;
 const embed = flags.embed;
+const devBuild = flags["dev-build"];
 const tracing = flags.tracing as string;
 
 // -e implies -b
@@ -66,8 +70,11 @@ const group = new ProcessGroup();
 
 // Build frontend first when embedding assets
 if (embed && !noBuild) {
-  console.log(c("1;36", "→ Building frontend (for embedding)..."));
-  run(["bun", "run", "--cwd", "web", "build"]);
+  const buildMode = devBuild ? "development" : "production";
+  console.log(c("1;36", `→ Building frontend (${buildMode}, for embedding)...`));
+  const buildArgs = ["bun", "run", "--cwd", "web", "build"];
+  if (devBuild) buildArgs.push("--", "--mode", "development");
+  run(buildArgs);
 }
 
 // Frontend: Vite dev server
