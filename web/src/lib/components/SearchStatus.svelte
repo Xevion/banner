@@ -55,12 +55,13 @@ onMount(() => {
 {#if meta}
     <SimpleTooltip
         text={tooltipText}
-        contentClass="whitespace-nowrap text-[12px] px-2 py-1"
-        triggerClass="self-start"
+        contentClass="whitespace-nowrap text-[12px]/1 px-2"
         sideOffset={0}
     >
         <span
-            class="pl-1 text-xs transition-opacity duration-200 {loading ? 'opacity-40' : ''}"
+            class="pl-1 text-xs transition-opacity duration-200 {loading
+                ? 'opacity-40'
+                : ''}"
             in:fade={{ duration: 300 }}
         >
             <span class="text-muted-foreground/70">{countLabel}</span>
@@ -70,5 +71,7 @@ onMount(() => {
     </SimpleTooltip>
 {:else}
     <!-- Invisible placeholder to maintain layout height -->
-    <span class="pl-1 text-xs opacity-0 pointer-events-none" aria-hidden="true">&nbsp;</span>
+    <span class="pl-1 text-xs opacity-0 pointer-events-none" aria-hidden="true"
+        >&nbsp;</span
+    >
 {/if}

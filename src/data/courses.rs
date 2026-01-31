@@ -29,7 +29,7 @@ pub enum SortDirection {
 
 /// Shared WHERE clause for course search filters.
 ///
-/// Parameters $1-$8 match the bind order in `search_courses`.
+/// Parameters $1-$17 match the bind order in `search_courses`.
 const SEARCH_WHERE: &str = r#"
     WHERE term_code = $1
       AND ($2::text[] IS NULL OR subject = ANY($2))
@@ -37,8 +37,40 @@ const SEARCH_WHERE: &str = r#"
       AND ($4::int IS NULL OR course_number::int >= $4)
       AND ($5::int IS NULL OR course_number::int <= $5)
       AND ($6::bool = false OR max_enrollment > enrollment)
-      AND ($7::text IS NULL OR instructional_method = $7)
-      AND ($8::text IS NULL OR campus = $8)
+      AND ($7::text[] IS NULL OR instructional_method = ANY($7))
+      AND ($8::text[] IS NULL OR campus = ANY($8))
+      AND ($9::int IS NULL OR wait_count <= $9)
+      AND ($10::text[] IS NULL OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(meeting_times) AS mt
+          WHERE (NOT 'monday' = ANY($10) OR (mt->>'monday')::bool)
+            AND (NOT 'tuesday' = ANY($10) OR (mt->>'tuesday')::bool)
+            AND (NOT 'wednesday' = ANY($10) OR (mt->>'wednesday')::bool)
+            AND (NOT 'thursday' = ANY($10) OR (mt->>'thursday')::bool)
+            AND (NOT 'friday' = ANY($10) OR (mt->>'friday')::bool)
+            AND (NOT 'saturday' = ANY($10) OR (mt->>'saturday')::bool)
+            AND (NOT 'sunday' = ANY($10) OR (mt->>'sunday')::bool)
+      ))
+      AND ($11::text IS NULL OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(meeting_times) AS mt
+          WHERE (mt->>'begin_time') >= $11
+      ))
+      AND ($12::text IS NULL OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(meeting_times) AS mt
+          WHERE (mt->>'end_time') <= $12
+      ))
+      AND ($13::text[] IS NULL OR part_of_term = ANY($13))
+      AND ($14::text[] IS NULL OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(attributes) a
+          WHERE a = ANY($14)
+      ))
+      AND ($15::int IS NULL OR COALESCE(credit_hours, credit_hour_low, 0) >= $15)
+      AND ($16::int IS NULL OR COALESCE(credit_hours, credit_hour_high, 0) <= $16)
+      AND ($17::text IS NULL OR EXISTS (
+          SELECT 1 FROM course_instructors ci
+          JOIN instructors i ON i.id = ci.instructor_id
+          WHERE ci.course_id = courses.id
+            AND i.display_name ILIKE '%' || $17 || '%'
+      ))
 "#;
 
 /// Build a safe ORDER BY clause from typed sort parameters.
@@ -86,8 +118,17 @@ pub async fn search_courses(
     course_number_low: Option<i32>,
     course_number_high: Option<i32>,
     open_only: bool,
-    instructional_method: Option<&str>,
-    campus: Option<&str>,
+    instructional_method: Option<&[String]>,
+    campus: Option<&[String]>,
+    wait_count_max: Option<i32>,
+    days: Option<&[String]>,
+    time_start: Option<&str>,
+    time_end: Option<&str>,
+    part_of_term: Option<&[String]>,
+    attributes: Option<&[String]>,
+    credit_hour_min: Option<i32>,
+    credit_hour_max: Option<i32>,
+    instructor: Option<&str>,
     limit: i32,
     offset: i32,
     sort_by: Option<SortColumn>,
@@ -96,32 +137,50 @@ pub async fn search_courses(
     let order_by = sort_clause(sort_by, sort_dir);
 
     let data_query =
-        format!("SELECT * FROM courses {SEARCH_WHERE} ORDER BY {order_by} LIMIT $9 OFFSET $10");
+        format!("SELECT * FROM courses {SEARCH_WHERE} ORDER BY {order_by} LIMIT $18 OFFSET $19");
     let count_query = format!("SELECT COUNT(*) FROM courses {SEARCH_WHERE}");
 
     let courses = sqlx::query_as::<_, Course>(&data_query)
-        .bind(term_code)
-        .bind(subject)
-        .bind(title_query)
-        .bind(course_number_low)
-        .bind(course_number_high)
-        .bind(open_only)
-        .bind(instructional_method)
-        .bind(campus)
-        .bind(limit)
-        .bind(offset)
+        .bind(term_code) // $1
+        .bind(subject) // $2
+        .bind(title_query) // $3
+        .bind(course_number_low) // $4
+        .bind(course_number_high) // $5
+        .bind(open_only) // $6
+        .bind(instructional_method) // $7
+        .bind(campus) // $8
+        .bind(wait_count_max) // $9
+        .bind(days) // $10
+        .bind(time_start) // $11
+        .bind(time_end) // $12
+        .bind(part_of_term) // $13
+        .bind(attributes) // $14
+        .bind(credit_hour_min) // $15
+        .bind(credit_hour_max) // $16
+        .bind(instructor) // $17
+        .bind(limit) // $18
+        .bind(offset) // $19
         .fetch_all(db_pool)
         .await?;
 
     let total: (i64,) = sqlx::query_as(&count_query)
-        .bind(term_code)
-        .bind(subject)
-        .bind(title_query)
-        .bind(course_number_low)
-        .bind(course_number_high)
-        .bind(open_only)
-        .bind(instructional_method)
-        .bind(campus)
+        .bind(term_code) // $1
+        .bind(subject) // $2
+        .bind(title_query) // $3
+        .bind(course_number_low) // $4
+        .bind(course_number_high) // $5
+        .bind(open_only) // $6
+        .bind(instructional_method) // $7
+        .bind(campus) // $8
+        .bind(wait_count_max) // $9
+        .bind(days) // $10
+        .bind(time_start) // $11
+        .bind(time_end) // $12
+        .bind(part_of_term) // $13
+        .bind(attributes) // $14
+        .bind(credit_hour_min) // $15
+        .bind(credit_hour_max) // $16
+        .bind(instructor) // $17
         .fetch_one(db_pool)
         .await?;
 

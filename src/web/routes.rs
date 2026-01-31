@@ -440,24 +440,42 @@ pub struct SearchParams {
     pub subject: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub q: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "course_number_low")]
     pub course_number_low: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "course_number_high")]
     pub course_number_high: Option<i32>,
-    #[serde(default)]
+    #[serde(default, alias = "open_only")]
     pub open_only: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub instructional_method: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub campus: Option<String>,
+    #[serde(default, alias = "instructional_method")]
+    pub instructional_method: Vec<String>,
+    #[serde(default)]
+    pub campus: Vec<String>,
     #[serde(default = "default_limit")]
     pub limit: i32,
     #[serde(default)]
     pub offset: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "sort_by")]
     pub sort_by: Option<SortColumn>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "sort_dir")]
     pub sort_dir: Option<SortDirection>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "wait_count_max")]
+    pub wait_count_max: Option<i32>,
+    #[serde(default)]
+    pub days: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "time_start")]
+    pub time_start: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "time_end")]
+    pub time_end: Option<String>,
+    #[serde(default, alias = "part_of_term")]
+    pub part_of_term: Vec<String>,
+    #[serde(default)]
+    pub attributes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "credit_hour_min")]
+    pub credit_hour_min: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "credit_hour_max")]
+    pub credit_hour_max: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instructor: Option<String>,
 }
 
 use crate::data::courses::{SortColumn, SortDirection};
@@ -632,8 +650,37 @@ async fn search_courses(
         params.course_number_low,
         params.course_number_high,
         params.open_only,
-        params.instructional_method.as_deref(),
-        params.campus.as_deref(),
+        if params.instructional_method.is_empty() {
+            None
+        } else {
+            Some(&params.instructional_method)
+        },
+        if params.campus.is_empty() {
+            None
+        } else {
+            Some(&params.campus)
+        },
+        params.wait_count_max,
+        if params.days.is_empty() {
+            None
+        } else {
+            Some(&params.days)
+        },
+        params.time_start.as_deref(),
+        params.time_end.as_deref(),
+        if params.part_of_term.is_empty() {
+            None
+        } else {
+            Some(&params.part_of_term)
+        },
+        if params.attributes.is_empty() {
+            None
+        } else {
+            Some(&params.attributes)
+        },
+        params.credit_hour_min,
+        params.credit_hour_max,
+        params.instructor.as_deref(),
         limit,
         offset,
         params.sort_by,

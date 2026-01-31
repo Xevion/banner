@@ -30,7 +30,6 @@ import {
   ArrowUp,
   ArrowUpDown,
   Check,
-  Columns3,
   ExternalLink,
   RotateCcw,
   Star,
@@ -47,7 +46,7 @@ import {
 import { ContextMenu, DropdownMenu, Tooltip } from "bits-ui";
 import { flip } from "svelte/animate";
 import { cubicOut } from "svelte/easing";
-import { fade, fly, slide } from "svelte/transition";
+import { fade, slide } from "svelte/transition";
 import CourseDetail from "./CourseDetail.svelte";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 
@@ -59,6 +58,7 @@ let {
   manualSorting = false,
   subjectMap = {},
   limit = 25,
+  columnVisibility = $bindable({}),
 }: {
   courses: CourseResponse[];
   loading: boolean;
@@ -67,6 +67,7 @@ let {
   manualSorting?: boolean;
   subjectMap?: Record<string, string>;
   limit?: number;
+  columnVisibility?: VisibilityState;
 } = $props();
 
 let expandedCrn: string | null = $state(null);
@@ -105,9 +106,6 @@ useOverlayScrollbars(() => tableWrapper, {
   overflow: { x: "scroll", y: "hidden" },
   scrollbars: { autoHide: "never" },
 });
-
-// Column visibility state
-let columnVisibility: VisibilityState = $state({});
 
 function resetColumnVisibility() {
   columnVisibility = {};
@@ -288,45 +286,6 @@ const table = createSvelteTable({
         </Item>
     {/if}
 {/snippet}
-
-<!-- Toolbar: View columns button -->
-<div class="flex items-center justify-end pb-2">
-    <DropdownMenu.Root>
-        <DropdownMenu.Trigger
-            class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
-        >
-            <Columns3 class="size-3.5" />
-            View
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-            <DropdownMenu.Content
-                class="z-50 min-w-40 rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
-                align="end"
-                sideOffset={4}
-                forceMount
-            >
-                {#snippet child({ wrapperProps, props, open })}
-                    {#if open}
-                        <div {...wrapperProps}>
-                            <div
-                                {...props}
-                                transition:fly={{ duration: 150, y: -10 }}
-                            >
-                                {@render columnVisibilityGroup(
-                                    DropdownMenu.Group,
-                                    DropdownMenu.GroupHeading,
-                                    DropdownMenu.CheckboxItem,
-                                    DropdownMenu.Separator,
-                                    DropdownMenu.Item,
-                                )}
-                            </div>
-                        </div>
-                    {/if}
-                {/snippet}
-            </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-</div>
 
 <!-- Table with context menu on header -->
 <div

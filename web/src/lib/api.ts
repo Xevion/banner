@@ -244,8 +244,43 @@ export class BannerApiClient {
     if (params.courseNumberHigh !== undefined && params.courseNumberHigh !== null) {
       query.set("course_number_high", String(params.courseNumberHigh));
     }
-    if (params.instructionalMethod) query.set("instructional_method", params.instructionalMethod);
-    if (params.campus) query.set("campus", params.campus);
+    if (params.instructionalMethod && params.instructionalMethod.length > 0) {
+      for (const m of params.instructionalMethod) {
+        query.append("instructional_method", m);
+      }
+    }
+    if (params.campus && params.campus.length > 0) {
+      for (const c of params.campus) {
+        query.append("campus", c);
+      }
+    }
+    if (params.waitCountMax !== undefined && params.waitCountMax !== null) {
+      query.set("wait_count_max", String(params.waitCountMax));
+    }
+    if (params.days && params.days.length > 0) {
+      for (const d of params.days) {
+        query.append("days", d);
+      }
+    }
+    if (params.timeStart) query.set("time_start", params.timeStart);
+    if (params.timeEnd) query.set("time_end", params.timeEnd);
+    if (params.partOfTerm && params.partOfTerm.length > 0) {
+      for (const p of params.partOfTerm) {
+        query.append("part_of_term", p);
+      }
+    }
+    if (params.attributes && params.attributes.length > 0) {
+      for (const a of params.attributes) {
+        query.append("attributes", a);
+      }
+    }
+    if (params.creditHourMin !== undefined && params.creditHourMin !== null) {
+      query.set("credit_hour_min", String(params.creditHourMin));
+    }
+    if (params.creditHourMax !== undefined && params.creditHourMax !== null) {
+      query.set("credit_hour_max", String(params.creditHourMax));
+    }
+    if (params.instructor) query.set("instructor", params.instructor);
     if (params.limit !== undefined) query.set("limit", String(params.limit));
     if (params.offset !== undefined) query.set("offset", String(params.offset));
     if (params.sortBy) query.set("sort_by", params.sortBy);
