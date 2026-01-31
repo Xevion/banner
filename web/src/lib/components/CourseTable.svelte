@@ -24,7 +24,7 @@ import {
   seatsDotColor,
 } from "$lib/course";
 import { themeStore } from "$lib/stores/theme.svelte";
-import { cn, formatNumber, tooltipContentClass } from "$lib/utils";
+import { formatNumber } from "$lib/utils";
 import {
   ArrowDown,
   ArrowUp,
@@ -43,11 +43,12 @@ import {
   getCoreRowModel,
   getSortedRowModel,
 } from "@tanstack/table-core";
-import { ContextMenu, DropdownMenu, Tooltip } from "bits-ui";
+import { ContextMenu, DropdownMenu } from "bits-ui";
 import { flip } from "svelte/animate";
 import { cubicOut } from "svelte/easing";
 import { fade, slide } from "svelte/transition";
 import CourseDetail from "./CourseDetail.svelte";
+import RichTooltip from "./RichTooltip.svelte";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 
 let {
@@ -532,10 +533,12 @@ const table = createSvelteTable({
                                                 {@const lowConfidence =
                                                     ratingData.count <
                                                     RMP_CONFIDENCE_THRESHOLD}
-                                                <Tooltip.Root
-                                                    delayDuration={150}
+                                                <RichTooltip
+                                                    side="bottom"
+                                                    sideOffset={6}
+                                                    contentClass="px-2.5 py-1.5"
                                                 >
-                                                    <Tooltip.Trigger>
+                                                    {#snippet children()}
                                                         <span
                                                             class="ml-1 text-xs font-medium inline-flex items-center gap-0.5"
                                                             style={ratingStyle(
@@ -556,15 +559,8 @@ const table = createSvelteTable({
                                                                 />
                                                             {/if}
                                                         </span>
-                                                    </Tooltip.Trigger>
-                                                    <Tooltip.Content
-                                                        side="bottom"
-                                                        sideOffset={6}
-                                                        class={cn(
-                                                            tooltipContentClass,
-                                                            "px-2.5 py-1.5",
-                                                        )}
-                                                    >
+                                                    {/snippet}
+                                                    {#snippet content()}
                                                         <span
                                                             class="inline-flex items-center gap-1.5 text-xs"
                                                         >
@@ -592,8 +588,8 @@ const table = createSvelteTable({
                                                                 </a>
                                                             {/if}
                                                         </span>
-                                                    </Tooltip.Content>
-                                                </Tooltip.Root>
+                                                    {/snippet}
+                                                </RichTooltip>
                                             {/if}
                                         </td>
                                     {:else if colId === "time"}

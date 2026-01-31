@@ -1,32 +1,32 @@
 <script lang="ts">
-import { cn } from "$lib/utils";
+import { cn, tooltipContentClass } from "$lib/utils";
 import { Tooltip } from "bits-ui";
 import type { Snippet } from "svelte";
 
 let {
-  text,
-  delay = 150,
+  delay,
   side = "top",
+  sideOffset = 6,
   passthrough = false,
   triggerClass = "",
   contentClass = "",
-  sideOffset = 6,
   portal = true,
   avoidCollisions = true,
   collisionPadding = 8,
   children,
+  content,
 }: {
-  text: string;
   delay?: number;
   side?: "top" | "bottom" | "left" | "right";
+  sideOffset?: number;
   passthrough?: boolean;
   triggerClass?: string;
   contentClass?: string;
-  sideOffset?: number;
   portal?: boolean;
   avoidCollisions?: boolean;
   collisionPadding?: number;
   children: Snippet;
+  content: Snippet;
 } = $props();
 </script>
 
@@ -45,9 +45,9 @@ let {
         {sideOffset}
         {avoidCollisions}
         {collisionPadding}
-        class={cn("z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-sm whitespace-pre-line max-w-max text-left", contentClass)}
+        class={cn(tooltipContentClass, contentClass)}
       >
-        {text}
+        {@render content()}
       </Tooltip.Content>
     </Tooltip.Portal>
   {:else}
@@ -56,9 +56,9 @@ let {
       {sideOffset}
       {avoidCollisions}
       {collisionPadding}
-      class={cn("z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-sm whitespace-pre-line max-w-max text-left", contentClass)}
+      class={cn(tooltipContentClass, contentClass)}
     >
-      {text}
+      {@render content()}
     </Tooltip.Content>
   {/if}
 </Tooltip.Root>

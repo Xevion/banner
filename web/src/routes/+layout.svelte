@@ -39,7 +39,7 @@ onMount(() => {
 });
 </script>
 
-<Tooltip.Provider>
+<Tooltip.Provider delayDuration={150} skipDelayDuration={50}>
   <div class="relative flex min-h-screen flex-col">
     <!-- pointer-events-none so the navbar doesn't block canvas interactions;
          NavBar re-enables pointer-events on its own container. -->

@@ -13,7 +13,7 @@ import {
   rmpUrl,
 } from "$lib/course";
 import { themeStore } from "$lib/stores/theme.svelte";
-import { cn, formatNumber, tooltipContentClass } from "$lib/utils";
+import { formatNumber } from "$lib/utils";
 import {
   Calendar,
   Check,
@@ -24,7 +24,7 @@ import {
   Star,
   Triangle,
 } from "@lucide/svelte";
-import { Tooltip } from "bits-ui";
+import RichTooltip from "./RichTooltip.svelte";
 import SimpleTooltip from "./SimpleTooltip.svelte";
 
 let { course }: { course: CourseResponse } = $props();
@@ -40,8 +40,8 @@ const clipboard = useClipboard();
             {#if course.instructors.length > 0}
                 <div class="flex flex-wrap gap-1.5">
                     {#each course.instructors as instructor}
-                        <Tooltip.Root delayDuration={200}>
-                            <Tooltip.Trigger>
+                        <RichTooltip delay={200} contentClass="px-3 py-2">
+                            {#snippet children()}
                                 <span
                                     class="inline-flex items-center gap-1.5 text-sm font-medium bg-card border border-border rounded-md px-2.5 py-1 text-foreground hover:border-foreground/20 hover:bg-card/80 transition-colors"
                                 >
@@ -71,11 +71,8 @@ const clipboard = useClipboard();
                                         </span>
                                     {/if}
                                 </span>
-                            </Tooltip.Trigger>
-                            <Tooltip.Content
-                                sideOffset={6}
-                                class={cn(tooltipContentClass, "px-3 py-2")}
-                            >
+                            {/snippet}
+                            {#snippet content()}
                                 <div class="space-y-1.5">
                                     <div class="font-medium">
                                         {instructor.displayName}
@@ -126,8 +123,8 @@ const clipboard = useClipboard();
                                         </button>
                                     {/if}
                                 </div>
-                            </Tooltip.Content>
-                        </Tooltip.Root>
+                            {/snippet}
+                        </RichTooltip>
                     {/each}
                 </div>
             {:else}
@@ -272,8 +269,8 @@ const clipboard = useClipboard();
                         </SimpleTooltip>
                     </span>
                 </h4>
-                <Tooltip.Root delayDuration={150} disableHoverableContent>
-                    <Tooltip.Trigger>
+                <RichTooltip passthrough>
+                    {#snippet children()}
                         <span
                             class="inline-flex items-center gap-1.5 text-foreground font-mono"
                         >
@@ -288,8 +285,8 @@ const clipboard = useClipboard();
                                 </span>
                             {/if}
                         </span>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content sideOffset={6} class={tooltipContentClass}>
+                    {/snippet}
+                    {#snippet content()}
                         Group <span class="font-mono font-medium"
                             >{course.crossList}</span
                         >
@@ -297,8 +294,8 @@ const clipboard = useClipboard();
                             — {formatNumber(course.crossListCount)} enrolled across {formatNumber(course.crossListCapacity)}
                             shared seats
                         {/if}
-                    </Tooltip.Content>
-                </Tooltip.Root>
+                    {/snippet}
+                </RichTooltip>
             </div>
         {/if}
 
