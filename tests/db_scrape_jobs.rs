@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 mod helpers;
 
 use banner::data::models::{ScrapePriority, TargetType};

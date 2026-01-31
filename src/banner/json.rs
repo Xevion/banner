@@ -325,6 +325,7 @@ mod tests {
     fn test_parse_json_with_context_null_value() {
         #[derive(Debug, Deserialize)]
         struct TestStruct {
+            #[allow(dead_code)]
             name: String,
         }
 
@@ -363,12 +364,14 @@ mod tests {
             #[allow(dead_code)]
             #[serde(rename = "courseTitle")]
             course_title: String,
+            #[allow(dead_code)]
             faculty: Vec<Faculty>,
         }
 
         #[derive(Debug, Deserialize)]
         struct Faculty {
             #[serde(rename = "displayName")]
+            #[allow(dead_code)]
             display_name: String,
             #[allow(dead_code)]
             email: String,
@@ -376,6 +379,7 @@ mod tests {
 
         #[derive(Debug, Deserialize)]
         struct SearchResult {
+            #[allow(dead_code)]
             data: Vec<Course>,
         }
 
