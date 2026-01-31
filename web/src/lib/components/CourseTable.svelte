@@ -147,6 +147,11 @@ function timeIsTBA(course: CourseResponse): boolean {
   return isMeetingTimeTBA(mt) && isTimeTBA(mt);
 }
 
+// Calculate max subject code length for alignment
+let maxSubjectLength = $derived(
+  courses.length > 0 ? Math.max(...courses.map((c) => c.subject.length)) : 3
+);
+
 // Column definitions
 const columns: ColumnDef<CourseResponse, unknown>[] = [
   {
@@ -453,6 +458,11 @@ const table = createSvelteTable({
                                     {:else if colId === "course_code"}
                                         {@const subjectDesc =
                                             subjectMap[course.subject]}
+                                        {@const paddedSubject =
+                                            course.subject.padStart(
+                                                maxSubjectLength,
+                                                " ",
+                                            )}
                                         <td class="py-2 px-2 whitespace-nowrap">
                                             <SimpleTooltip
                                                 text={subjectDesc
@@ -462,13 +472,7 @@ const table = createSvelteTable({
                                                 side="bottom"
                                                 passthrough
                                             >
-                                                <span class="font-semibold"
-                                                    >{course.subject}
-                                                    {course.courseNumber}</span
-                                                >{#if course.sequenceNumber}<span
-                                                        class="text-muted-foreground"
-                                                        >-{course.sequenceNumber}</span
-                                                    >{/if}
+                                                <span class="font-semibold font-mono tracking-tight whitespace-pre">{paddedSubject} {course.courseNumber}</span>{#if course.sequenceNumber}<span class="text-muted-foreground font-mono tracking-tight">-{course.sequenceNumber}</span>{/if}
                                             </SimpleTooltip>
                                         </td>
                                     {:else if colId === "title"}

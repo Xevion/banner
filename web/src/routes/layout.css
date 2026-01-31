@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -60,6 +61,7 @@
   --color-surface-100: var(--card);
   --color-surface-content: var(--foreground);
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
   --animate-accordion-down: accordion-down 200ms ease-out;
   --animate-accordion-up: accordion-up 200ms ease-out;
 }
