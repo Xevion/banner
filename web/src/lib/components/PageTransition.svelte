@@ -67,9 +67,9 @@ function outTransition(_node: HTMLElement): TransitionConfig {
 }
 </script>
 
-<div class="relative flex flex-1 flex-col">
+<div class="relative flex flex-1 flex-col overflow-hidden p-8">
   {#key key}
-    <div in:inTransition out:outTransition class="flex flex-1 flex-col">
+    <div in:inTransition out:outTransition class="flex flex-1 flex-col -m-8">
       {@render children()}
     </div>
   {/key}
