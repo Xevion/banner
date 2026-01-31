@@ -2,7 +2,7 @@
 
 use crate::banner::Course;
 use crate::data::models::{DbMeetingTime, UpsertCounts};
-use crate::data::names::parse_banner_name;
+use crate::data::names::{decode_html_entities, parse_banner_name};
 use crate::error::Result;
 use sqlx::PgConnection;
 use sqlx::PgPool;
@@ -448,7 +448,10 @@ async fn upsert_courses(courses: &[Course], conn: &mut PgConnection) -> Result<V
         .collect();
     let subjects: Vec<&str> = courses.iter().map(|c| c.subject.as_str()).collect();
     let course_numbers: Vec<&str> = courses.iter().map(|c| c.course_number.as_str()).collect();
-    let titles: Vec<&str> = courses.iter().map(|c| c.course_title.as_str()).collect();
+    let titles: Vec<String> = courses
+        .iter()
+        .map(|c| decode_html_entities(&c.course_title))
+        .collect();
     let term_codes: Vec<&str> = courses.iter().map(|c| c.term.as_str()).collect();
     let enrollments: Vec<i32> = courses.iter().map(|c| c.enrollment).collect();
     let max_enrollments: Vec<i32> = courses.iter().map(|c| c.maximum_enrollment).collect();
@@ -628,7 +631,7 @@ async fn upsert_instructors(
     conn: &mut PgConnection,
 ) -> Result<HashMap<String, i32>> {
     let mut seen = HashSet::new();
-    let mut display_names: Vec<&str> = Vec::new();
+    let mut display_names: Vec<String> = Vec::new();
     let mut first_names: Vec<Option<String>> = Vec::new();
     let mut last_names: Vec<Option<String>> = Vec::new();
     let mut emails_lower: Vec<String> = Vec::new();
@@ -640,7 +643,7 @@ async fn upsert_instructors(
                 let email_lower = email.to_lowercase();
                 if seen.insert(email_lower.clone()) {
                     let parts = parse_banner_name(&faculty.display_name);
-                    display_names.push(faculty.display_name.as_str());
+                    display_names.push(decode_html_entities(&faculty.display_name));
                     first_names.push(parts.as_ref().map(|p| p.first.clone()));
                     last_names.push(parts.as_ref().map(|p| p.last.clone()));
                     emails_lower.push(email_lower);

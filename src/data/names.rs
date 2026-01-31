@@ -30,7 +30,7 @@ pub struct NameParts {
 ///
 /// Handles both named entities (`&amp;`, `&uuml;`) and numeric references
 /// (`&#39;`, `&#x27;`).
-fn decode_html_entities(s: &str) -> String {
+pub(crate) fn decode_html_entities(s: &str) -> String {
     if !s.contains('&') {
         return s.to_string();
     }
