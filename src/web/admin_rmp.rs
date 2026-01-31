@@ -180,6 +180,7 @@ pub struct InstructorDetailResponse {
 pub struct RescoreResponse {
     pub total_unmatched: usize,
     pub candidates_created: usize,
+    pub candidates_rescored: usize,
     pub auto_matched: usize,
     pub skipped_unparseable: usize,
     pub skipped_no_candidates: usize,
@@ -858,6 +859,7 @@ pub async fn rescore(
     Ok(Json(RescoreResponse {
         total_unmatched: stats.total_unmatched,
         candidates_created: stats.candidates_created,
+        candidates_rescored: stats.candidates_rescored,
         auto_matched: stats.auto_matched,
         skipped_unparseable: stats.skipped_unparseable,
         skipped_no_candidates: stats.skipped_no_candidates,

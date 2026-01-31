@@ -78,8 +78,9 @@ fn department_similarity(subjects: &[String], rmp_department: Option<&str>) -> f
 /// Expand common subject abbreviations used at UTSA and check for overlap.
 fn matches_known_abbreviation(subject: &str, department: &str) -> bool {
     const MAPPINGS: &[(&str, &[&str])] = &[
+        // Core subjects (original mappings, corrected)
         ("cs", &["computer science"]),
-        ("ece", &["electrical", "computer engineering"]),
+        ("ece", &["early childhood education", "early childhood"]),
         ("ee", &["electrical engineering", "electrical"]),
         ("me", &["mechanical engineering", "mechanical"]),
         ("ce", &["civil engineering", "civil"]),
@@ -105,6 +106,85 @@ fn matches_known_abbreviation(subject: &str, department: &str) -> bool {
         ("ms", &["management science"]),
         ("kin", &["kinesiology"]),
         ("com", &["communication"]),
+        // Architecture & Design
+        ("arc", &["architecture"]),
+        ("ide", &["interior design", "design"]),
+        // Anthropology & Ethnic Studies
+        ("ant", &["anthropology"]),
+        ("aas", &["african american studies", "ethnic studies"]),
+        ("mas", &["mexican american studies", "ethnic studies"]),
+        ("regs", &["ethnic studies", "gender"]),
+        // Languages
+        ("lng", &["linguistics", "applied linguistics"]),
+        ("spn", &["spanish"]),
+        ("frn", &["french"]),
+        ("ger", &["german"]),
+        ("chn", &["chinese"]),
+        ("jpn", &["japanese"]),
+        ("kor", &["korean"]),
+        ("itl", &["italian"]),
+        ("rus", &["russian"]),
+        ("lat", &["latin"]),
+        ("grk", &["greek"]),
+        ("asl", &["american sign language", "sign language"]),
+        (
+            "fl",
+            &["foreign languages", "languages", "modern languages"],
+        ),
+        // Education
+        ("edu", &["education"]),
+        ("ci", &["curriculum", "education"]),
+        ("edl", &["educational leadership", "education"]),
+        ("edp", &["educational psychology", "education"]),
+        ("bbl", &["bilingual education"]),
+        ("spe", &["special education", "education"]),
+        // Business
+        ("ent", &["entrepreneurship"]),
+        ("gba", &["general business", "business"]),
+        ("blw", &["business law", "law"]),
+        ("rfd", &["real estate"]),
+        ("mot", &["management of technology", "management"]),
+        // Engineering
+        ("egr", &["engineering"]),
+        ("bme", &["biomedical engineering", "engineering"]),
+        ("cme", &["chemical engineering", "engineering"]),
+        ("cpe", &["computer engineering", "engineering"]),
+        ("ise", &["industrial", "systems engineering", "engineering"]),
+        ("mate", &["materials engineering", "engineering"]),
+        // Sciences
+        ("che", &["chemistry"]),
+        ("bch", &["biochemistry", "chemistry"]),
+        ("geo", &["geology"]),
+        ("phy", &["physics"]),
+        ("ast", &["astronomy"]),
+        ("es", &["environmental science"]),
+        // Social Sciences
+        ("crj", &["criminal justice"]),
+        ("swk", &["social work"]),
+        ("pad", &["public administration"]),
+        ("grg", &["geography"]),
+        ("ges", &["geography"]),
+        // Humanities
+        ("cla", &["classics"]),
+        ("hum", &["humanities"]),
+        ("wgss", &["women's studies"]),
+        // Health
+        ("hth", &["health"]),
+        ("hcp", &["health science", "health"]),
+        ("ntr", &["nutrition"]),
+        // Military
+        ("msc", &["military science"]),
+        ("asc", &["aerospace"]),
+        // Arts
+        ("dan", &["dance"]),
+        ("thr", &["theater"]),
+        ("ahc", &["art history"]),
+        // Other
+        ("cou", &["counseling"]),
+        ("hon", &["honors"]),
+        ("csm", &["construction"]),
+        ("wrc", &["writing"]),
+        ("set", &["tourism management", "tourism"]),
     ];
 
     for &(abbr, expansions) in MAPPINGS {
@@ -164,6 +244,7 @@ pub fn compute_match_score(
 pub struct MatchingStats {
     pub total_unmatched: usize,
     pub candidates_created: usize,
+    pub candidates_rescored: usize,
     pub auto_matched: usize,
     pub skipped_unparseable: usize,
     pub skipped_no_candidates: usize,
@@ -200,6 +281,7 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
         return Ok(MatchingStats {
             total_unmatched: 0,
             candidates_created: 0,
+            candidates_rescored: 0,
             auto_matched: 0,
             skipped_unparseable: 0,
             skipped_no_candidates: 0,
@@ -245,24 +327,34 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
         });
     }
 
-    // 4. Load existing candidate pairs (and rejected subset) in a single query
+    // 4. Load existing candidate pairs — only skip resolved (accepted/rejected) pairs.
+    //    Pending candidates are rescored so updated mappings take effect.
     let candidate_rows: Vec<(i32, i32, String)> =
         sqlx::query_as("SELECT instructor_id, rmp_legacy_id, status FROM rmp_match_candidates")
             .fetch_all(db_pool)
             .await?;
 
-    let mut existing_pairs: HashSet<(i32, i32)> = HashSet::with_capacity(candidate_rows.len());
+    let mut resolved_pairs: HashSet<(i32, i32)> = HashSet::new();
+    let mut pending_pairs: HashSet<(i32, i32)> = HashSet::new();
     let mut rejected_pairs: HashSet<(i32, i32)> = HashSet::new();
     for (iid, lid, status) in candidate_rows {
-        existing_pairs.insert((iid, lid));
-        if status == "rejected" {
-            rejected_pairs.insert((iid, lid));
+        match status.as_str() {
+            "accepted" | "rejected" => {
+                resolved_pairs.insert((iid, lid));
+                if status == "rejected" {
+                    rejected_pairs.insert((iid, lid));
+                }
+            }
+            _ => {
+                pending_pairs.insert((iid, lid));
+            }
         }
     }
 
-    // 5. Score and collect candidates
+    // 5. Score and collect candidates (new + rescored pending)
     let empty_subjects: Vec<String> = Vec::new();
-    let mut candidates: Vec<(i32, i32, f32, serde_json::Value)> = Vec::new();
+    let mut new_candidates: Vec<(i32, i32, f32, serde_json::Value)> = Vec::new();
+    let mut rescored_candidates: Vec<(i32, i32, f32, serde_json::Value)> = Vec::new();
     let mut auto_accept: Vec<(i32, i32)> = Vec::new(); // (instructor_id, legacy_id)
     let mut skipped_unparseable = 0usize;
     let mut skipped_no_candidates = 0usize;
@@ -290,7 +382,7 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
 
         for prof in rmp_candidates {
             let pair = (*instructor_id, prof.legacy_id);
-            if existing_pairs.contains(&pair) {
+            if resolved_pairs.contains(&pair) {
                 continue;
             }
 
@@ -308,7 +400,16 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
             let breakdown_json =
                 serde_json::to_value(&ms.breakdown).unwrap_or_else(|_| serde_json::json!({}));
 
-            candidates.push((*instructor_id, prof.legacy_id, ms.score, breakdown_json));
+            if pending_pairs.contains(&pair) {
+                rescored_candidates.push((
+                    *instructor_id,
+                    prof.legacy_id,
+                    ms.score,
+                    breakdown_json,
+                ));
+            } else {
+                new_candidates.push((*instructor_id, prof.legacy_id, ms.score, breakdown_json));
+            }
 
             match best {
                 Some((s, _)) if ms.score > s => best = Some((ms.score, prof.legacy_id)),
@@ -327,19 +428,20 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
         }
     }
 
-    // 6–7. Write candidates and auto-accept within a single transaction
-    let candidates_created = candidates.len();
+    // 6–7. Write candidates, rescore, and auto-accept within a single transaction
+    let candidates_created = new_candidates.len();
+    let candidates_rescored = rescored_candidates.len();
     let auto_matched = auto_accept.len();
 
     let mut tx = db_pool.begin().await?;
 
-    // 6. Batch-insert candidates
-    if !candidates.is_empty() {
-        let c_instructor_ids: Vec<i32> = candidates.iter().map(|(iid, _, _, _)| *iid).collect();
-        let c_legacy_ids: Vec<i32> = candidates.iter().map(|(_, lid, _, _)| *lid).collect();
-        let c_scores: Vec<f32> = candidates.iter().map(|(_, _, s, _)| *s).collect();
+    // 6a. Batch-insert new candidates
+    if !new_candidates.is_empty() {
+        let c_instructor_ids: Vec<i32> = new_candidates.iter().map(|(iid, _, _, _)| *iid).collect();
+        let c_legacy_ids: Vec<i32> = new_candidates.iter().map(|(_, lid, _, _)| *lid).collect();
+        let c_scores: Vec<f32> = new_candidates.iter().map(|(_, _, s, _)| *s).collect();
         let c_breakdowns: Vec<serde_json::Value> =
-            candidates.into_iter().map(|(_, _, _, b)| b).collect();
+            new_candidates.into_iter().map(|(_, _, _, b)| b).collect();
 
         sqlx::query(
             r#"
@@ -354,6 +456,40 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
         .bind(&c_legacy_ids)
         .bind(&c_scores)
         .bind(&c_breakdowns)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    // 6b. Batch-update rescored pending candidates
+    if !rescored_candidates.is_empty() {
+        let r_instructor_ids: Vec<i32> = rescored_candidates
+            .iter()
+            .map(|(iid, _, _, _)| *iid)
+            .collect();
+        let r_legacy_ids: Vec<i32> = rescored_candidates
+            .iter()
+            .map(|(_, lid, _, _)| *lid)
+            .collect();
+        let r_scores: Vec<f32> = rescored_candidates.iter().map(|(_, _, s, _)| *s).collect();
+        let r_breakdowns: Vec<serde_json::Value> = rescored_candidates
+            .into_iter()
+            .map(|(_, _, _, b)| b)
+            .collect();
+
+        sqlx::query(
+            r#"
+            UPDATE rmp_match_candidates mc
+            SET score = v.score, score_breakdown = v.score_breakdown
+            FROM UNNEST($1::int4[], $2::int4[], $3::real[], $4::jsonb[])
+                AS v(instructor_id, rmp_legacy_id, score, score_breakdown)
+            WHERE mc.instructor_id = v.instructor_id
+              AND mc.rmp_legacy_id = v.rmp_legacy_id
+            "#,
+        )
+        .bind(&r_instructor_ids)
+        .bind(&r_legacy_ids)
+        .bind(&r_scores)
+        .bind(&r_breakdowns)
         .execute(&mut *tx)
         .await?;
     }
@@ -411,6 +547,7 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
     let stats = MatchingStats {
         total_unmatched,
         candidates_created,
+        candidates_rescored,
         auto_matched,
         skipped_unparseable,
         skipped_no_candidates,
@@ -419,6 +556,7 @@ pub async fn generate_candidates(db_pool: &PgPool) -> Result<MatchingStats> {
     info!(
         total_unmatched = stats.total_unmatched,
         candidates_created = stats.candidates_created,
+        candidates_rescored = stats.candidates_rescored,
         auto_matched = stats.auto_matched,
         skipped_unparseable = stats.skipped_unparseable,
         skipped_no_candidates = stats.skipped_no_candidates,

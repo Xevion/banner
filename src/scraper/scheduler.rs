@@ -310,6 +310,7 @@ impl Scheduler {
             total,
             stats.total_unmatched,
             stats.candidates_created,
+            stats.candidates_rescored,
             stats.auto_matched,
             stats.skipped_unparseable,
             stats.skipped_no_candidates,
