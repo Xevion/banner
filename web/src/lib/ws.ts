@@ -1,21 +1,4 @@
-import type { ScrapeJob } from "$lib/api";
-
-export type ScrapeJobStatus = "processing" | "staleLock" | "exhausted" | "scheduled" | "pending";
-
-export type ScrapeJobEvent =
-  | { type: "init"; jobs: ScrapeJob[] }
-  | { type: "jobCreated"; job: ScrapeJob }
-  | { type: "jobLocked"; id: number; lockedAt: string; status: ScrapeJobStatus }
-  | { type: "jobCompleted"; id: number }
-  | {
-      type: "jobRetried";
-      id: number;
-      retryCount: number;
-      queuedAt: string;
-      status: ScrapeJobStatus;
-    }
-  | { type: "jobExhausted"; id: number }
-  | { type: "jobDeleted"; id: number };
+import type { ScrapeJobDto, ScrapeJobEvent } from "$lib/bindings";
 
 export type ConnectionState = "connected" | "reconnecting" | "disconnected";
 
@@ -29,7 +12,7 @@ const PRIORITY_ORDER: Record<string, number> = {
 const MAX_RECONNECT_DELAY = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
-function sortJobs(jobs: Iterable<ScrapeJob>): ScrapeJob[] {
+function sortJobs(jobs: Iterable<ScrapeJobDto>): ScrapeJobDto[] {
   return Array.from(jobs).sort((a, b) => {
     const pa = PRIORITY_ORDER[a.priority.toLowerCase()] ?? 2;
     const pb = PRIORITY_ORDER[b.priority.toLowerCase()] ?? 2;
@@ -40,7 +23,7 @@ function sortJobs(jobs: Iterable<ScrapeJob>): ScrapeJob[] {
 
 export class ScrapeJobsStore {
   private ws: WebSocket | null = null;
-  private jobs = new Map<number, ScrapeJob>();
+  private jobs = new Map<number, ScrapeJobDto>();
   private _connectionState: ConnectionState = "disconnected";
   private _initialized = false;
   private onUpdate: () => void;
@@ -49,14 +32,14 @@ export class ScrapeJobsStore {
   private intentionalClose = false;
 
   /** Cached sorted array, invalidated on data mutations. */
-  private cachedJobs: ScrapeJob[] = [];
+  private cachedJobs: ScrapeJobDto[] = [];
   private cacheDirty = false;
 
   constructor(onUpdate: () => void) {
     this.onUpdate = onUpdate;
   }
 
-  getJobs(): ScrapeJob[] {
+  getJobs(): ScrapeJobDto[] {
     if (this.cacheDirty) {
       this.cachedJobs = sortJobs(this.jobs.values());
       this.cacheDirty = false;

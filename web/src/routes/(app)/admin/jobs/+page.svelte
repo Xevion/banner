@@ -1,5 +1,5 @@
 <script lang="ts">
-import { type ScrapeJob, client } from "$lib/api";
+import { type ScrapeJobDto, client } from "$lib/api";
 import { FlexRender, createSvelteTable } from "$lib/components/ui/data-table/index.js";
 import { formatAbsoluteDate } from "$lib/date";
 import { formatDuration } from "$lib/time";
@@ -14,7 +14,7 @@ import {
 } from "@tanstack/table-core";
 import { onMount } from "svelte";
 
-let jobs = $state<ScrapeJob[]>([]);
+let jobs = $state<ScrapeJobDto[]>([]);
 let connectionState = $state<ConnectionState>("disconnected");
 let initialized = $state(false);
 let error = $state<string | null>(null);
@@ -97,7 +97,7 @@ function handleSortingChange(updater: Updater<SortingState>) {
 
 // --- Helper functions ---
 
-function formatJobDetails(job: ScrapeJob, subjects: Map<string, string>): string {
+function formatJobDetails(job: ScrapeJobDto, subjects: Map<string, string>): string {
   const payload = job.targetPayload as Record<string, unknown>;
   switch (job.targetType) {
     case "Subject": {
@@ -169,7 +169,7 @@ function overdueDurationColor(ms: number): string {
 
 // --- Table columns ---
 
-const columns: ColumnDef<ScrapeJob, unknown>[] = [
+const columns: ColumnDef<ScrapeJobDto, unknown>[] = [
   {
     id: "id",
     accessorKey: "id",
@@ -265,7 +265,7 @@ const skeletonWidths: Record<string, string> = {
 // Unified timing display: shows the most relevant duration for the job's current state.
 // Uses _tick dependency so Svelte re-evaluates every second.
 function getTimingDisplay(
-  job: ScrapeJob,
+  job: ScrapeJobDto,
   _tick: number
 ): { text: string; colorClass: string; icon: "warning" | "none"; tooltip: string } {
   const now = Date.now();

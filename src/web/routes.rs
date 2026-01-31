@@ -291,7 +291,7 @@ async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
 async fn metrics(
     State(state): State<AppState>,
     Query(params): Query<MetricsParams>,
-) -> Result<Json<Value>, (AxumStatusCode, String)> {
+) -> Result<Json<MetricsResponse>, (AxumStatusCode, String)> {
     let limit = params.limit.clamp(1, 5000);
 
     // Parse range shorthand, defaulting to 24h
@@ -370,32 +370,51 @@ async fn metrics(
         })?;
 
     let count = metrics.len();
-    let metrics_json: Vec<Value> = metrics
+    let metrics_entries: Vec<MetricEntry> = metrics
         .into_iter()
         .map(
-            |(id, course_id, timestamp, enrollment, wait_count, seats_available)| {
-                json!({
-                    "id": id,
-                    "courseId": course_id,
-                    "timestamp": timestamp.to_rfc3339(),
-                    "enrollment": enrollment,
-                    "waitCount": wait_count,
-                    "seatsAvailable": seats_available,
-                })
+            |(id, course_id, timestamp, enrollment, wait_count, seats_available)| MetricEntry {
+                id,
+                course_id,
+                timestamp: timestamp.to_rfc3339(),
+                enrollment,
+                wait_count,
+                seats_available,
             },
         )
         .collect();
 
-    Ok(Json(json!({
-        "metrics": metrics_json,
-        "count": count,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-    })))
+    Ok(Json(MetricsResponse {
+        metrics: metrics_entries,
+        count,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    }))
 }
 
 // ============================================================
 // Course search & detail API
 // ============================================================
+
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MetricEntry {
+    pub id: i32,
+    pub course_id: i32,
+    pub timestamp: String,
+    pub enrollment: i32,
+    pub wait_count: i32,
+    pub seats_available: i32,
+}
+
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MetricsResponse {
+    pub metrics: Vec<MetricEntry>,
+    pub count: usize,
+    pub timestamp: String,
+}
 
 #[derive(Deserialize)]
 struct MetricsParams {

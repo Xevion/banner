@@ -6,18 +6,51 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Json, Response};
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use ts_rs::TS;
 
 use crate::data::models::User;
 use crate::state::AppState;
+use crate::status::ServiceStatus;
 use crate::web::extractors::AdminUser;
+use crate::web::ws::ScrapeJobDto;
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ScrapeJobsResponse {
+    pub jobs: Vec<ScrapeJobDto>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AdminServiceInfo {
+    name: String,
+    status: ServiceStatus,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AdminStatusResponse {
+    #[ts(type = "number")]
+    user_count: i64,
+    #[ts(type = "number")]
+    session_count: i64,
+    #[ts(type = "number")]
+    course_count: i64,
+    #[ts(type = "number")]
+    scrape_job_count: i64,
+    services: Vec<AdminServiceInfo>,
+}
 
 /// `GET /api/admin/status` — Enhanced system status for admins.
 pub async fn admin_status(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<Json<AdminStatusResponse>, (StatusCode, Json<Value>)> {
     let (user_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
         .fetch_one(&state.db_pool)
         .await
@@ -60,25 +93,20 @@ pub async fn admin_status(
             )
         })?;
 
-    let services: Vec<Value> = state
+    let services: Vec<AdminServiceInfo> = state
         .service_statuses
         .all()
         .into_iter()
-        .map(|(name, status)| {
-            json!({
-                "name": name,
-                "status": status,
-            })
-        })
+        .map(|(name, status)| AdminServiceInfo { name, status })
         .collect();
 
-    Ok(Json(json!({
-        "userCount": user_count,
-        "sessionCount": session_count,
-        "courseCount": course_count,
-        "scrapeJobCount": scrape_job_count,
-        "services": services,
-    })))
+    Ok(Json(AdminStatusResponse {
+        user_count,
+        session_count,
+        course_count,
+        scrape_job_count,
+        services,
+    }))
 }
 
 /// `GET /api/admin/users` — List all users.
@@ -136,7 +164,7 @@ pub async fn set_user_admin(
 pub async fn list_scrape_jobs(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<Json<ScrapeJobsResponse>, (StatusCode, Json<Value>)> {
     let rows = sqlx::query_as::<_, crate::data::models::ScrapeJob>(
         "SELECT * FROM scrape_jobs ORDER BY priority DESC, execute_at ASC LIMIT 100",
     )
@@ -150,26 +178,9 @@ pub async fn list_scrape_jobs(
         )
     })?;
 
-    let jobs: Vec<Value> = rows
-        .iter()
-        .map(|j| {
-            json!({
-                "id": j.id,
-                "targetType": format!("{:?}", j.target_type),
-                "targetPayload": j.target_payload,
-                "priority": format!("{:?}", j.priority),
-                "executeAt": j.execute_at.to_rfc3339(),
-                "createdAt": j.created_at.to_rfc3339(),
-                "lockedAt": j.locked_at.map(|t| t.to_rfc3339()),
-                "retryCount": j.retry_count,
-                "maxRetries": j.max_retries,
-                "queuedAt": j.queued_at.to_rfc3339(),
-                "status": j.status(),
-            })
-        })
-        .collect();
+    let jobs: Vec<ScrapeJobDto> = rows.iter().map(ScrapeJobDto::from).collect();
 
-    Ok(Json(json!({ "jobs": jobs })))
+    Ok(Json(ScrapeJobsResponse { jobs }))
 }
 
 /// Row returned by the audit-log query (audit + joined course fields).
@@ -186,6 +197,29 @@ struct AuditRow {
     course_number: Option<String>,
     crn: Option<String>,
     title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AuditLogEntry {
+    pub id: i32,
+    pub course_id: i32,
+    pub timestamp: String,
+    pub field_changed: String,
+    pub old_value: String,
+    pub new_value: String,
+    pub subject: Option<String>,
+    pub course_number: Option<String>,
+    pub crn: Option<String>,
+    pub course_title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AuditLogResponse {
+    pub entries: Vec<AuditLogEntry>,
 }
 
 /// Format a `DateTime<Utc>` as an HTTP-date (RFC 2822) for Last-Modified headers.
@@ -241,25 +275,23 @@ pub async fn list_audit_log(
         }
     }
 
-    let entries: Vec<Value> = rows
+    let entries: Vec<AuditLogEntry> = rows
         .iter()
-        .map(|a| {
-            json!({
-                "id": a.id,
-                "courseId": a.course_id,
-                "timestamp": a.timestamp.to_rfc3339(),
-                "fieldChanged": a.field_changed,
-                "oldValue": a.old_value,
-                "newValue": a.new_value,
-                "subject": a.subject,
-                "courseNumber": a.course_number,
-                "crn": a.crn,
-                "courseTitle": a.title,
-            })
+        .map(|a| AuditLogEntry {
+            id: a.id,
+            course_id: a.course_id,
+            timestamp: a.timestamp.to_rfc3339(),
+            field_changed: a.field_changed.clone(),
+            old_value: a.old_value.clone(),
+            new_value: a.new_value.clone(),
+            subject: a.subject.clone(),
+            course_number: a.course_number.clone(),
+            crn: a.crn.clone(),
+            course_title: a.title.clone(),
         })
         .collect();
 
-    let mut resp = Json(json!({ "entries": entries })).into_response();
+    let mut resp = Json(AuditLogResponse { entries }).into_response();
     if let Some(latest_ts) = latest
         && let Ok(val) = to_http_date(&latest_ts).parse()
     {

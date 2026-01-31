@@ -192,8 +192,9 @@ pub enum TargetType {
 }
 
 /// Computed status for a scrape job, derived from existing fields.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum ScrapeJobStatus {
     Processing,
     StaleLock,

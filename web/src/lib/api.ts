@@ -1,5 +1,8 @@
 import { authStore } from "$lib/auth.svelte";
 import type {
+  AdminStatusResponse,
+  AuditLogEntry,
+  AuditLogResponse,
   CandidateResponse,
   CodeDescription,
   CourseResponse,
@@ -11,7 +14,12 @@ import type {
   InstructorStats,
   LinkedRmpProfile,
   ListInstructorsResponse,
+  MetricEntry,
+  MetricsResponse,
   RescoreResponse,
+  ScrapeJobDto,
+  ScrapeJobEvent,
+  ScrapeJobsResponse,
   ScraperStatsResponse,
   SearchResponse as SearchResponseGenerated,
   ServiceInfo,
@@ -22,6 +30,10 @@ import type {
   SubjectSummary,
   SubjectsResponse,
   TermResponse,
+  TimeRange,
+  TimelineRequest,
+  TimelineResponse,
+  TimelineSlot,
   TimeseriesPoint,
   TimeseriesResponse,
   TopCandidateResponse,
@@ -32,6 +44,9 @@ const API_BASE_URL = "/api";
 
 // Re-export generated types under their canonical names
 export type {
+  AdminStatusResponse,
+  AuditLogEntry,
+  AuditLogResponse,
   CandidateResponse,
   CodeDescription,
   CourseResponse,
@@ -43,7 +58,12 @@ export type {
   InstructorStats,
   LinkedRmpProfile,
   ListInstructorsResponse,
+  MetricEntry,
+  MetricsResponse,
   RescoreResponse,
+  ScrapeJobDto,
+  ScrapeJobEvent,
+  ScrapeJobsResponse,
   ScraperStatsResponse,
   ServiceInfo,
   ServiceStatus,
@@ -53,6 +73,10 @@ export type {
   SubjectSummary,
   SubjectsResponse,
   TermResponse,
+  TimelineRequest,
+  TimelineResponse,
+  TimelineSlot,
+  TimeRange,
   TimeseriesPoint,
   TimeseriesResponse,
   TopCandidateResponse,
@@ -72,93 +96,12 @@ export type ScraperPeriod = "1h" | "6h" | "24h" | "7d" | "30d";
 export type SortColumn = "course_code" | "title" | "instructor" | "time" | "seats";
 export type SortDirection = "asc" | "desc";
 
-export interface AdminStatus {
-  userCount: number;
-  sessionCount: number;
-  courseCount: number;
-  scrapeJobCount: number;
-  services: { name: string; status: string }[];
-}
-
-export interface ScrapeJob {
-  id: number;
-  targetType: string;
-  targetPayload: unknown;
-  priority: string;
-  executeAt: string;
-  createdAt: string;
-  lockedAt: string | null;
-  retryCount: number;
-  maxRetries: number;
-  queuedAt: string;
-  status: "processing" | "staleLock" | "exhausted" | "scheduled" | "pending";
-}
-
-export interface ScrapeJobsResponse {
-  jobs: ScrapeJob[];
-}
-
-export interface AuditLogEntry {
-  id: number;
-  courseId: number;
-  timestamp: string;
-  fieldChanged: string;
-  oldValue: string;
-  newValue: string;
-  subject: string | null;
-  courseNumber: string | null;
-  crn: string | null;
-  courseTitle: string | null;
-}
-
-export interface AuditLogResponse {
-  entries: AuditLogEntry[];
-}
-
-export interface MetricEntry {
-  id: number;
-  courseId: number;
-  timestamp: string;
-  enrollment: number;
-  waitCount: number;
-  seatsAvailable: number;
-}
-
-export interface MetricsResponse {
-  metrics: MetricEntry[];
-  count: number;
-  timestamp: string;
-}
-
 export interface MetricsParams {
   course_id?: number;
   term?: string;
   crn?: string;
   range?: "1h" | "6h" | "24h" | "7d" | "30d";
   limit?: number;
-}
-
-/** A time range for timeline queries (ISO-8601 strings). */
-export interface TimelineRange {
-  start: string;
-  end: string;
-}
-
-/** Request body for POST /api/timeline. */
-export interface TimelineRequest {
-  ranges: TimelineRange[];
-}
-
-/** A single 15-minute slot returned by the timeline API. */
-export interface TimelineSlot {
-  time: string;
-  subjects: Record<string, number>;
-}
-
-/** Response from POST /api/timeline. */
-export interface TimelineResponse {
-  slots: TimelineSlot[];
-  subjects: string[];
 }
 
 export interface SearchParams {
@@ -279,8 +222,8 @@ export class BannerApiClient {
   }
 
   // Admin endpoints
-  async getAdminStatus(): Promise<AdminStatus> {
-    return this.request<AdminStatus>("/admin/status");
+  async getAdminStatus(): Promise<AdminStatusResponse> {
+    return this.request<AdminStatusResponse>("/admin/status");
   }
 
   async getAdminUsers(): Promise<User[]> {
@@ -331,7 +274,7 @@ export class BannerApiClient {
   /** Stored `Last-Modified` value for audit log conditional requests. */
   private _auditLastModified: string | null = null;
 
-  async getTimeline(ranges: TimelineRange[]): Promise<TimelineResponse> {
+  async getTimeline(ranges: TimeRange[]): Promise<TimelineResponse> {
     return this.request<TimelineResponse>("/timeline", {
       method: "POST",
       body: { ranges } satisfies TimelineRequest,

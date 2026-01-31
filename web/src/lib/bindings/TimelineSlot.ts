@@ -8,4 +8,4 @@ time: string,
 /**
  * Subject code → total enrollment in this slot.
  */
-subjects: { [key in string]?: bigint }, };
+subjects: Record<string, number>, };

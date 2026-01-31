@@ -38,13 +38,17 @@ const MAX_TOTAL_SPAN: Duration = Duration::hours(168); // 1 week
 
 // ── Request / Response types ────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct TimelineRequest {
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TimelineRequest {
     ranges: Vec<TimeRange>,
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct TimeRange {
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TimeRange {
     start: DateTime<Utc>,
     end: DateTime<Utc>,
 }
@@ -66,6 +70,7 @@ pub struct TimelineSlot {
     /// ISO-8601 timestamp at the start of this 15-minute bucket.
     time: DateTime<Utc>,
     /// Subject code → total enrollment in this slot.
+    #[ts(type = "Record<string, number>")]
     subjects: BTreeMap<String, i64>,
 }
 

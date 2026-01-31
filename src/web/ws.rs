@@ -12,14 +12,16 @@ use serde::Serialize;
 use sqlx::PgPool;
 use tokio::sync::broadcast;
 use tracing::debug;
+use ts_rs::TS;
 
 use crate::data::models::{ScrapeJob, ScrapeJobStatus};
 use crate::state::AppState;
 use crate::web::extractors::AdminUser;
 
 /// A serializable DTO for `ScrapeJob` with computed `status`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ScrapeJobDto {
     pub id: i32,
     pub target_type: String,
@@ -53,8 +55,9 @@ impl From<&ScrapeJob> for ScrapeJobDto {
 }
 
 /// Events broadcast when scrape job state changes.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export)]
 pub enum ScrapeJobEvent {
     Init {
         jobs: Vec<ScrapeJobDto>,
@@ -64,6 +67,7 @@ pub enum ScrapeJobEvent {
     },
     JobLocked {
         id: i32,
+        #[serde(rename = "lockedAt")]
         locked_at: String,
         status: ScrapeJobStatus,
     },
@@ -72,7 +76,9 @@ pub enum ScrapeJobEvent {
     },
     JobRetried {
         id: i32,
+        #[serde(rename = "retryCount")]
         retry_count: i32,
+        #[serde(rename = "queuedAt")]
         queued_at: String,
         status: ScrapeJobStatus,
     },

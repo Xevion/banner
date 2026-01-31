@@ -1,9 +1,9 @@
 <script lang="ts">
-import { type AdminStatus, client } from "$lib/api";
+import { type AdminStatusResponse, client } from "$lib/api";
 import { formatNumber } from "$lib/utils";
 import { onMount } from "svelte";
 
-let status = $state<AdminStatus | null>(null);
+let status = $state<AdminStatusResponse | null>(null);
 let error = $state<string | null>(null);
 
 onMount(async () => {

@@ -5,7 +5,7 @@
  * the missing segments when the view expands into unloaded territory.
  * Fetches are throttled so rapid panning/zooming doesn't flood the API.
  */
-import { type TimelineRange, client } from "$lib/api";
+import { type TimeRange, client } from "$lib/api";
 import { SLOT_INTERVAL_MS } from "./constants";
 import type { TimeSlot } from "./types";
 
@@ -74,7 +74,7 @@ function mergeRange(ranges: Range[], added: Range): Range[] {
  * Converts gap ranges into the API request format.
  */
 async function fetchFromApi(gaps: Range[]): Promise<TimeSlot[]> {
-  const ranges: TimelineRange[] = gaps.map(([start, end]) => ({
+  const ranges: TimeRange[] = gaps.map(([start, end]) => ({
     start: new Date(start).toISOString(),
     end: new Date(end).toISOString(),
   }));
@@ -83,7 +83,9 @@ async function fetchFromApi(gaps: Range[]): Promise<TimeSlot[]> {
 
   return response.slots.map((slot) => ({
     time: new Date(slot.time),
-    subjects: slot.subjects,
+    subjects: Object.fromEntries(
+      Object.entries(slot.subjects).map(([k, v]) => [k, Number(v)])
+    ) as Record<string, number>,
   }));
 }
 
