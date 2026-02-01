@@ -15,10 +15,13 @@ import type {
   InstructorResponse,
   InstructorStats,
   LinkedRmpProfile,
+  ListInstructorsParams as ListInstructorsParamsGenerated,
   ListInstructorsResponse,
+  MatchBody,
   MetricEntry,
   MetricsParams as MetricsParamsGenerated,
   MetricsResponse,
+  RejectCandidateBody,
   RescoreResponse,
   ScrapeJobDto,
   ScrapeJobEvent,
@@ -105,16 +108,36 @@ export type ReferenceEntry = CodeDescription;
 export type SearchResponse = SearchResponseGenerated;
 export type SearchParams = SearchParamsGenerated;
 export type MetricsParams = MetricsParamsGenerated;
+export type ListInstructorsParams = ListInstructorsParamsGenerated;
 
 export type ScraperPeriod = "1h" | "6h" | "24h" | "7d" | "30d";
 
-// Admin instructor query params (client-only, not generated)
-export interface AdminInstructorListParams {
-  status?: string;
-  search?: string;
-  page?: number;
-  per_page?: number;
-  sort?: string;
+/**
+ * Converts a typed object to URLSearchParams, preserving camelCase keys.
+ * Handles arrays, optional values, and primitives.
+ */
+function toURLSearchParams(obj: Record<string, unknown>): URLSearchParams {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined || value === null) {
+      continue; // Skip undefined/null values
+    }
+
+    if (Array.isArray(value)) {
+      // Append each array element
+      for (const item of value) {
+        if (item !== undefined && item !== null) {
+          params.append(key, String(item));
+        }
+      }
+    } else {
+      // Convert primitives to string
+      params.set(key, String(value));
+    }
+  }
+
+  return params;
 }
 
 /**
@@ -235,62 +258,7 @@ export class BannerApiClient {
   }
 
   async searchCourses(params: Partial<SearchParams> & { term: string }): Promise<SearchResponse> {
-    const query = new URLSearchParams();
-    query.set("term", params.term);
-    if (params.subject && params.subject.length > 0) {
-      for (const s of params.subject) {
-        query.append("subject", s);
-      }
-    }
-    if (params.q) query.set("q", params.q);
-    if (params.openOnly) query.set("open_only", "true");
-    if (params.courseNumberLow !== undefined && params.courseNumberLow !== null) {
-      query.set("course_number_low", String(params.courseNumberLow));
-    }
-    if (params.courseNumberHigh !== undefined && params.courseNumberHigh !== null) {
-      query.set("course_number_high", String(params.courseNumberHigh));
-    }
-    if (params.instructionalMethod && params.instructionalMethod.length > 0) {
-      for (const m of params.instructionalMethod) {
-        query.append("instructional_method", m);
-      }
-    }
-    if (params.campus && params.campus.length > 0) {
-      for (const c of params.campus) {
-        query.append("campus", c);
-      }
-    }
-    if (params.waitCountMax !== undefined && params.waitCountMax !== null) {
-      query.set("wait_count_max", String(params.waitCountMax));
-    }
-    if (params.days && params.days.length > 0) {
-      for (const d of params.days) {
-        query.append("days", d);
-      }
-    }
-    if (params.timeStart) query.set("time_start", params.timeStart);
-    if (params.timeEnd) query.set("time_end", params.timeEnd);
-    if (params.partOfTerm && params.partOfTerm.length > 0) {
-      for (const p of params.partOfTerm) {
-        query.append("part_of_term", p);
-      }
-    }
-    if (params.attributes && params.attributes.length > 0) {
-      for (const a of params.attributes) {
-        query.append("attributes", a);
-      }
-    }
-    if (params.creditHourMin !== undefined && params.creditHourMin !== null) {
-      query.set("credit_hour_min", String(params.creditHourMin));
-    }
-    if (params.creditHourMax !== undefined && params.creditHourMax !== null) {
-      query.set("credit_hour_max", String(params.creditHourMax));
-    }
-    if (params.instructor) query.set("instructor", params.instructor);
-    if (params.limit !== undefined) query.set("limit", String(params.limit));
-    if (params.offset !== undefined) query.set("offset", String(params.offset));
-    if (params.sortBy) query.set("sort_by", params.sortBy);
-    if (params.sortDir) query.set("sort_dir", params.sortDir);
+    const query = toURLSearchParams(params as Record<string, unknown>);
     return this.request<SearchResponse>(`/courses/search?${query.toString()}`);
   }
 
@@ -386,27 +354,23 @@ export class BannerApiClient {
   }
 
   async getMetrics(params?: Partial<MetricsParams>): Promise<MetricsResponse> {
-    const query = new URLSearchParams();
-    if (params?.courseId !== undefined && params.courseId !== null) {
-      query.set("course_id", String(params.courseId));
+    if (!params) {
+      return this.request<MetricsResponse>("/metrics");
     }
-    if (params?.term) query.set("term", params.term);
-    if (params?.crn) query.set("crn", params.crn);
-    if (params?.range) query.set("range", params.range);
-    if (params?.limit !== undefined) query.set("limit", String(params.limit));
+    const query = toURLSearchParams(params as Record<string, unknown>);
     const qs = query.toString();
     return this.request<MetricsResponse>(`/metrics${qs ? `?${qs}` : ""}`);
   }
 
   // Admin instructor endpoints
 
-  async getAdminInstructors(params?: AdminInstructorListParams): Promise<ListInstructorsResponse> {
-    const query = new URLSearchParams();
-    if (params?.status) query.set("status", params.status);
-    if (params?.search) query.set("search", params.search);
-    if (params?.page !== undefined) query.set("page", String(params.page));
-    if (params?.per_page !== undefined) query.set("per_page", String(params.per_page));
-    if (params?.sort) query.set("sort", params.sort);
+  async getAdminInstructors(
+    params?: Partial<ListInstructorsParams>
+  ): Promise<ListInstructorsResponse> {
+    if (!params) {
+      return this.request<ListInstructorsResponse>("/admin/instructors");
+    }
+    const query = toURLSearchParams(params as Record<string, unknown>);
     const qs = query.toString();
     return this.request<ListInstructorsResponse>(`/admin/instructors${qs ? `?${qs}` : ""}`);
   }
@@ -418,14 +382,14 @@ export class BannerApiClient {
   async matchInstructor(id: number, rmpLegacyId: number): Promise<InstructorDetailResponse> {
     return this.request<InstructorDetailResponse>(`/admin/instructors/${id}/match`, {
       method: "POST",
-      body: { rmpLegacyId },
+      body: { rmpLegacyId } satisfies MatchBody,
     });
   }
 
   async rejectCandidate(id: number, rmpLegacyId: number): Promise<void> {
     return this.requestVoid(`/admin/instructors/${id}/reject-candidate`, {
       method: "POST",
-      body: { rmpLegacyId },
+      body: { rmpLegacyId } satisfies RejectCandidateBody,
     });
   }
 
@@ -438,7 +402,7 @@ export class BannerApiClient {
   async unmatchInstructor(id: number, rmpLegacyId?: number): Promise<void> {
     return this.requestVoid(`/admin/instructors/${id}/unmatch`, {
       method: "POST",
-      ...(rmpLegacyId !== undefined ? { body: { rmpLegacyId } } : {}),
+      ...(rmpLegacyId !== undefined ? { body: { rmpLegacyId } satisfies MatchBody } : {}),
     });
   }
 

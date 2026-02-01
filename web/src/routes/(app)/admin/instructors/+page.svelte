@@ -134,7 +134,7 @@ async function fetchInstructors() {
       status: activeFilter,
       search: searchQuery || undefined,
       page: currentPage,
-      per_page: perPage,
+      perPage: perPage,
     });
     instructors = res.instructors;
     totalCount = res.total;

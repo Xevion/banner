@@ -66,7 +66,7 @@ describe("BannerApiClient", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "/api/courses/search?term=202420&subject=CS&q=data&open_only=true&limit=25&offset=50"
+      "/api/courses/search?term=202420&subject=CS&q=data&openOnly=true&limit=25&offset=50"
     );
     expect(result).toEqual(mockResponse);
   });
