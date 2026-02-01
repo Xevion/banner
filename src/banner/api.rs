@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::banner::{
     SessionPool, create_shared_rate_limiter, errors::BannerApiError, json::parse_json_with_context,
-    middleware::TransparentMiddleware, models::*, nonce, query::SearchQuery,
+    middleware::LoggingMiddleware, models::*, nonce, query::SearchQuery,
     rate_limit_middleware::RateLimitMiddleware, util::user_agent,
 };
 use crate::config::RateLimitingConfig;
@@ -46,7 +46,7 @@ impl BannerApi {
                 .build()
                 .context("Failed to create HTTP client")?,
         )
-        .with(TransparentMiddleware)
+        .with(LoggingMiddleware)
         .with(RateLimitMiddleware::new(rate_limiter.clone()))
         .build();
 

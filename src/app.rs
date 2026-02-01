@@ -10,8 +10,10 @@ use crate::web::auth::AuthConfig;
 use anyhow::Context;
 use figment::value::UncasedStr;
 use figment::{Figment, providers::Env};
+use sqlx::ConnectOptions;
 use sqlx::postgres::PgPoolOptions;
 use std::process::ExitCode;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{error, info, warn};
@@ -45,6 +47,11 @@ impl App {
         let slow_threshold = Duration::from_millis(if is_private { 200 } else { 500 });
 
         // Create database connection pool
+        let connect_options = sqlx::postgres::PgConnectOptions::from_str(&config.database_url)
+            .context("Failed to parse database URL")?
+            .log_statements(tracing::log::LevelFilter::Debug)
+            .log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_secs(1));
+
         let db_pool = PgPoolOptions::new()
             .min_connections(0)
             .max_connections(4)
@@ -52,7 +59,7 @@ impl App {
             .acquire_timeout(Duration::from_secs(4))
             .idle_timeout(Duration::from_secs(60 * 2))
             .max_lifetime(Duration::from_secs(60 * 30))
-            .connect(&config.database_url)
+            .connect_with(connect_options)
             .await
             .context("Failed to create database pool")?;
 
