@@ -10,6 +10,7 @@ import {
   client,
 } from "$lib/api";
 import { CourseTable } from "$lib/components/course-table";
+import { buildAttributeMap, setCourseDetailContext } from "$lib/components/course-detail/context";
 import FilterChip from "$lib/components/FilterChip.svelte";
 import Footer from "$lib/components/Footer.svelte";
 import Pagination from "$lib/components/Pagination.svelte";
@@ -24,6 +25,8 @@ import { type ScrollMetrics, maskGradient as computeMaskGradient } from "$lib/sc
 import { fly } from "svelte/transition";
 
 let { data } = $props();
+
+let courseTableRef: CourseTable | undefined = $state();
 
 // Read initial state from URL params (intentionally captured once)
 const initialParams = untrack(() => new URLSearchParams(data.url.search));
@@ -87,6 +90,23 @@ const referenceData = $derived({
   campuses: searchOptions?.reference.campuses ?? [],
   partsOfTerm: searchOptions?.reference.partsOfTerm ?? [],
   attributes: searchOptions?.reference.attributes ?? [],
+});
+
+// Provide attribute descriptions and navigation to CourseDetail components via context
+const attributeMap = $derived(buildAttributeMap(referenceData.attributes));
+const courseDetailCtx: import("$lib/components/course-detail/context").CourseDetailContext = {
+  get attributeMap() {
+    return attributeMap;
+  },
+  navigateToSection: null,
+};
+setCourseDetailContext(courseDetailCtx);
+
+// Wire up navigation callback once CourseTable is mounted
+$effect(() => {
+  if (courseTableRef) {
+    courseDetailCtx.navigateToSection = (crn: string) => courseTableRef!.navigateToSection(crn);
+  }
 });
 
 const ranges = $derived(
@@ -905,6 +925,7 @@ $effect(() => {
             </div>
         {:else}
             <CourseTable
+                bind:this={courseTableRef}
                 courses={searchResult?.courses ?? []}
                 {loading}
                 {sorting}

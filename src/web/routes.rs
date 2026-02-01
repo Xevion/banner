@@ -50,6 +50,10 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
         .route("/courses/search", get(search_courses))
         .route("/courses/{term}/{crn}", get(get_course))
         .route(
+            "/courses/{term}/{subject}/{course_number}/sections",
+            get(get_related_sections),
+        )
+        .route(
             "/courses/{term}/{crn}/calendar.ics",
             get(calendar::course_ics),
         )
@@ -832,6 +836,35 @@ async fn get_course(
         .await
         .unwrap_or_default();
     Ok(Json(build_course_response(&course, instructors)))
+}
+
+/// `GET /api/courses/:term/:subject/:course_number/sections`
+///
+/// Returns all sections of the same course (same term, subject, course number).
+async fn get_related_sections(
+    State(state): State<AppState>,
+    Path((term, subject, course_number)): Path<(String, String, String)>,
+) -> Result<Json<Vec<CourseResponse>>, ApiError> {
+    let courses =
+        data::courses::get_related_sections(&state.db_pool, &term, &subject, &course_number)
+            .await
+            .map_err(|e| db_error("Related sections lookup", e))?;
+
+    let course_ids: Vec<i32> = courses.iter().map(|c| c.id).collect();
+    let mut instructor_map =
+        data::courses::get_instructors_for_courses(&state.db_pool, &course_ids)
+            .await
+            .unwrap_or_default();
+
+    let responses: Vec<CourseResponse> = courses
+        .iter()
+        .map(|course| {
+            let instructors = instructor_map.remove(&course.id).unwrap_or_default();
+            build_course_response(course, instructors)
+        })
+        .collect();
+
+    Ok(Json(responses))
 }
 
 /// `GET /api/reference/:category`

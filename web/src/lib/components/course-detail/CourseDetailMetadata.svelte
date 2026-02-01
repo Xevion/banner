@@ -1,0 +1,98 @@
+<script lang="ts">
+import type { CourseResponse } from "$lib/api";
+import { formatCreditHours } from "$lib/course";
+import { formatNumber } from "$lib/utils";
+import { Info } from "@lucide/svelte";
+import SimpleTooltip from "../SimpleTooltip.svelte";
+import { getCourseDetailContext } from "./context";
+
+let { course }: { course: CourseResponse } = $props();
+
+const ctx = getCourseDetailContext();
+</script>
+
+<!-- Compact key-value metadata strip -->
+<div class="flex flex-col gap-2">
+  <!-- Primary row: always-present fields -->
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+    <span class="inline-flex items-center gap-1.5">
+      <span class="text-muted-foreground text-xs">Delivery</span>
+      <span class="text-foreground">
+        {course.instructionalMethod ?? "\u2014"}
+        {#if course.campus}
+          <span class="text-muted-foreground"> &middot; {course.campus}</span>
+        {/if}
+      </span>
+    </span>
+
+    <span class="text-border">|</span>
+
+    <span class="inline-flex items-center gap-1.5">
+      <span class="text-muted-foreground text-xs">Credits</span>
+      <span class="text-foreground">{formatCreditHours(course)}</span>
+    </span>
+
+    {#if course.enrollment.waitCapacity > 0}
+      <span class="text-border">|</span>
+      <span class="inline-flex items-center gap-1.5">
+        <span class="text-muted-foreground text-xs">Waitlist</span>
+        <span class="text-foreground">
+          {formatNumber(course.enrollment.waitCount)}/{formatNumber(
+            course.enrollment.waitCapacity
+          )}
+        </span>
+      </span>
+    {/if}
+
+    {#if course.crossList}
+      <span class="text-border">|</span>
+      <span class="inline-flex items-center gap-1.5">
+        <SimpleTooltip
+          text="Cross-listed sections share enrollment across multiple course numbers."
+          delay={150}
+          passthrough
+        >
+          <span class="text-muted-foreground text-xs inline-flex items-center gap-0.5">
+            Cross-list
+            <Info class="size-2.5 text-muted-foreground/50" />
+          </span>
+        </SimpleTooltip>
+        <span
+          class="font-mono text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5"
+        >
+          {course.crossList.identifier}
+        </span>
+        {#if course.crossList.count != null && course.crossList.capacity != null}
+          <span class="text-muted-foreground text-xs">
+            {formatNumber(course.crossList.count)}/{formatNumber(course.crossList.capacity)}
+          </span>
+        {/if}
+      </span>
+    {/if}
+  </div>
+
+  <!-- Attributes row: only if present -->
+  {#if course.attributes.length > 0}
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="text-muted-foreground text-xs mr-1">Attributes</span>
+      {#each course.attributes as attr}
+        {@const description = ctx?.attributeMap[attr]}
+        {#if description}
+          <SimpleTooltip text={description} delay={100} passthrough>
+            <span
+              class="inline-flex text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors cursor-default"
+            >
+              {attr}
+            </span>
+          </SimpleTooltip>
+        {:else}
+          <span
+            class="inline-flex text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground"
+          >
+            {attr}
+          </span>
+        {/if}
+      {/each}
+    </div>
+  {/if}
+</div>

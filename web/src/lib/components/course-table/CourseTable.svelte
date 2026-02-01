@@ -29,6 +29,10 @@ const state = useCourseTableState(
   () => courses,
   () => limit
 );
+
+export function navigateToSection(crn: string) {
+  state.toggleRow(crn);
+}
 </script>
 
 <CourseTableMobile

@@ -319,6 +319,24 @@ pub async fn get_subjects_by_enrollment(
     Ok(rows)
 }
 
+/// Get all sections of the same course (same term, subject, and course number).
+pub async fn get_related_sections(
+    db_pool: &PgPool,
+    term_code: &str,
+    subject: &str,
+    course_number: &str,
+) -> Result<Vec<Course>> {
+    let courses = sqlx::query_as::<_, Course>(
+        "SELECT * FROM courses WHERE term_code = $1 AND subject = $2 AND course_number = $3 ORDER BY sequence_number ASC NULLS LAST",
+    )
+    .bind(term_code)
+    .bind(subject)
+    .bind(course_number)
+    .fetch_all(db_pool)
+    .await?;
+    Ok(courses)
+}
+
 /// Get all distinct term codes that have courses in the DB.
 pub async fn get_available_terms(db_pool: &PgPool) -> Result<Vec<String>> {
     let rows: Vec<(String,)> =
