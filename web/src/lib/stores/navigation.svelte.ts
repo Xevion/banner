@@ -70,8 +70,14 @@ export function initNavigation() {
   });
 
   onNavigate((navigation) => {
-    if (!document.startViewTransition) {
-      // No view transitions — update path when navigation completes
+    // Skip document-level view transitions for same-page navigations (e.g.
+    // query param updates from filter changes). Document transitions apply
+    // visibility:hidden to the entire page, blocking all pointer interaction.
+    const fromPath = navigation.from?.url.pathname;
+    const toPath = navigation.to?.url.pathname;
+    const isPageChange = fromPath !== toPath;
+
+    if (!document.startViewTransition || !isPageChange) {
       navigation.complete.then(() => {
         navbar.path = window.location.pathname;
       });
