@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.2](https://github.com/Xevion/Banner/compare/v0.6.1...v0.6.2) (2026-02-01)
+
+
+### Features
+
+* **web:** Add dynamic range sliders with consolidated search options API ([f5a639e](https://github.com/Xevion/Banner/commit/f5a639e88bfe03dfc635f25e06fc22208ee0c855))
+* **web:** Batch rapid search query changes into history entries, allow for query history ([e920968](https://github.com/Xevion/Banner/commit/e9209684eb051f978607a31f237b19e883af5d5a))
+* **web:** Build responsive layout with mobile card view ([bd2acee](https://github.com/Xevion/Banner/commit/bd2acee6f40c0768898ab39e0524c0474ec4fd31))
+* **web:** Implement aligned course codes with jetbrains mono ([567c4ae](https://github.com/Xevion/Banner/commit/567c4aec3ca7baaeb548fff2005d83f7e6228d79))
+* **web:** Implement multi-dimensional course filtering system ([106bf23](https://github.com/Xevion/Banner/commit/106bf232c4b53f4ca8902a582f185e146878c54e))
+* **web:** Implement smooth view transitions for search results ([5729a82](https://github.com/Xevion/Banner/commit/5729a821d54d95a00e9f4ba736a2bd884c0c409b))
+
+
+### Bug Fixes
+
+* **cli:** Add proper flag validation for check script ([2acf52a](https://github.com/Xevion/Banner/commit/2acf52a63b6dcd24ca826b99061bf7a51a9230b1))
+* **data:** Handle alphanumeric course numbers in range filtering ([96a8c13](https://github.com/Xevion/Banner/commit/96a8c13125428f1cc14e46d8f580719c17c029ef))
+* Re-add overflow hidden for page transitions, but with negative margin padding to avoid clipping ([9e825cd](https://github.com/Xevion/Banner/commit/9e825cd113bbc65c10f0386b5300b6aec50bf936))
+* Separate Biome format and lint checks to enable auto-format ([ac8dbb2](https://github.com/Xevion/Banner/commit/ac8dbb2eefe79ec5d898cfa719e270f4713125d5))
+* **web:** Ignore .svelte-kit/generated in vite watcher ([b562fe2](https://github.com/Xevion/Banner/commit/b562fe227e89a0826fe4587372e3eeca2ab6eb33))
+* **web:** Prevent duplicate searches and background fetching on navigation ([5dd35ed](https://github.com/Xevion/Banner/commit/5dd35ed215d3d1f3603e67a2aa59eaddf619f5c9))
+* **web:** Prevent interaction blocking during search transitions ([7f0f087](https://github.com/Xevion/Banner/commit/7f0f08725a668c5ac88c510f43791d90ce2f795e))
+* **web:** Skip view transitions for same-page navigations ([b37604f](https://github.com/Xevion/Banner/commit/b37604f8071741017a83f74a67b73cf7975827ae))
+
+
+### Code Refactoring
+
+* **api:** Extract toURLSearchParams helper for query param handling ([6c15f40](https://github.com/Xevion/Banner/commit/6c15f4082f1a4b6fb6c54c545c6e0ec47e191654))
+* **api:** Rename middleware and enable database query logging ([f387401](https://github.com/Xevion/Banner/commit/f387401a4174d4d0bdf74deccdda80b3af543b74))
+* Migrate API responses from manual JSON to type-safe bindings ([0ee4e8a](https://github.com/Xevion/Banner/commit/0ee4e8a8bc1fe0b079fea84ac303674083b43a59))
+* Standardize error responses with ApiError and ts-rs bindings ([239f7ee](https://github.com/Xevion/Banner/commit/239f7ee38cbc0e49d9041579fc9923fd4a4608bf))
+* **web:** Consolidate tooltip implementations with shared components ([d91f7ab](https://github.com/Xevion/Banner/commit/d91f7ab34299b26dc12d629bf99d502ee05e7cfa))
+* **web:** Extract FilterPopover component and upgrade range sliders ([4e01406](https://github.com/Xevion/Banner/commit/4e0140693b00686e8a57561b0811fdf25a614e65))
+* **web:** Replace component tooltips with delegated singleton ([d278498](https://github.com/Xevion/Banner/commit/d278498daa4afc82c877b536ecd1264970dc92a7))
+* **web:** Split CourseTable into modular component structure ([bbff2b7](https://github.com/Xevion/Banner/commit/bbff2b7f36744808b62ec130be2cfbdc96f87b69))
+* **web:** Streamline filter ui with simplified removal ([4426042](https://github.com/Xevion/Banner/commit/44260422d68e910ed4ad37e78cd8a1d1f8bb51a3))
+
+
+### Miscellaneous
+
+* Add aliases to Justfile ([02b18f0](https://github.com/Xevion/Banner/commit/02b18f0c66dc8b876452f35999c027475df52462))
+* Add dev-build flag for embedded vite builds ([5134ae9](https://github.com/Xevion/Banner/commit/5134ae93881854ac722dc9e7f3f5040aee3e517a))
+
 ## [0.6.1](https://github.com/Xevion/Banner/compare/v0.6.0...v0.6.1) (2026-01-31)
 
 
