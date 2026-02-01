@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { CodeDescription } from "$lib/bindings";
+import { toggleValue } from "$lib/filters";
 import FilterPopover from "./FilterPopover.svelte";
 
 let {
@@ -27,10 +28,6 @@ const hasActiveFilters = $derived(
     partOfTerm.length > 0 ||
     attributes.length > 0
 );
-
-function toggleValue(arr: string[], code: string): string[] {
-  return arr.includes(code) ? arr.filter((v) => v !== code) : [...arr, code];
-}
 
 const sections: {
   label: string;

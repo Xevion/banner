@@ -23,9 +23,17 @@ async function handleToggle(event: MouseEvent) {
   const y = event.clientY;
   const endRadius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
 
+  // Suppress named view-transition elements during theme change so they don't
+  // get their own transition group and snap to the new theme ahead of the mask.
+  document.documentElement.classList.add("theme-transitioning");
+
   const transition = document.startViewTransition(async () => {
     themeStore.toggle();
     await tick();
+  });
+
+  transition.finished.finally(() => {
+    document.documentElement.classList.remove("theme-transitioning");
   });
 
   transition.ready.then(() => {

@@ -20,6 +20,7 @@ import { Check, Columns3, RotateCcw } from "@lucide/svelte";
 import type { SortingState, VisibilityState } from "@tanstack/table-core";
 import { DropdownMenu } from "bits-ui";
 import { tick, untrack } from "svelte";
+import { type ScrollMetrics, maskGradient as computeMaskGradient } from "$lib/scroll-fade";
 import { fly } from "svelte/transition";
 
 let { data } = $props();
@@ -482,8 +483,47 @@ function handlePageChange(newOffset: number) {
 // Column visibility state (lifted from CourseTable)
 let columnVisibility: VisibilityState = $state({});
 
+// Responsive column hiding: hide CRN and Location in the sm-to-md range (640-768px)
+let isCompactTable = $state(false);
+// Track columns the user has explicitly toggled so we don't override their choices
+let userToggledColumns = $state(new Set<string>());
+
+$effect(() => {
+  if (typeof window === "undefined") return;
+  const mql = window.matchMedia("(min-width: 640px) and (max-width: 767px)");
+  isCompactTable = mql.matches;
+  const handler = (e: MediaQueryListEvent) => {
+    isCompactTable = e.matches;
+  };
+  mql.addEventListener("change", handler);
+  return () => mql.removeEventListener("change", handler);
+});
+
+// Auto-hide/show columns based on compact mode (only for columns the user hasn't manually toggled)
+const autoHideColumns = ["crn", "location"];
+$effect(() => {
+  const compact = isCompactTable;
+  const toggled = userToggledColumns;
+  const current = untrack(() => columnVisibility);
+  let changed = false;
+  const next = { ...current };
+  for (const col of autoHideColumns) {
+    if (toggled.has(col)) continue;
+    const shouldHide = compact;
+    if (shouldHide && next[col] !== false) {
+      next[col] = false;
+      changed = true;
+    } else if (!shouldHide && next[col] === false) {
+      delete next[col];
+      changed = true;
+    }
+  }
+  if (changed) columnVisibility = next;
+});
+
 function resetColumnVisibility() {
   columnVisibility = {};
+  userToggledColumns = new Set();
 }
 
 let hasCustomVisibility = $derived(Object.values(columnVisibility).some((v) => v === false));
@@ -572,17 +612,54 @@ function clearAllFilters() {
   courseNumberMin = null;
   courseNumberMax = null;
 }
+
+// Scroll-based fade mask for chips container
+let chipsContainer: HTMLDivElement | undefined = $state();
+let scrollMetrics = $state<ScrollMetrics>({ scrollLeft: 0, scrollWidth: 0, clientWidth: 0 });
+
+const maskGradient = $derived(computeMaskGradient(scrollMetrics));
+
+function updateScrollMetrics() {
+  if (!chipsContainer) return;
+  scrollMetrics = {
+    scrollLeft: chipsContainer.scrollLeft,
+    scrollWidth: chipsContainer.scrollWidth,
+    clientWidth: chipsContainer.clientWidth,
+  };
+}
+
+$effect(() => {
+  if (!chipsContainer) return;
+  const el = chipsContainer; // capture for cleanup
+
+  const ro = new ResizeObserver(updateScrollMetrics);
+  ro.observe(el);
+
+  el.addEventListener("scroll", updateScrollMetrics, { passive: true });
+  updateScrollMetrics(); // initial measurement
+
+  return () => {
+    ro.disconnect();
+    el.removeEventListener("scroll", updateScrollMetrics);
+  };
+});
 </script>
 
-<div class="min-h-screen flex flex-col items-center px-5 pb-5 pt-20">
+<div class="min-h-screen flex flex-col items-center px-3 md:px-5 pb-5 pt-20">
     <div class="w-full max-w-6xl flex flex-col pt-2">
         <!-- Chips bar: status | chips | view button -->
-        <div class="flex items-end gap-3 min-h-7">
+        <div class="flex flex-col md:flex-row md:items-end gap-1 md:gap-3 min-h-7">
             <SearchStatus meta={searchMeta} {loading} />
 
             <!-- Active filter chips -->
             <div
-                class="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap pb-1.5"
+                bind:this={chipsContainer}
+                class="flex items-center gap-1.5 flex-1 min-w-0
+                       flex-nowrap overflow-x-auto md:flex-wrap md:overflow-x-visible
+                       -mx-3 px-3 md:mx-0 md:px-0
+                       pb-1.5 scrollbar-none"
+                style:mask-image={maskGradient}
+                style:-webkit-mask-image={maskGradient}
             >
                 {#if selectedSubjects.length > 0}
                     <SegmentedChip
@@ -686,16 +763,18 @@ function clearAllFilters() {
                 {#if activeFilterCount >= 2}
                     <button
                         type="button"
-                        class="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none ml-1"
+                        class="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none ml-1 shrink-0"
                         onclick={clearAllFilters}
                     >
                         Clear all
                     </button>
                 {/if}
+                <!-- Trailing spacer so last chip scrolls past the fade mask -->
+                <div class="shrink-0 w-6 md:hidden" aria-hidden="true"></div>
             </div>
 
             <!-- View columns dropdown (moved from CourseTable) -->
-            <div class="pb-1.5">
+            <div class="hidden md:block pb-1.5">
                 <DropdownMenu.Root>
                     <DropdownMenu.Trigger
                         class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer select-none shrink-0"
@@ -735,6 +814,7 @@ function clearAllFilters() {
                                                     onCheckedChange={(
                                                         checked,
                                                     ) => {
+                                                        userToggledColumns = new Set(userToggledColumns).add(col.id);
                                                         columnVisibility = {
                                                             ...columnVisibility,
                                                             [col.id]: checked,

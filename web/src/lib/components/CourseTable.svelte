@@ -47,6 +47,7 @@ import { ContextMenu, DropdownMenu } from "bits-ui";
 import { flip } from "svelte/animate";
 import { cubicOut } from "svelte/easing";
 import { fade, slide } from "svelte/transition";
+import CourseCard from "./CourseCard.svelte";
 import CourseDetail from "./CourseDetail.svelte";
 import RichTooltip from "./RichTooltip.svelte";
 import SimpleTooltip from "./SimpleTooltip.svelte";
@@ -241,6 +242,12 @@ const table = createSvelteTable({
 });
 </script>
 
+{#snippet emptyState()}
+    <div class="py-8 text-center text-sm text-muted-foreground">
+        No courses found. Try adjusting your filters.
+    </div>
+{/snippet}
+
 {#snippet columnVisibilityGroup(
     Group: typeof DropdownMenu.Group,
     GroupHeading: typeof DropdownMenu.GroupHeading,
@@ -293,10 +300,50 @@ const table = createSvelteTable({
     {/if}
 {/snippet}
 
-<!-- Table with context menu on header -->
+<!-- Mobile cards -->
+<div class="flex flex-col gap-2 sm:hidden">
+    {#if loading && courses.length === 0}
+        {#each Array(skeletonRowCount) as _}
+            <div class="rounded-lg border border-border bg-card p-3 animate-pulse">
+                <div class="flex items-baseline justify-between gap-2">
+                    <div class="flex items-baseline gap-1.5">
+                        <div class="h-4 w-16 bg-muted rounded"></div>
+                        <div class="h-4 w-32 bg-muted rounded"></div>
+                    </div>
+                    <div class="h-4 w-10 bg-muted rounded"></div>
+                </div>
+                <div class="flex items-center justify-between gap-2 mt-1">
+                    <div class="h-3 w-24 bg-muted rounded"></div>
+                    <div class="h-3 w-20 bg-muted rounded"></div>
+                </div>
+            </div>
+        {/each}
+    {:else if courses.length === 0 && !loading}
+        {@render emptyState()}
+    {:else}
+        {#each courses as course (course.crn)}
+            <div class="transition-opacity duration-200 {loading ? 'opacity-45 pointer-events-none' : ''}">
+                <CourseCard
+                    {course}
+                    expanded={expandedCrn === course.crn}
+                    onToggle={() => toggleRow(course.crn)}
+                />
+            </div>
+        {/each}
+    {/if}
+</div>
+
+<!-- CourseTable uses sm: (640px) for card/table switch intentionally.
+     The table renders well at smaller widths than the full app layout (which uses md: 768px). -->
+
+<!-- Desktop table
+     IMPORTANT: !important flags on hidden/block are required because OverlayScrollbars
+     applies inline styles (style="display: ...") to set up its custom scrollbar UI.
+     Inline styles have higher CSS specificity than class utilities, so without !important,
+     the table would remain visible at all viewport widths instead of hiding below 640px. -->
 <div
     bind:this={tableWrapper}
-    class="overflow-x-auto overflow-y-hidden transition-[height] duration-200"
+    class="!hidden sm:!block overflow-x-auto overflow-y-hidden transition-[height] duration-200"
     style:height={contentHeight != null ? `${contentHeight}px` : undefined}
     style:view-transition-name="search-results"
     style:contain="layout"
@@ -304,7 +351,7 @@ const table = createSvelteTable({
 >
     <ContextMenu.Root>
         <ContextMenu.Trigger class="contents">
-            <table bind:this={tableElement} class="w-full min-w-160 border-collapse text-sm">
+            <table bind:this={tableElement} class="w-full min-w-120 md:min-w-160 border-collapse text-sm">
                 <thead>
                     {#each table.getHeaderGroups() as headerGroup}
                         <tr
@@ -389,7 +436,7 @@ const table = createSvelteTable({
                                 colspan={visibleColumnIds.length}
                                 class="py-12 text-center text-muted-foreground"
                             >
-                                No courses found. Try adjusting your filters.
+                                {@render emptyState()}
                             </td>
                         </tr>
                     </tbody>

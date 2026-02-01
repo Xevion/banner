@@ -447,6 +447,15 @@ export function formatInstructorName(displayName: string): string {
   return `${rest} ${last}`;
 }
 
+/** Compact meeting time summary for mobile cards: "MWF 9:00–9:50 AM", "Async", or "TBA" */
+export function formatMeetingTimeSummary(course: CourseResponse): string {
+  if (isAsyncOnline(course)) return "Async";
+  if (course.meetingTimes.length === 0) return "TBA";
+  const mt = course.meetingTimes[0];
+  if (isMeetingTimeTBA(mt) && isTimeTBA(mt)) return "TBA";
+  return `${formatMeetingDays(mt)} ${formatTimeRange(mt.begin_time, mt.end_time)}`;
+}
+
 /** Check if a rating value represents real data (not the 0.0 placeholder for unrated professors). */
 export function isRatingValid(avgRating: number | null, numRatings: number): boolean {
   return avgRating !== null && !(avgRating === 0 && numRatings === 0);

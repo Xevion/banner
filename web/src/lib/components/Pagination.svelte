@@ -68,10 +68,13 @@ const selectValue = $derived(String(currentPage));
     <div class="flex items-start text-xs mt-2 pl-2">
         <!-- Left zone: result count -->
         <div class="flex-1">
-            <span class="text-muted-foreground select-none">
+            <span class="text-muted-foreground select-none hidden md:inline">
                 Showing {formatNumber(start)}&ndash;{formatNumber(end)} of {formatNumber(
                     totalCount,
                 )} courses
+            </span>
+            <span class="text-muted-foreground select-none tabular-nums md:hidden">
+                {formatNumber(start)}&ndash;{formatNumber(end)} / {formatNumber(totalCount)}
             </span>
         </div>
 
@@ -187,10 +190,13 @@ const selectValue = $derived(String(currentPage));
 {:else if totalCount > 0}
     <!-- Single page: just show the count, no pagination controls -->
     <div class="flex items-start text-xs mt-2 pl-2">
-        <span class="text-muted-foreground select-none">
+        <span class="text-muted-foreground select-none hidden md:inline">
             Showing {formatNumber(start)}&ndash;{formatNumber(end)} of {formatNumber(
                 totalCount,
             )} courses
+        </span>
+        <span class="text-muted-foreground select-none tabular-nums md:hidden">
+            {formatNumber(start)}&ndash;{formatNumber(end)} / {formatNumber(totalCount)}
         </span>
     </div>
 {/if}

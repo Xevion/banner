@@ -72,7 +72,7 @@ $effect(() => {
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="relative h-9 rounded-md border border-border bg-card
-           flex flex-nowrap items-center gap-1 w-56 pr-9 overflow-hidden cursor-pointer
+           flex flex-nowrap items-center gap-1 w-full md:w-56 pr-9 overflow-hidden cursor-pointer
            has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background"
     bind:this={containerEl}
     onclick={() => { containerEl?.querySelector('input')?.focus(); }}

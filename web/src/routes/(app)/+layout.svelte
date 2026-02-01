@@ -2,8 +2,8 @@
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { authStore } from "$lib/auth.svelte";
+import BottomSheet from "$lib/components/BottomSheet.svelte";
 import ErrorBoundaryFallback from "$lib/components/ErrorBoundaryFallback.svelte";
-import PageTransition from "$lib/components/PageTransition.svelte";
 import {
   Activity,
   ClipboardList,
@@ -11,6 +11,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   LogOut,
+  MoreHorizontal,
   Settings,
   User,
   Users,
@@ -18,6 +19,8 @@ import {
 import { tick } from "svelte";
 
 let { children } = $props();
+
+let moreSheetOpen = $state(false);
 
 // Track boundary reset function so navigation can auto-clear errors
 let boundaryReset = $state<(() => void) | null>(null);
@@ -65,6 +68,27 @@ function isActive(href: string): boolean {
   if (href === "/admin") return page.url.pathname === "/admin";
   return page.url.pathname.startsWith(href);
 }
+
+// Bottom tab bar definitions
+const adminTabs = [
+  { href: "/profile", icon: User, label: "Profile" },
+  { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/admin/scraper", icon: Activity, label: "Scraper" },
+] as const;
+
+const nonAdminTabs = [
+  { href: "/profile", icon: User, label: "Profile" },
+  { href: "/settings", icon: Settings, label: "Settings" },
+] as const;
+
+// "More" sheet items (admin only, items not in the tab bar)
+const moreSheetItems = [
+  { href: "/settings", icon: Settings, label: "Settings" },
+  { href: "/admin/jobs", icon: ClipboardList, label: "Scrape Jobs" },
+  { href: "/admin/audit", icon: FileText, label: "Audit Log" },
+  { href: "/admin/users", icon: Users, label: "Users" },
+  { href: "/admin/instructors", icon: GraduationCap, label: "Instructors" },
+] as const;
 </script>
 
 {#if authStore.isLoading}
@@ -80,10 +104,10 @@ function isActive(href: string): boolean {
     </div>
   </div>
 {:else}
-  <div class="flex flex-col items-center px-5 pb-5 pt-20">
+  <div class="flex flex-col items-center px-3 md:px-5 pb-20 md:pb-5 pt-20">
     <div class="w-full max-w-6xl flex gap-8">
       <!-- Inline sidebar -->
-      <aside class="w-48 shrink-0 pt-1">
+      <aside class="hidden md:block w-48 shrink-0 pt-1">
         {#if authStore.user}
           <div class="mb-4 px-2">
             <p class="text-sm font-medium text-foreground">{authStore.user.discordUsername}</p>
@@ -135,11 +159,9 @@ function isActive(href: string): boolean {
       </aside>
 
       <!-- Content -->
-      <main class="flex-1 min-w-0">
+      <main class="flex-1 min-w-0" style="view-transition-name: app-content">
         <svelte:boundary onerror={onBoundaryError}>
-          <PageTransition key={page.url.pathname} axis="vertical">
             {@render children()}
-          </PageTransition>
 
           {#snippet failed(error, reset)}
             <ErrorBoundaryFallback title="Page error" {error} {reset} />
@@ -148,4 +170,69 @@ function isActive(href: string): boolean {
       </main>
     </div>
   </div>
+
+  <!-- Mobile bottom tab bar -->
+  <nav class="fixed bottom-0 inset-x-0 z-30 md:hidden bg-background/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom)]">
+    <div class="flex">
+      {#each authStore.isAdmin ? adminTabs : nonAdminTabs as tab}
+        <a
+          href={tab.href}
+          class="flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[56px] no-underline
+            {isActive(tab.href) ? 'text-foreground' : 'text-muted-foreground'}"
+        >
+          <tab.icon size={20} strokeWidth={1.75} />
+          <span class="text-[10px] font-medium">{tab.label}</span>
+        </a>
+      {/each}
+      {#if authStore.isAdmin}
+        <button
+          onclick={() => (moreSheetOpen = true)}
+          class="flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[56px]
+            bg-transparent border-none cursor-pointer text-muted-foreground"
+        >
+          <MoreHorizontal size={20} strokeWidth={1.75} />
+          <span class="text-[10px] font-medium">More</span>
+        </button>
+      {:else}
+        <button
+          onclick={() => authStore.logout()}
+          class="flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[56px]
+            bg-transparent border-none cursor-pointer text-muted-foreground"
+        >
+          <LogOut size={20} strokeWidth={1.75} />
+          <span class="text-[10px] font-medium">Sign Out</span>
+        </button>
+      {/if}
+    </div>
+  </nav>
+
+  <!-- Admin "More" bottom sheet -->
+  {#if authStore.isAdmin}
+    <BottomSheet bind:open={moreSheetOpen} maxHeight="60vh" label="More options">
+      <nav class="flex flex-col gap-0.5 px-4 pb-4">
+        {#each moreSheetItems as item}
+          <a
+            href={item.href}
+            onclick={() => (moreSheetOpen = false)}
+            class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors
+              {isActive(item.href)
+                ? 'text-foreground bg-muted font-medium'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
+          >
+            <item.icon size={15} strokeWidth={2} />
+            {item.label}
+          </a>
+        {/each}
+        <div class="my-2 mx-2 border-t border-border"></div>
+        <button
+          onclick={() => { moreSheetOpen = false; authStore.logout(); }}
+          class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer
+            bg-transparent border-none text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+        >
+          <LogOut size={15} strokeWidth={2} />
+          Sign Out
+        </button>
+      </nav>
+    </BottomSheet>
+  {/if}
 {/if}

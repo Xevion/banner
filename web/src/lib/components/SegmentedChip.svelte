@@ -10,7 +10,7 @@ let {
 
 {#if segments.length > 0}
   <span
-    class="inline-flex items-center rounded-full border border-border bg-muted/40 text-xs text-muted-foreground"
+    class="inline-flex items-center rounded-full border border-border bg-muted/40 text-xs text-muted-foreground shrink-0"
   >
     {#each segments as segment, i}
       {#if i > 0}
