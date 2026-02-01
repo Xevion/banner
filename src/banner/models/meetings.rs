@@ -3,6 +3,7 @@ use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc, Weekday};
 use extension_traits::extension;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{cmp::Ordering, str::FromStr};
+use ts_rs::TS;
 
 use super::terms::Term;
 
@@ -199,7 +200,8 @@ impl TryFrom<MeetingDays> for Weekday {
 }
 
 /// Time range for meetings
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct TimeRange {
     pub start: NaiveTime,
     pub end: NaiveTime,

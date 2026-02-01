@@ -238,9 +238,11 @@ fn parse_hhmm(s: &str) -> Option<u16> {
     Some(hours * 60 + mins)
 }
 
-/// Parse "MM/DD/YYYY" → NaiveDate.
+/// Parse a date string in either MM/DD/YYYY or YYYY-MM-DD format.
 fn parse_date(s: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(s, "%m/%d/%Y").ok()
+    NaiveDate::parse_from_str(s, "%m/%d/%Y")
+        .or_else(|_| NaiveDate::parse_from_str(s, "%Y-%m-%d"))
+        .ok()
 }
 
 // ── Slot matching ───────────────────────────────────────────────────

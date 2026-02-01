@@ -225,7 +225,8 @@ pub async fn get_course_instructors(
 ) -> Result<Vec<CourseInstructorDetail>> {
     let rows = sqlx::query_as::<_, CourseInstructorDetail>(
         r#"
-        SELECT i.id as instructor_id, ci.banner_id, i.display_name, i.email, ci.is_primary,
+        SELECT i.id as instructor_id, ci.banner_id, i.display_name, i.first_name, i.last_name,
+               i.email, ci.is_primary,
                rmp.avg_rating, rmp.num_ratings, rmp.rmp_legacy_id,
                ci.course_id
         FROM course_instructors ci
@@ -261,7 +262,8 @@ pub async fn get_instructors_for_courses(
 
     let rows = sqlx::query_as::<_, CourseInstructorDetail>(
         r#"
-        SELECT i.id as instructor_id, ci.banner_id, i.display_name, i.email, ci.is_primary,
+        SELECT i.id as instructor_id, ci.banner_id, i.display_name, i.first_name, i.last_name,
+               i.email, ci.is_primary,
                rmp.avg_rating, rmp.num_ratings, rmp.rmp_legacy_id,
                ci.course_id
         FROM course_instructors ci

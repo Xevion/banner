@@ -2,12 +2,15 @@ import { authStore } from "$lib/auth.svelte";
 import type {
   AdminStatusResponse,
   ApiError,
+  ApiErrorCode,
   AuditLogEntry,
   AuditLogResponse,
   CandidateResponse,
   CodeDescription,
   CourseResponse,
+  DayOfWeek,
   DbMeetingTime,
+  DeliveryMode,
   FilterRanges,
   InstructorDetail,
   InstructorDetailResponse,
@@ -57,12 +60,15 @@ const API_BASE_URL = "/api";
 export type {
   AdminStatusResponse,
   ApiError,
+  ApiErrorCode,
   AuditLogEntry,
   AuditLogResponse,
   CandidateResponse,
   CodeDescription,
   CourseResponse,
+  DayOfWeek,
   DbMeetingTime,
+  DeliveryMode,
   FilterRanges,
   InstructorDetail,
   InstructorDetailResponse,
@@ -144,7 +150,7 @@ function toURLSearchParams(obj: Record<string, unknown>): URLSearchParams {
  * API error class that wraps the structured ApiError response from the backend.
  */
 export class ApiErrorClass extends Error {
-  public readonly code: string;
+  public readonly code: ApiErrorCode;
   public readonly details: unknown | null;
 
   constructor(apiError: ApiError) {
@@ -213,7 +219,7 @@ export class BannerApiClient {
         apiError = (await response.json()) as ApiError;
       } catch {
         apiError = {
-          code: "UNKNOWN_ERROR",
+          code: "INTERNAL_ERROR",
           message: `API request failed: ${response.status} ${response.statusText}`,
           details: null,
         };
@@ -244,7 +250,7 @@ export class BannerApiClient {
         apiError = (await response.json()) as ApiError;
       } catch {
         apiError = {
-          code: "UNKNOWN_ERROR",
+          code: "INTERNAL_ERROR",
           message: `API request failed: ${response.status} ${response.statusText}`,
           details: null,
         };

@@ -3,26 +3,16 @@ import { formatMeetingTimeSummary } from "$lib/course";
 import type { CourseResponse, DbMeetingTime } from "$lib/api";
 
 function makeMeetingTime(overrides: Partial<DbMeetingTime> = {}): DbMeetingTime {
-  return {
-    begin_time: null,
-    end_time: null,
-    start_date: "2025-01-13",
-    end_date: "2025-05-08",
-    monday: false,
-    tuesday: false,
-    wednesday: false,
-    thursday: false,
-    friday: false,
-    saturday: false,
-    sunday: false,
-    building: null,
-    building_description: null,
-    room: null,
-    campus: null,
-    meeting_type: "CLAS",
-    meeting_schedule_type: "LEC",
+  const mt: DbMeetingTime = {
+    timeRange: null,
+    dateRange: { start: "2025-01-13", end: "2025-05-08" },
+    days: [],
+    location: null,
+    meetingType: "CLAS",
+    meetingScheduleType: "LEC",
     ...overrides,
   };
+  return mt;
 }
 
 function makeCourse(overrides: Partial<CourseResponse> = {}): CourseResponse {
@@ -35,19 +25,16 @@ function makeCourse(overrides: Partial<CourseResponse> = {}): CourseResponse {
     sequenceNumber: null,
     instructionalMethod: null,
     campus: null,
-    enrollment: 10,
-    maxEnrollment: 30,
-    waitCount: 0,
-    waitCapacity: 0,
-    creditHours: 3,
-    creditHourLow: null,
-    creditHourHigh: null,
+    enrollment: { current: 10, max: 30, waitCount: 0, waitCapacity: 0 },
+    creditHours: { type: "fixed", hours: 3 },
     crossList: null,
-    crossListCapacity: null,
-    crossListCount: null,
-    linkIdentifier: null,
-    isSectionLinked: null,
+    sectionLink: null,
     partOfTerm: null,
+    isAsyncOnline: false,
+    deliveryMode: null,
+    primaryLocation: null,
+    hasPhysicalLocation: false,
+    primaryInstructorId: null,
     meetingTimes: [],
     attributes: [],
     instructors: [],
@@ -58,7 +45,12 @@ function makeCourse(overrides: Partial<CourseResponse> = {}): CourseResponse {
 describe("formatMeetingTimeSummary", () => {
   it("returns 'Async' for async online courses", () => {
     const course = makeCourse({
-      meetingTimes: [makeMeetingTime({ building: "INT" })],
+      isAsyncOnline: true,
+      meetingTimes: [
+        makeMeetingTime({
+          location: { building: "INT", buildingDescription: null, room: null, campus: null },
+        }),
+      ],
     });
     expect(formatMeetingTimeSummary(course)).toBe("Async");
   });
@@ -79,11 +71,8 @@ describe("formatMeetingTimeSummary", () => {
     const course = makeCourse({
       meetingTimes: [
         makeMeetingTime({
-          monday: true,
-          wednesday: true,
-          friday: true,
-          begin_time: "0900",
-          end_time: "0950",
+          days: ["monday", "wednesday", "friday"],
+          timeRange: { start: "09:00:00", end: "09:50:00" },
         }),
       ],
     });
@@ -94,8 +83,7 @@ describe("formatMeetingTimeSummary", () => {
     const course = makeCourse({
       meetingTimes: [
         makeMeetingTime({
-          tuesday: true,
-          thursday: true,
+          days: ["tuesday", "thursday"],
         }),
       ],
     });

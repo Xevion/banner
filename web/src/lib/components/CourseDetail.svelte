@@ -2,13 +2,10 @@
 import type { CourseResponse } from "$lib/api";
 import { useClipboard } from "$lib/composables/useClipboard.svelte";
 import {
-  RMP_CONFIDENCE_THRESHOLD,
   formatCreditHours,
   formatDate,
   formatMeetingDaysLong,
   formatTime,
-  isMeetingTimeTBA,
-  isTimeTBA,
   ratingStyle,
   rmpUrl,
 } from "$lib/course";
@@ -45,31 +42,29 @@ const clipboard = useClipboard();
                                 <span
                                     class="inline-flex items-center gap-1.5 text-sm font-medium bg-card border border-border rounded-md px-2.5 py-1 text-foreground hover:border-foreground/20 hover:bg-card/80 transition-colors"
                                 >
-                                    {instructor.displayName}
-                                    {#if instructor.rmpRating != null}
-                                        {@const rating = instructor.rmpRating}
-                                        {@const lowConfidence =
-                                            (instructor.rmpNumRatings ?? 0) <
-                                            RMP_CONFIDENCE_THRESHOLD}
-                                        <span
-                                            class="text-[10px] font-semibold inline-flex items-center gap-0.5"
-                                            style={ratingStyle(
-                                                rating,
-                                                themeStore.isDark,
-                                            )}
-                                        >
-                                            {rating.toFixed(1)}
-                                            {#if lowConfidence}
-                                                <Triangle
-                                                    class="size-2 fill-current"
-                                                />
-                                            {:else}
-                                                <Star
-                                                    class="size-2.5 fill-current"
-                                                />
-                                            {/if}
-                                        </span>
-                                    {/if}
+                                     {instructor.displayName}
+                                     {#if instructor.rmp != null}
+                                         {@const rating = instructor.rmp.avgRating}
+                                         {@const lowConfidence = !instructor.rmp.isConfident}
+                                         <span
+                                             class="text-[10px] font-semibold inline-flex items-center gap-0.5"
+                                             style={ratingStyle(
+                                                 rating,
+                                                 themeStore.isDark,
+                                             )}
+                                         >
+                                             {rating.toFixed(1)}
+                                             {#if lowConfidence}
+                                                 <Triangle
+                                                     class="size-2 fill-current"
+                                                 />
+                                             {:else}
+                                                 <Star
+                                                     class="size-2.5 fill-current"
+                                                 />
+                                             {/if}
+                                         </span>
+                                     {/if}
                                 </span>
                             {/snippet}
                             {#snippet content()}
@@ -77,33 +72,33 @@ const clipboard = useClipboard();
                                     <div class="font-medium">
                                         {instructor.displayName}
                                     </div>
-                                    {#if instructor.isPrimary}
-                                        <div class="text-muted-foreground">
-                                            Primary instructor
-                                        </div>
-                                    {/if}
-                                    {#if instructor.rmpRating != null}
-                                        <div class="text-muted-foreground">
-                                            {instructor.rmpRating.toFixed(1)}/5
-                                            · {instructor.rmpNumRatings ?? 0} ratings
-                                            {#if (instructor.rmpNumRatings ?? 0) < RMP_CONFIDENCE_THRESHOLD}
-                                                (low)
-                                            {/if}
-                                        </div>
-                                    {/if}
-                                    {#if instructor.rmpLegacyId != null}
-                                        <a
-                                            href={rmpUrl(
-                                                instructor.rmpLegacyId,
-                                            )}
-                                            target="_blank"
-                                            rel="noopener"
-                                            class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-                                        >
-                                            <ExternalLink class="size-3" />
-                                            <span>View on RMP</span>
-                                        </a>
-                                    {/if}
+                                     {#if instructor.isPrimary}
+                                         <div class="text-muted-foreground">
+                                             Primary instructor
+                                         </div>
+                                     {/if}
+                                     {#if instructor.rmp != null}
+                                         <div class="text-muted-foreground">
+                                             {instructor.rmp.avgRating.toFixed(1)}/5
+                                             · {instructor.rmp.numRatings} ratings
+                                             {#if !instructor.rmp.isConfident}
+                                                 (low)
+                                             {/if}
+                                         </div>
+                                     {/if}
+                                     {#if instructor.rmp?.legacyId != null}
+                                         <a
+                                             href={rmpUrl(
+                                                 instructor.rmp.legacyId,
+                                             )}
+                                             target="_blank"
+                                             rel="noopener"
+                                             class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                                         >
+                                             <ExternalLink class="size-3" />
+                                             <span>View on RMP</span>
+                                         </a>
+                                     {/if}
                                     {#if instructor.email}
                                         <button
                                             onclick={(e) =>
@@ -136,56 +131,56 @@ const clipboard = useClipboard();
         <div>
             <h4 class="text-sm text-foreground mb-2">Meeting Times</h4>
             {#if course.meetingTimes.length > 0}
-                <ul class="flex flex-col gap-y-2">
-                    {#each course.meetingTimes as mt}
-                        <li>
-                            {#if isMeetingTimeTBA(mt) && isTimeTBA(mt)}
-                                <span class="italic text-muted-foreground"
-                                    >TBA</span
-                                >
-                            {:else}
-                                <div class="flex items-baseline gap-1.5">
-                                    {#if !isMeetingTimeTBA(mt)}
-                                        <span
-                                            class="font-medium text-foreground"
-                                        >
-                                            {formatMeetingDaysLong(mt)}
-                                        </span>
-                                    {/if}
-                                    {#if !isTimeTBA(mt)}
-                                        <span class="text-muted-foreground">
-                                            {formatTime(
-                                                mt.begin_time,
-                                            )}&ndash;{formatTime(mt.end_time)}
-                                        </span>
-                                    {:else}
-                                        <span
-                                            class="italic text-muted-foreground"
-                                            >Time TBA</span
-                                        >
-                                    {/if}
-                                </div>
-                            {/if}
-                            {#if mt.building || mt.room}
-                                <div
-                                    class="text-xs text-muted-foreground mt-0.5"
-                                >
-                                    {mt.building_description ??
-                                        mt.building}{mt.room
-                                        ? ` ${mt.room}`
-                                        : ""}
-                                </div>
-                            {/if}
-                            <div
-                                class="text-xs text-muted-foreground/70 mt-0.5"
-                            >
-                                {formatDate(mt.start_date)} &ndash; {formatDate(
-                                    mt.end_date,
-                                )}
-                            </div>
-                        </li>
-                    {/each}
-                </ul>
+                 <ul class="flex flex-col gap-y-2">
+                     {#each course.meetingTimes as mt}
+                         <li>
+                             {#if mt.days.length === 0 && mt.timeRange === null}
+                                 <span class="italic text-muted-foreground"
+                                     >TBA</span
+                                 >
+                             {:else}
+                                 <div class="flex items-baseline gap-1.5">
+                                     {#if mt.days.length > 0}
+                                         <span
+                                             class="font-medium text-foreground"
+                                         >
+                                             {formatMeetingDaysLong(mt)}
+                                         </span>
+                                     {/if}
+                                     {#if mt.timeRange !== null}
+                                         <span class="text-muted-foreground">
+                                             {formatTime(
+                                                 mt.timeRange.start,
+                                             )}&ndash;{formatTime(mt.timeRange.end)}
+                                         </span>
+                                     {:else}
+                                         <span
+                                             class="italic text-muted-foreground"
+                                             >Time TBA</span
+                                         >
+                                     {/if}
+                                 </div>
+                             {/if}
+                             {#if mt.location?.building || mt.location?.room}
+                                 <div
+                                     class="text-xs text-muted-foreground mt-0.5"
+                                 >
+                                     {mt.location.buildingDescription ??
+                                         mt.location.building}{mt.location.room
+                                         ? ` ${mt.location.room}`
+                                         : ""}
+                                 </div>
+                             {/if}
+                             <div
+                                 class="text-xs text-muted-foreground/70 mt-0.5"
+                             >
+                                 {formatDate(mt.dateRange.start)} &ndash; {formatDate(
+                                     mt.dateRange.end,
+                                 )}
+                             </div>
+                         </li>
+                     {/each}
+                 </ul>
             {:else}
                 <span class="italic text-muted-foreground">TBA</span>
             {/if}
@@ -256,6 +251,7 @@ const clipboard = useClipboard();
 
         <!-- Cross-list -->
         {#if course.crossList}
+            {@const crossList = course.crossList}
             <div>
                 <h4 class="text-sm text-foreground mb-2">
                     <span class="inline-flex items-center gap-1">
@@ -277,21 +273,21 @@ const clipboard = useClipboard();
                             <span
                                 class="bg-card border border-border rounded-md px-2 py-0.5 text-xs font-medium"
                             >
-                                {course.crossList}
+                                {crossList.identifier}
                             </span>
-                            {#if course.crossListCount != null && course.crossListCapacity != null}
+                            {#if crossList.count != null && crossList.capacity != null}
                                 <span class="text-muted-foreground text-xs">
-                                    {formatNumber(course.crossListCount)}/{formatNumber(course.crossListCapacity)}
+                                    {formatNumber(crossList.count)}/{formatNumber(crossList.capacity)}
                                 </span>
                             {/if}
                         </span>
                     {/snippet}
                     {#snippet content()}
                         Group <span class="font-mono font-medium"
-                            >{course.crossList}</span
+                            >{crossList.identifier}</span
                         >
-                        {#if course.crossListCount != null && course.crossListCapacity != null}
-                            — {formatNumber(course.crossListCount)} enrolled across {formatNumber(course.crossListCapacity)}
+                        {#if crossList.count != null && crossList.capacity != null}
+                            — {formatNumber(crossList.count)} enrolled across {formatNumber(crossList.capacity)}
                             shared seats
                         {/if}
                     {/snippet}
@@ -299,15 +295,15 @@ const clipboard = useClipboard();
             </div>
         {/if}
 
-        <!-- Waitlist -->
-        {#if course.waitCapacity > 0}
-            <div>
-                <h4 class="text-sm text-foreground mb-2">Waitlist</h4>
-                <span class="text-2foreground"
-                    >{formatNumber(course.waitCount)} / {formatNumber(course.waitCapacity)}</span
-                >
-            </div>
-        {/if}
+         <!-- Waitlist -->
+         {#if course.enrollment.waitCapacity > 0}
+             <div>
+                 <h4 class="text-sm text-foreground mb-2">Waitlist</h4>
+                 <span class="text-2foreground"
+                     >{formatNumber(course.enrollment.waitCount)} / {formatNumber(course.enrollment.waitCapacity)}</span
+                 >
+             </div>
+         {/if}
 
         <!-- Calendar Export -->
         {#if course.meetingTimes.length > 0}

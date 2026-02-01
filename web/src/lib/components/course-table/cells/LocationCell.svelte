@@ -1,18 +1,12 @@
 <script lang="ts">
 import type { CourseResponse } from "$lib/api";
-import {
-  concernAccentColor,
-  formatLocationDisplay,
-  formatLocationTooltip,
-  getDeliveryConcern,
-} from "$lib/course";
+import { concernAccentColor, formatLocationTooltip } from "$lib/course";
 
 let { course }: { course: CourseResponse } = $props();
 
-let concern = $derived(getDeliveryConcern(course));
-let accentColor = $derived(concernAccentColor(concern));
-let locTooltip = $derived(formatLocationTooltip(course, concern));
-let locDisplay = $derived(formatLocationDisplay(course, concern));
+let accentColor = $derived(concernAccentColor(course.deliveryMode));
+let locTooltip = $derived(formatLocationTooltip(course));
+let locDisplay = $derived(course.primaryLocation);
 </script>
 
 <td class="py-2 px-2 whitespace-nowrap">

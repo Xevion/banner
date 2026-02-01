@@ -7,6 +7,7 @@ pub mod admin_scraper;
 pub mod assets;
 pub mod auth;
 pub mod calendar;
+pub mod delivery;
 #[cfg(feature = "embed-assets")]
 pub mod encoding;
 pub mod error;

@@ -1,12 +1,6 @@
 <script lang="ts">
 import type { CourseResponse } from "$lib/api";
-import {
-  RMP_CONFIDENCE_THRESHOLD,
-  abbreviateInstructor,
-  getPrimaryInstructor,
-  ratingStyle,
-  rmpUrl,
-} from "$lib/course";
+import { abbreviateInstructor, getPrimaryInstructor, ratingStyle, rmpUrl } from "$lib/course";
 import { themeStore } from "$lib/stores/theme.svelte";
 import { formatNumber } from "$lib/utils";
 import { ExternalLink, Star, Triangle } from "@lucide/svelte";
@@ -14,15 +8,16 @@ import LazyRichTooltip from "$lib/components/LazyRichTooltip.svelte";
 
 let { course }: { course: CourseResponse } = $props();
 
-let primary = $derived(getPrimaryInstructor(course.instructors));
+let primary = $derived(getPrimaryInstructor(course.instructors, course.primaryInstructorId));
 let display = $derived(primary ? abbreviateInstructor(primary.displayName) : "Staff");
 let commaIdx = $derived(display.indexOf(", "));
 let ratingData = $derived(
-  primary?.rmpRating != null
+  primary?.rmp != null
     ? {
-        rating: primary.rmpRating,
-        count: primary.rmpNumRatings ?? 0,
-        legacyId: primary.rmpLegacyId ?? null,
+        rating: primary.rmp.avgRating,
+        count: primary.rmp.numRatings,
+        legacyId: primary.rmp.legacyId,
+        isConfident: primary.rmp.isConfident,
       }
     : null
 );
@@ -50,7 +45,7 @@ let ratingData = $derived(
     </span>
   {/if}
   {#if ratingData}
-    {@const lowConfidence = ratingData.count < RMP_CONFIDENCE_THRESHOLD}
+    {@const lowConfidence = !ratingData.isConfident}
     <LazyRichTooltip side="bottom" sideOffset={6} contentClass="px-2.5 py-1.5">
       {#snippet children()}
         <span
@@ -69,7 +64,7 @@ let ratingData = $derived(
         <span class="inline-flex items-center gap-1.5 text-xs">
           {ratingData.rating.toFixed(1)}/5 · {formatNumber(ratingData.count)}
           ratings
-          {#if (ratingData.count ?? 0) < RMP_CONFIDENCE_THRESHOLD}
+          {#if !ratingData.isConfident}
             (low)
           {/if}
           {#if ratingData.legacyId != null}

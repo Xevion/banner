@@ -1,10 +1,19 @@
-import type { CourseResponse, DbMeetingTime, InstructorResponse } from "$lib/api";
+import type {
+  CourseResponse,
+  DayOfWeek,
+  DbMeetingTime,
+  DeliveryMode,
+  InstructorResponse,
+} from "$lib/api";
 
-/** Convert "0900" to "9:00 AM" */
+/** Convert ISO time string "08:30:00" to "8:30 AM" */
 export function formatTime(time: string | null): string {
-  if (!time || time.length !== 4) return "TBA";
-  const hours = parseInt(time.slice(0, 2), 10);
-  const minutes = time.slice(2);
+  if (!time) return "TBA";
+  // ISO format: "HH:MM:SS"
+  const parts = time.split(":");
+  if (parts.length < 2) return "TBA";
+  const hours = parseInt(parts[0], 10);
+  const minutes = parts[1];
   const period = hours >= 12 ? "PM" : "AM";
   const display = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
   return `${display}:${minutes} ${period}`;
@@ -19,37 +28,39 @@ export function formatTime(time: string | null): string {
  * Codes use single letters where unambiguous (M/T/W/F) and
  * two letters where needed (Th/Sa/Su).
  */
+const DAY_SHORT: Record<DayOfWeek, [string, string]> = {
+  monday: ["M", "Mon"],
+  tuesday: ["T", "Tue"],
+  wednesday: ["W", "Wed"],
+  thursday: ["Th", "Thu"],
+  friday: ["F", "Fri"],
+  saturday: ["Sa", "Sat"],
+  sunday: ["Su", "Sun"],
+};
+
 export function formatMeetingDays(mt: DbMeetingTime): string {
-  const dayDefs: [boolean, string, string][] = [
-    [mt.monday, "M", "Mon"],
-    [mt.tuesday, "T", "Tue"],
-    [mt.wednesday, "W", "Wed"],
-    [mt.thursday, "Th", "Thu"],
-    [mt.friday, "F", "Fri"],
-    [mt.saturday, "Sa", "Sat"],
-    [mt.sunday, "Su", "Sun"],
-  ];
-  const active = dayDefs.filter(([a]) => a);
-  if (active.length === 0) return "";
-  if (active.length === 1) return active[0][2];
-  return active.map(([, code]) => code).join("");
+  const days = mt.days;
+  if (days.length === 0) return "";
+  if (days.length === 1) return DAY_SHORT[days[0]][1];
+  return days.map((d) => DAY_SHORT[d][0]).join("");
 }
 
 /** Longer day names for detail view: single day → "Thursdays", multiple → "Mon, Wed, Fri" */
+const DAY_LONG: Record<DayOfWeek, [string, string]> = {
+  monday: ["Mon", "Mondays"],
+  tuesday: ["Tue", "Tuesdays"],
+  wednesday: ["Wed", "Wednesdays"],
+  thursday: ["Thur", "Thursdays"],
+  friday: ["Fri", "Fridays"],
+  saturday: ["Sat", "Saturdays"],
+  sunday: ["Sun", "Sundays"],
+};
+
 export function formatMeetingDaysLong(mt: DbMeetingTime): string {
-  const days: [boolean, string, string][] = [
-    [mt.monday, "Mon", "Mondays"],
-    [mt.tuesday, "Tue", "Tuesdays"],
-    [mt.wednesday, "Wed", "Wednesdays"],
-    [mt.thursday, "Thur", "Thursdays"],
-    [mt.friday, "Fri", "Fridays"],
-    [mt.saturday, "Sat", "Saturdays"],
-    [mt.sunday, "Sun", "Sundays"],
-  ];
-  const active = days.filter(([a]) => a);
-  if (active.length === 0) return "";
-  if (active.length === 1) return active[0][2];
-  return active.map(([, short]) => short).join(", ");
+  const days = mt.days;
+  if (days.length === 0) return "";
+  if (days.length === 1) return DAY_LONG[days[0]][1];
+  return days.map((d) => DAY_LONG[d][0]).join(", ");
 }
 
 /**
@@ -60,30 +71,25 @@ export function formatMeetingDaysLong(mt: DbMeetingTime): string {
  * Missing:      "TBA"
  */
 export function formatTimeRange(begin: string | null, end: string | null): string {
-  if (!begin || begin.length !== 4 || !end || end.length !== 4) return "TBA";
+  if (!begin || !end) return "TBA";
 
-  const bHours = parseInt(begin.slice(0, 2), 10);
-  const eHours = parseInt(end.slice(0, 2), 10);
+  const bParts = begin.split(":");
+  const eParts = end.split(":");
+  if (bParts.length < 2 || eParts.length < 2) return "TBA";
+
+  const bHours = parseInt(bParts[0], 10);
+  const eHours = parseInt(eParts[0], 10);
   const bPeriod = bHours >= 12 ? "PM" : "AM";
   const ePeriod = eHours >= 12 ? "PM" : "AM";
 
   const bDisplay = bHours > 12 ? bHours - 12 : bHours === 0 ? 12 : bHours;
   const eDisplay = eHours > 12 ? eHours - 12 : eHours === 0 ? 12 : eHours;
 
-  const endStr = `${eDisplay}:${end.slice(2)} ${ePeriod}`;
+  const endStr = `${eDisplay}:${eParts[1]} ${ePeriod}`;
   if (bPeriod === ePeriod) {
-    return `${bDisplay}:${begin.slice(2)}–${endStr}`;
+    return `${bDisplay}:${bParts[1]}–${endStr}`;
   }
-  return `${bDisplay}:${begin.slice(2)} ${bPeriod}–${endStr}`;
-}
-
-/** Condensed meeting time: "MWF 9:00–9:50 AM" */
-export function formatMeetingTime(mt: DbMeetingTime): string {
-  const days = formatMeetingDays(mt);
-  if (!days) return "TBA";
-  const range = formatTimeRange(mt.begin_time, mt.end_time);
-  if (range === "TBA") return `${days} TBA`;
-  return `${days} ${range}`;
+  return `${bDisplay}:${bParts[1]} ${bPeriod}–${endStr}`;
 }
 
 /**
@@ -127,81 +133,40 @@ export function abbreviateInstructor(name: string, maxLen: number = 18): string 
   return `${last}, ${parts[0][0]}.`;
 }
 
-/** Get primary instructor from a course, or first instructor */
+/**
+ * Get the primary instructor from a course.
+ *
+ * When `primaryInstructorId` is available (from the backend), does a direct
+ * lookup. Falls back to iterating `isPrimary` / first instructor for safety.
+ */
 export function getPrimaryInstructor(
-  instructors: InstructorResponse[]
+  instructors: InstructorResponse[],
+  primaryInstructorId?: number | null
 ): InstructorResponse | undefined {
+  if (primaryInstructorId != null) {
+    return instructors.find((i) => i.instructorId === primaryInstructorId) ?? instructors[0];
+  }
   return instructors.find((i) => i.isPrimary) ?? instructors[0];
 }
 
-/** Check if a meeting time has no scheduled days */
-export function isMeetingTimeTBA(mt: DbMeetingTime): boolean {
-  return (
-    !mt.monday &&
-    !mt.tuesday &&
-    !mt.wednesday &&
-    !mt.thursday &&
-    !mt.friday &&
-    !mt.saturday &&
-    !mt.sunday
-  );
-}
-
-/** Check if a meeting time has no begin/end times */
-export function isTimeTBA(mt: DbMeetingTime): boolean {
-  return !mt.begin_time || mt.begin_time.length !== 4;
-}
-
-/** Check if course is asynchronous online (INT building with no meeting times) */
-export function isAsyncOnline(course: CourseResponse): boolean {
-  if (course.meetingTimes.length === 0) return false;
-  const mt = course.meetingTimes[0];
-  return mt.building === "INT" && isTimeTBA(mt);
-}
-
-/** Format a date string to "January 20, 2026". Accepts YYYY-MM-DD or MM/DD/YYYY. */
+/** Format an ISO-8601 date (YYYY-MM-DD) to "January 20, 2026". */
 export function formatDate(dateStr: string): string {
-  let year: number, month: number, day: number;
-  if (dateStr.includes("-")) {
-    [year, month, day] = dateStr.split("-").map(Number);
-  } else if (dateStr.includes("/")) {
-    [month, day, year] = dateStr.split("/").map(Number);
-  } else {
-    return dateStr;
-  }
+  const [year, month, day] = dateStr.split("-").map(Number);
   if (!year || !month || !day) return dateStr;
   const date = new Date(year, month - 1, day);
   return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
-/** Short location string from first meeting time: "MH 2.206" or campus fallback */
-export function formatLocation(course: CourseResponse): string | null {
-  for (const mt of course.meetingTimes) {
-    // Skip INT building - handled by formatLocationDisplay
-    if (mt.building === "INT") continue;
-    if (mt.building && mt.room) return `${mt.building} ${mt.room}`;
-    if (mt.building) return mt.building;
-  }
-  return course.campus ?? null;
-}
-
 /** Longer location string using building description: "Main Hall 2.206" */
-export function formatLocationLong(mt: DbMeetingTime): string | null {
-  const name = mt.building_description ?? mt.building;
+function formatLocationLong(mt: DbMeetingTime): string | null {
+  const name = mt.location?.buildingDescription ?? mt.location?.building;
   if (!name) return null;
-  return mt.room ? `${name} ${mt.room}` : name;
+  return mt.location?.room ? `${name} ${mt.location.room}` : name;
 }
 
-/** Format a date as "Aug 26, 2024". Accepts YYYY-MM-DD or MM/DD/YYYY. */
+/** Format an ISO-8601 date (YYYY-MM-DD) as "Aug 26, 2024". */
 export function formatDateShort(dateStr: string): string {
-  let year: number, month: number, day: number;
-  if (dateStr.includes("-")) {
-    [year, month, day] = dateStr.split("-").map(Number);
-  } else if (dateStr.includes("/")) {
-    [month, day, year] = dateStr.split("/").map(Number);
-  } else {
-    return dateStr;
-  }
+  const [year, month, day] = dateStr.split("-").map(Number);
   if (!year || !month || !day) return dateStr;
   const date = new Date(year, month - 1, day);
   return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
@@ -211,20 +176,21 @@ export function formatDateShort(dateStr: string): string {
  * Verbose day names for tooltips: "Tuesdays & Thursdays", "Mondays, Wednesdays & Fridays".
  * Single day → plural: "Thursdays".
  */
+const DAY_VERBOSE: Record<DayOfWeek, string> = {
+  monday: "Mondays",
+  tuesday: "Tuesdays",
+  wednesday: "Wednesdays",
+  thursday: "Thursdays",
+  friday: "Fridays",
+  saturday: "Saturdays",
+  sunday: "Sundays",
+};
+
 export function formatMeetingDaysVerbose(mt: DbMeetingTime): string {
-  const dayDefs: [boolean, string][] = [
-    [mt.monday, "Mondays"],
-    [mt.tuesday, "Tuesdays"],
-    [mt.wednesday, "Wednesdays"],
-    [mt.thursday, "Thursdays"],
-    [mt.friday, "Fridays"],
-    [mt.saturday, "Saturdays"],
-    [mt.sunday, "Sundays"],
-  ];
-  const active = dayDefs.filter(([a]) => a).map(([, name]) => name);
-  if (active.length === 0) return "";
-  if (active.length === 1) return active[0];
-  return active.slice(0, -1).join(", ") + " & " + active[active.length - 1];
+  const names = mt.days.map((d) => DAY_VERBOSE[d]);
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0];
+  return names.slice(0, -1).join(", ") + " & " + names[names.length - 1];
 }
 
 /**
@@ -233,7 +199,7 @@ export function formatMeetingDaysVerbose(mt: DbMeetingTime): string {
  */
 export function formatMeetingTimeTooltip(mt: DbMeetingTime): string {
   const days = formatMeetingDaysVerbose(mt);
-  const range = formatTimeRange(mt.begin_time, mt.end_time);
+  const range = formatTimeRange(mt.timeRange?.start ?? null, mt.timeRange?.end ?? null);
   let line1: string;
   if (!days && range === "TBA") {
     line1 = "TBA";
@@ -248,10 +214,7 @@ export function formatMeetingTimeTooltip(mt: DbMeetingTime): string {
   const parts = [line1];
 
   const loc = formatLocationLong(mt);
-  const dateRange =
-    mt.start_date && mt.end_date
-      ? `${formatDateShort(mt.start_date)} – ${formatDateShort(mt.end_date)}`
-      : null;
+  const dateRange = `${formatDateShort(mt.dateRange.start)} – ${formatDateShort(mt.dateRange.end)}`;
 
   if (loc && dateRange) {
     parts.push(`${loc}, ${dateRange}`);
@@ -270,36 +233,8 @@ export function formatMeetingTimesTooltip(meetingTimes: DbMeetingTime[]): string
   return meetingTimes.map(formatMeetingTimeTooltip).join("\n\n");
 }
 
-/**
- * Delivery concern category for visual accent on location cells.
- * - "online": fully online with no physical location (OA, OS, OH without INT building)
- * - "internet": internet campus with INT building code
- * - "hybrid": mix of online and in-person (HB, H1, H2)
- * - "off-campus": in-person but not on Main Campus
- * - null: normal in-person on main campus (no accent)
- */
-export type DeliveryConcern = "online" | "internet" | "hybrid" | "off-campus" | null;
-
-const ONLINE_METHODS = new Set(["OA", "OS", "OH"]);
-const HYBRID_METHODS = new Set(["HB", "H1", "H2"]);
-const MAIN_CAMPUS = "11";
-const ONLINE_CAMPUSES = new Set(["9", "ONL"]);
-
-export function getDeliveryConcern(course: CourseResponse): DeliveryConcern {
-  const method = course.instructionalMethod;
-  if (method && ONLINE_METHODS.has(method)) {
-    const hasIntBuilding = course.meetingTimes.some((mt: DbMeetingTime) => mt.building === "INT");
-    return hasIntBuilding ? "internet" : "online";
-  }
-  if (method && HYBRID_METHODS.has(method)) return "hybrid";
-  if (course.campus && course.campus !== MAIN_CAMPUS && !ONLINE_CAMPUSES.has(course.campus)) {
-    return "off-campus";
-  }
-  return null;
-}
-
-/** Border accent color for each delivery concern type. */
-export function concernAccentColor(concern: DeliveryConcern): string | null {
+/** Border accent color for each delivery mode type. */
+export function concernAccentColor(concern: DeliveryMode | null): string | null {
   switch (concern) {
     case "online":
       return "#3b82f6"; // blue-500
@@ -314,32 +249,8 @@ export function concernAccentColor(concern: DeliveryConcern): string | null {
   }
 }
 
-/**
- * Location display text for the table cell.
- * Shows "Online" for internet class (INT building) or other online courses.
- */
-export function formatLocationDisplay(
-  course: CourseResponse,
-  concern?: DeliveryConcern
-): string | null {
-  // Check for Internet Class building first
-  const hasIntBuilding = course.meetingTimes.some((mt) => mt.building === "INT");
-  if (hasIntBuilding) return "Online";
-
-  const loc = formatLocation(course);
-  if (loc) return loc;
-
-  const c = concern ?? getDeliveryConcern(course);
-  if (c === "online" || c === "internet") return "Online";
-
-  return null;
-}
-
 /** Tooltip text for the location column: long-form location + delivery note */
-export function formatLocationTooltip(
-  course: CourseResponse,
-  concern?: DeliveryConcern
-): string | null {
+export function formatLocationTooltip(course: CourseResponse): string | null {
   const parts: string[] = [];
 
   for (const mt of course.meetingTimes) {
@@ -349,7 +260,7 @@ export function formatLocationTooltip(
 
   const locationLine = parts.length > 0 ? parts.join(", ") : null;
 
-  const c = concern ?? getDeliveryConcern(course);
+  const c = course.deliveryMode;
   let deliveryNote: string | null = null;
   if (c === "online") deliveryNote = "Online";
   else if (c === "internet") deliveryNote = "Internet";
@@ -362,29 +273,19 @@ export function formatLocationTooltip(
   return null;
 }
 
-/** Number of open seats in a course section */
-export function openSeats(course: CourseResponse): number {
-  return Math.max(0, course.maxEnrollment - course.enrollment);
-}
-
 /** Text color class for seat availability: red (full), yellow (low), green (open) */
-export function seatsColor(course: CourseResponse): string {
-  const open = openSeats(course);
-  if (open === 0) return "text-status-red";
-  if (open <= 5) return "text-yellow-500";
+export function seatsColor(openSeats: number): string {
+  if (openSeats === 0) return "text-status-red";
+  if (openSeats <= 5) return "text-yellow-500";
   return "text-status-green";
 }
 
 /** Background dot color class for seat availability */
-export function seatsDotColor(course: CourseResponse): string {
-  const open = openSeats(course);
-  if (open === 0) return "bg-red-500";
-  if (open <= 5) return "bg-yellow-500";
+export function seatsDotColor(openSeats: number): string {
+  if (openSeats === 0) return "bg-red-500";
+  if (openSeats <= 5) return "bg-yellow-500";
   return "bg-green-500";
 }
-
-/** Minimum number of ratings needed to consider RMP data reliable */
-export const RMP_CONFIDENCE_THRESHOLD = 7;
 
 /** RMP professor page URL from legacy ID */
 export function rmpUrl(legacyId: number): string {
@@ -430,19 +331,30 @@ export function ratingStyle(rating: number, isDark: boolean): string {
 
 /** Format credit hours display */
 export function formatCreditHours(course: CourseResponse): string {
-  if (course.creditHours != null) return String(course.creditHours);
-  if (course.creditHourLow != null && course.creditHourHigh != null) {
-    return `${course.creditHourLow}–${course.creditHourHigh}`;
+  if (course.creditHours == null) return "—";
+  if (course.creditHours.type === "fixed") {
+    return String(course.creditHours.hours);
   }
-  return "—";
+  return `${course.creditHours.low}–${course.creditHours.high}`;
 }
 
 /**
- * Convert Banner "Last, First Middle" → "First Middle Last".
- * Handles: no comma (returned as-is), trailing/leading spaces,
- * middle names/initials preserved.
+ * Format an instructor's name for display.
+ *
+ * When an `InstructorResponse` object with `firstName` and `lastName` is
+ * provided, uses them directly: "First Last". Otherwise falls back to parsing
+ * `displayName` from Banner's "Last, First Middle" format.
  */
-export function formatInstructorName(displayName: string): string {
+export function formatInstructorName(
+  nameOrInstructor: string | Pick<InstructorResponse, "displayName" | "firstName" | "lastName">
+): string {
+  if (typeof nameOrInstructor !== "string") {
+    const { firstName, lastName, displayName } = nameOrInstructor;
+    if (firstName && lastName) return `${firstName} ${lastName}`;
+    return formatInstructorName(displayName);
+  }
+
+  const displayName = nameOrInstructor;
   const commaIdx = displayName.indexOf(",");
   if (commaIdx === -1) return displayName.trim();
 
@@ -455,14 +367,9 @@ export function formatInstructorName(displayName: string): string {
 
 /** Compact meeting time summary for mobile cards: "MWF 9:00–9:50 AM", "Async", or "TBA" */
 export function formatMeetingTimeSummary(course: CourseResponse): string {
-  if (isAsyncOnline(course)) return "Async";
+  if (course.isAsyncOnline) return "Async";
   if (course.meetingTimes.length === 0) return "TBA";
   const mt = course.meetingTimes[0];
-  if (isMeetingTimeTBA(mt) && isTimeTBA(mt)) return "TBA";
-  return `${formatMeetingDays(mt)} ${formatTimeRange(mt.begin_time, mt.end_time)}`;
-}
-
-/** Check if a rating value represents real data (not the 0.0 placeholder for unrated professors). */
-export function isRatingValid(avgRating: number | null, numRatings: number): boolean {
-  return avgRating !== null && !(avgRating === 0 && numRatings === 0);
+  if (mt.days.length === 0 && mt.timeRange === null) return "TBA";
+  return `${formatMeetingDays(mt)} ${formatTimeRange(mt.timeRange?.start ?? null, mt.timeRange?.end ?? null)}`;
 }

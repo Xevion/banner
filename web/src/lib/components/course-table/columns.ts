@@ -4,11 +4,9 @@ import type { ColumnDef } from "@tanstack/table-core";
 import type { Component } from "svelte";
 import {
   abbreviateInstructor,
-  formatLocationDisplay,
   formatMeetingDays,
   formatTimeRange,
   getPrimaryInstructor,
-  openSeats,
 } from "$lib/course";
 
 import CrnCell from "./cells/CrnCell.svelte";
@@ -41,7 +39,7 @@ export const COLUMN_DEFS: ColumnDef<CourseResponse, unknown>[] = [
   {
     id: "instructor",
     accessorFn: (row) => {
-      const primary = getPrimaryInstructor(row.instructors);
+      const primary = getPrimaryInstructor(row.instructors, row.primaryInstructorId);
       if (!primary) return "Staff";
       return abbreviateInstructor(primary.displayName);
     },
@@ -53,20 +51,20 @@ export const COLUMN_DEFS: ColumnDef<CourseResponse, unknown>[] = [
     accessorFn: (row) => {
       if (row.meetingTimes.length === 0) return "";
       const mt = row.meetingTimes[0];
-      return `${formatMeetingDays(mt)} ${formatTimeRange(mt.begin_time, mt.end_time)}`;
+      return `${formatMeetingDays(mt)} ${formatTimeRange(mt.timeRange?.start ?? null, mt.timeRange?.end ?? null)}`;
     },
     header: "Time",
     enableSorting: true,
   },
   {
     id: "location",
-    accessorFn: (row) => formatLocationDisplay(row) ?? "",
+    accessorFn: (row) => row.primaryLocation ?? "",
     header: "Location",
     enableSorting: false,
   },
   {
     id: "seats",
-    accessorFn: (row) => openSeats(row),
+    accessorFn: (row) => row.enrollment.max - row.enrollment.current,
     header: "Seats",
     enableSorting: true,
   },

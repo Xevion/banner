@@ -6,13 +6,28 @@ use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use ts_rs::TS;
 
+/// Machine-readable error code for API responses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[ts(export)]
+pub enum ApiErrorCode {
+    NotFound,
+    BadRequest,
+    InternalError,
+    InvalidTerm,
+    InvalidRange,
+    Unauthorized,
+    Forbidden,
+    NoTerms,
+}
+
 /// Standardized error response for all API endpoints.
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ApiError {
-    /// Machine-readable error code (e.g., "NOT_FOUND", "INVALID_TERM")
-    pub code: String,
+    /// Machine-readable error code
+    pub code: ApiErrorCode,
     /// Human-readable error message
     pub message: String,
     /// Optional additional details (validation errors, field info, etc.)
@@ -21,9 +36,9 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn new(code: ApiErrorCode, message: impl Into<String>) -> Self {
         Self {
-            code: code.into(),
+            code,
             message: message.into(),
             details: None,
         }
@@ -36,28 +51,31 @@ impl ApiError {
     }
 
     pub fn not_found(message: impl Into<String>) -> Self {
-        Self::new("NOT_FOUND", message)
+        Self::new(ApiErrorCode::NotFound, message)
     }
 
     pub fn bad_request(message: impl Into<String>) -> Self {
-        Self::new("BAD_REQUEST", message)
+        Self::new(ApiErrorCode::BadRequest, message)
     }
 
     pub fn internal_error(message: impl Into<String>) -> Self {
-        Self::new("INTERNAL_ERROR", message)
+        Self::new(ApiErrorCode::InternalError, message)
     }
 
     pub fn invalid_term(term: impl std::fmt::Display) -> Self {
-        Self::new("INVALID_TERM", format!("Invalid term: {}", term))
+        Self::new(ApiErrorCode::InvalidTerm, format!("Invalid term: {}", term))
     }
 
     fn status_code(&self) -> StatusCode {
-        match self.code.as_str() {
-            "NOT_FOUND" => StatusCode::NOT_FOUND,
-            "BAD_REQUEST" | "INVALID_TERM" | "INVALID_RANGE" => StatusCode::BAD_REQUEST,
-            "UNAUTHORIZED" => StatusCode::UNAUTHORIZED,
-            "FORBIDDEN" => StatusCode::FORBIDDEN,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        match self.code {
+            ApiErrorCode::NotFound => StatusCode::NOT_FOUND,
+            ApiErrorCode::BadRequest
+            | ApiErrorCode::InvalidTerm
+            | ApiErrorCode::InvalidRange
+            | ApiErrorCode::NoTerms => StatusCode::BAD_REQUEST,
+            ApiErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
+            ApiErrorCode::Forbidden => StatusCode::FORBIDDEN,
+            ApiErrorCode::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -73,11 +91,11 @@ impl IntoResponse for ApiError {
 impl From<(StatusCode, String)> for ApiError {
     fn from((status, message): (StatusCode, String)) -> Self {
         let code = match status {
-            StatusCode::NOT_FOUND => "NOT_FOUND",
-            StatusCode::BAD_REQUEST => "BAD_REQUEST",
-            StatusCode::UNAUTHORIZED => "UNAUTHORIZED",
-            StatusCode::FORBIDDEN => "FORBIDDEN",
-            _ => "INTERNAL_ERROR",
+            StatusCode::NOT_FOUND => ApiErrorCode::NotFound,
+            StatusCode::BAD_REQUEST => ApiErrorCode::BadRequest,
+            StatusCode::UNAUTHORIZED => ApiErrorCode::Unauthorized,
+            StatusCode::FORBIDDEN => ApiErrorCode::Forbidden,
+            _ => ApiErrorCode::InternalError,
         };
         Self::new(code, message)
     }

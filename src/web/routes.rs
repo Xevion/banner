@@ -8,10 +8,12 @@ use axum::{
     routing::{get, post, put},
 };
 
+use crate::data::course_types::{CreditHours, CrossList, Enrollment, RmpRating, SectionLink};
 use crate::web::admin_scraper;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::calendar;
-use crate::web::error::{ApiError, db_error};
+use crate::web::delivery::{DeliveryMode, classify_delivery_mode};
+use crate::web::error::{ApiError, ApiErrorCode, db_error};
 use crate::web::timeline;
 use crate::web::ws;
 use crate::{data, web::admin};
@@ -303,7 +305,7 @@ async fn metrics(
         "30d" => chrono::Duration::days(30),
         _ => {
             return Err(ApiError::new(
-                "INVALID_RANGE",
+                ApiErrorCode::InvalidRange,
                 format!("Invalid range '{range_str}'. Valid: 1h, 6h, 24h, 7d, 30d"),
             ));
         }
@@ -488,21 +490,20 @@ pub struct CourseResponse {
     sequence_number: Option<String>,
     instructional_method: Option<String>,
     campus: Option<String>,
-    enrollment: i32,
-    max_enrollment: i32,
-    wait_count: i32,
-    wait_capacity: i32,
-    credit_hours: Option<i32>,
-    credit_hour_low: Option<i32>,
-    credit_hour_high: Option<i32>,
-    cross_list: Option<String>,
-    cross_list_capacity: Option<i32>,
-    cross_list_count: Option<i32>,
-    link_identifier: Option<String>,
-    is_section_linked: Option<bool>,
+    enrollment: Enrollment,
+    credit_hours: Option<CreditHours>,
+    cross_list: Option<CrossList>,
+    section_link: Option<SectionLink>,
     part_of_term: Option<String>,
     meeting_times: Vec<models::DbMeetingTime>,
     attributes: Vec<String>,
+    is_async_online: bool,
+    delivery_mode: Option<DeliveryMode>,
+    /// Best display-ready location: physical room ("MH 2.206"), "Online", or campus fallback.
+    primary_location: Option<String>,
+    /// Whether a physical (non-INT) building was found in meeting times.
+    has_physical_location: bool,
+    primary_instructor_id: Option<i32>,
     instructors: Vec<InstructorResponse>,
 }
 
@@ -513,11 +514,11 @@ pub struct InstructorResponse {
     instructor_id: i32,
     banner_id: String,
     display_name: String,
+    first_name: Option<String>,
+    last_name: Option<String>,
     email: String,
     is_primary: bool,
-    rmp_rating: Option<f32>,
-    rmp_num_ratings: Option<i32>,
-    rmp_legacy_id: Option<i32>,
+    rmp: Option<RmpRating>,
 }
 
 #[derive(Serialize, TS)]
@@ -571,37 +572,66 @@ pub struct SearchOptionsParams {
     pub term: Option<String>,
 }
 
+/// Minimum number of ratings needed to consider RMP data reliable.
+const RMP_CONFIDENCE_THRESHOLD: i32 = 7;
+
 /// Build a `CourseResponse` from a DB course with pre-fetched instructor details.
 fn build_course_response(
     course: &models::Course,
     instructors: Vec<models::CourseInstructorDetail>,
 ) -> CourseResponse {
-    let instructors = instructors
+    let instructors: Vec<InstructorResponse> = instructors
         .into_iter()
-        .map(|i| InstructorResponse {
-            instructor_id: i.instructor_id,
-            banner_id: i.banner_id,
-            display_name: i.display_name,
-            email: i.email,
-            is_primary: i.is_primary,
-            rmp_rating: i.avg_rating,
-            rmp_num_ratings: i.num_ratings,
-            rmp_legacy_id: i.rmp_legacy_id,
+        .map(|i| {
+            // Filter out the (0.0, 0) sentinel — treat as unrated
+            let has_rating =
+                i.avg_rating.is_some_and(|r| r != 0.0) || i.num_ratings.is_some_and(|n| n != 0);
+            let rmp = if has_rating {
+                match (i.avg_rating, i.num_ratings, i.rmp_legacy_id) {
+                    (Some(avg_rating), Some(num_ratings), Some(legacy_id)) => Some(RmpRating {
+                        avg_rating,
+                        num_ratings,
+                        legacy_id,
+                        is_confident: num_ratings >= RMP_CONFIDENCE_THRESHOLD,
+                    }),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            InstructorResponse {
+                instructor_id: i.instructor_id,
+                banner_id: i.banner_id,
+                display_name: i.display_name,
+                first_name: i.first_name,
+                last_name: i.last_name,
+                email: i.email,
+                is_primary: i.is_primary,
+                rmp,
+            }
         })
         .collect();
 
-    let meeting_times = serde_json::from_value(course.meeting_times.clone())
-        .map_err(|e| {
-            tracing::error!(
-                course_id = course.id,
-                crn = %course.crn,
-                term = %course.term_code,
-                error = %e,
-                "Failed to deserialize meeting_times JSONB"
-            );
-            e
-        })
-        .unwrap_or_default();
+    // Primary = first with is_primary flag, or fall back to first instructor
+    let primary_instructor_id = instructors
+        .iter()
+        .find(|i| i.is_primary)
+        .or(instructors.first())
+        .map(|i| i.instructor_id);
+
+    let meeting_times: Vec<models::DbMeetingTime> =
+        serde_json::from_value(course.meeting_times.clone())
+            .map_err(|e| {
+                tracing::error!(
+                    course_id = course.id,
+                    crn = %course.crn,
+                    term = %course.term_code,
+                    error = %e,
+                    "Failed to deserialize meeting_times JSONB"
+                );
+                e
+            })
+            .unwrap_or_default();
 
     let attributes = serde_json::from_value(course.attributes.clone())
         .map_err(|e| {
@@ -616,6 +646,69 @@ fn build_course_response(
         })
         .unwrap_or_default();
 
+    let is_async_online = meeting_times.first().is_some_and(|mt| {
+        mt.location.as_ref().and_then(|loc| loc.building.as_deref()) == Some("INT")
+            && mt.is_time_tba()
+    });
+
+    let delivery_mode = classify_delivery_mode(
+        course.instructional_method.as_deref(),
+        course.campus.as_deref(),
+        &meeting_times,
+    );
+
+    // Compute primary_location: first non-INT building+room, else "Online" or campus fallback
+    let physical_location = meeting_times
+        .iter()
+        .filter(|mt| mt.location.as_ref().and_then(|loc| loc.building.as_deref()) != Some("INT"))
+        .find_map(|mt| {
+            mt.location.as_ref().and_then(|loc| {
+                loc.building.as_ref().map(|b| match &loc.room {
+                    Some(r) => format!("{b} {r}"),
+                    None => b.clone(),
+                })
+            })
+        });
+    let has_physical_location = physical_location.is_some();
+
+    let primary_location = physical_location.or_else(|| match delivery_mode {
+        Some(DeliveryMode::Online | DeliveryMode::Internet) => Some("Online".to_string()),
+        _ => None,
+    });
+
+    let enrollment = Enrollment {
+        current: course.enrollment,
+        max: course.max_enrollment,
+        wait_count: course.wait_count,
+        wait_capacity: course.wait_capacity,
+    };
+
+    let credit_hours = match (
+        course.credit_hours,
+        course.credit_hour_low,
+        course.credit_hour_high,
+    ) {
+        (Some(fixed), _, _) => Some(CreditHours::Fixed { hours: fixed }),
+        (None, Some(low), Some(high)) if low != high => Some(CreditHours::Range { low, high }),
+        (None, Some(hours), None) | (None, None, Some(hours)) => Some(CreditHours::Fixed { hours }),
+        _ => None,
+    };
+
+    let cross_list = course.cross_list.as_ref().and_then(|identifier| {
+        course.cross_list_capacity.and_then(|capacity| {
+            course.cross_list_count.map(|count| CrossList {
+                identifier: identifier.clone(),
+                capacity,
+                count,
+            })
+        })
+    });
+
+    let section_link = course
+        .link_identifier
+        .clone()
+        .map(|identifier| SectionLink { identifier });
+
     CourseResponse {
         crn: course.crn.clone(),
         subject: course.subject.clone(),
@@ -625,19 +718,16 @@ fn build_course_response(
         sequence_number: course.sequence_number.clone(),
         instructional_method: course.instructional_method.clone(),
         campus: course.campus.clone(),
-        enrollment: course.enrollment,
-        max_enrollment: course.max_enrollment,
-        wait_count: course.wait_count,
-        wait_capacity: course.wait_capacity,
-        credit_hours: course.credit_hours,
-        credit_hour_low: course.credit_hour_low,
-        credit_hour_high: course.credit_hour_high,
-        cross_list: course.cross_list.clone(),
-        cross_list_capacity: course.cross_list_capacity,
-        cross_list_count: course.cross_list_count,
-        link_identifier: course.link_identifier.clone(),
-        is_section_linked: course.is_section_linked,
+        enrollment,
+        credit_hours,
+        cross_list,
+        section_link,
         part_of_term: course.part_of_term.clone(),
+        is_async_online,
+        delivery_mode,
+        primary_location,
+        has_physical_location,
+        primary_instructor_id,
         meeting_times,
         attributes,
         instructors,
@@ -800,7 +890,7 @@ async fn get_search_options(
         let first_term: Term = term_codes
             .first()
             .and_then(|code| code.parse().ok())
-            .ok_or_else(|| ApiError::new("NO_TERMS", "No terms available".to_string()))?;
+            .ok_or_else(|| ApiError::new(ApiErrorCode::NoTerms, "No terms available"))?;
 
         first_term.slug()
     };

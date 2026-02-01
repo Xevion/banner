@@ -1,6 +1,7 @@
 //! Database models and schema.
 
 pub mod batch;
+pub mod course_types;
 pub mod courses;
 pub mod models;
 pub mod names;

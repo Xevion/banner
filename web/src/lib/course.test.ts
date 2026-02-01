@@ -4,96 +4,72 @@ import {
   formatCreditHours,
   formatDate,
   formatDateShort,
-  formatLocationDisplay,
+  formatInstructorName,
   formatMeetingDays,
   formatMeetingDaysLong,
   formatMeetingDaysVerbose,
-  formatMeetingTime,
   formatMeetingTimeTooltip,
   formatMeetingTimesTooltip,
   formatTime,
   formatTimeRange,
   getPrimaryInstructor,
-  isAsyncOnline,
-  isMeetingTimeTBA,
-  isTimeTBA,
 } from "$lib/course";
 import { describe, expect, it } from "vitest";
 
 function makeMeetingTime(overrides: Partial<DbMeetingTime> = {}): DbMeetingTime {
-  return {
-    begin_time: null,
-    end_time: null,
-    start_date: "2024-08-26",
-    end_date: "2024-12-12",
-    monday: false,
-    tuesday: false,
-    wednesday: false,
-    thursday: false,
-    friday: false,
-    saturday: false,
-    sunday: false,
-    building: null,
-    building_description: null,
-    room: null,
-    campus: null,
-    meeting_type: "CLAS",
-    meeting_schedule_type: "LEC",
+  const mt: DbMeetingTime = {
+    timeRange: null,
+    dateRange: { start: "2024-08-26", end: "2024-12-12" },
+    days: [],
+    location: null,
+    meetingType: "CLAS",
+    meetingScheduleType: "LEC",
     ...overrides,
   };
+  return mt;
 }
 
 describe("formatTime", () => {
-  it("converts 0900 to 9:00 AM", () => expect(formatTime("0900")).toBe("9:00 AM"));
-  it("converts 1330 to 1:30 PM", () => expect(formatTime("1330")).toBe("1:30 PM"));
-  it("converts 0000 to 12:00 AM", () => expect(formatTime("0000")).toBe("12:00 AM"));
-  it("converts 1200 to 12:00 PM", () => expect(formatTime("1200")).toBe("12:00 PM"));
-  it("converts 2359 to 11:59 PM", () => expect(formatTime("2359")).toBe("11:59 PM"));
+  it("converts 09:00:00 to 9:00 AM", () => expect(formatTime("09:00:00")).toBe("9:00 AM"));
+  it("converts 13:30:00 to 1:30 PM", () => expect(formatTime("13:30:00")).toBe("1:30 PM"));
+  it("converts 00:00:00 to 12:00 AM", () => expect(formatTime("00:00:00")).toBe("12:00 AM"));
+  it("converts 12:00:00 to 12:00 PM", () => expect(formatTime("12:00:00")).toBe("12:00 PM"));
+  it("converts 23:59:00 to 11:59 PM", () => expect(formatTime("23:59:00")).toBe("11:59 PM"));
   it("returns TBA for null", () => expect(formatTime(null)).toBe("TBA"));
-  it("returns TBA for empty string", () => expect(formatTime("")).toBe("TBA"));
-  it("returns TBA for short string", () => expect(formatTime("09")).toBe("TBA"));
 });
 
 describe("formatMeetingDays", () => {
   it("returns MWF for mon/wed/fri", () => {
-    expect(
-      formatMeetingDays(makeMeetingTime({ monday: true, wednesday: true, friday: true }))
-    ).toBe("MWF");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["monday", "wednesday", "friday"] }))).toBe(
+      "MWF"
+    );
   });
   it("returns TTh for tue/thu", () => {
-    expect(formatMeetingDays(makeMeetingTime({ tuesday: true, thursday: true }))).toBe("TTh");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["tuesday", "thursday"] }))).toBe("TTh");
   });
   it("returns MW for mon/wed", () => {
-    expect(formatMeetingDays(makeMeetingTime({ monday: true, wednesday: true }))).toBe("MW");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["monday", "wednesday"] }))).toBe("MW");
   });
   it("returns MTWThF for all weekdays", () => {
     expect(
       formatMeetingDays(
-        makeMeetingTime({
-          monday: true,
-          tuesday: true,
-          wednesday: true,
-          thursday: true,
-          friday: true,
-        })
+        makeMeetingTime({ days: ["monday", "tuesday", "wednesday", "thursday", "friday"] })
       )
     ).toBe("MTWThF");
   });
   it("returns partial abbreviation for single day", () => {
-    expect(formatMeetingDays(makeMeetingTime({ monday: true }))).toBe("Mon");
-    expect(formatMeetingDays(makeMeetingTime({ thursday: true }))).toBe("Thu");
-    expect(formatMeetingDays(makeMeetingTime({ saturday: true }))).toBe("Sat");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["monday"] }))).toBe("Mon");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["thursday"] }))).toBe("Thu");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["saturday"] }))).toBe("Sat");
   });
   it("concatenates codes for other multi-day combos", () => {
-    expect(formatMeetingDays(makeMeetingTime({ monday: true, friday: true }))).toBe("MF");
-    expect(formatMeetingDays(makeMeetingTime({ tuesday: true, saturday: true }))).toBe("TSa");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["monday", "friday"] }))).toBe("MF");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["tuesday", "saturday"] }))).toBe("TSa");
+    expect(formatMeetingDays(makeMeetingTime({ days: ["wednesday", "friday", "sunday"] }))).toBe(
+      "WFSu"
+    );
     expect(
-      formatMeetingDays(makeMeetingTime({ wednesday: true, friday: true, sunday: true }))
-    ).toBe("WFSu");
-    expect(
-      formatMeetingDays(
-        makeMeetingTime({ monday: true, tuesday: true, wednesday: true, thursday: true })
-      )
+      formatMeetingDays(makeMeetingTime({ days: ["monday", "tuesday", "wednesday", "thursday"] }))
     ).toBe("MTWTh");
   });
   it("returns empty string when no days", () => {
@@ -103,59 +79,23 @@ describe("formatMeetingDays", () => {
 
 describe("formatTimeRange", () => {
   it("elides AM when both times are AM", () => {
-    expect(formatTimeRange("0900", "0950")).toBe("9:00–9:50 AM");
+    expect(formatTimeRange("09:00:00", "09:50:00")).toBe("9:00–9:50 AM");
   });
   it("elides PM when both times are PM", () => {
-    expect(formatTimeRange("1315", "1430")).toBe("1:15–2:30 PM");
+    expect(formatTimeRange("13:15:00", "14:30:00")).toBe("1:15–2:30 PM");
   });
   it("keeps both markers when crossing noon", () => {
-    expect(formatTimeRange("1130", "1220")).toBe("11:30 AM–12:20 PM");
+    expect(formatTimeRange("11:30:00", "12:20:00")).toBe("11:30 AM–12:20 PM");
   });
   it("returns TBA for null begin", () => {
-    expect(formatTimeRange(null, "0950")).toBe("TBA");
+    expect(formatTimeRange(null, "09:50:00")).toBe("TBA");
   });
   it("returns TBA for null end", () => {
-    expect(formatTimeRange("0900", null)).toBe("TBA");
+    expect(formatTimeRange("09:00:00", null)).toBe("TBA");
   });
   it("handles midnight and noon", () => {
-    expect(formatTimeRange("0000", "0050")).toBe("12:00–12:50 AM");
-    expect(formatTimeRange("1200", "1250")).toBe("12:00–12:50 PM");
-  });
-});
-
-describe("formatMeetingTime", () => {
-  it("formats a standard meeting time with elided AM/PM", () => {
-    expect(
-      formatMeetingTime(
-        makeMeetingTime({
-          monday: true,
-          wednesday: true,
-          friday: true,
-          begin_time: "0900",
-          end_time: "0950",
-        })
-      )
-    ).toBe("MWF 9:00–9:50 AM");
-  });
-  it("keeps both markers when crossing noon", () => {
-    expect(
-      formatMeetingTime(
-        makeMeetingTime({
-          tuesday: true,
-          thursday: true,
-          begin_time: "1130",
-          end_time: "1220",
-        })
-      )
-    ).toBe("TTh 11:30 AM–12:20 PM");
-  });
-  it("returns TBA when no days", () => {
-    expect(formatMeetingTime(makeMeetingTime({ begin_time: "0900", end_time: "0950" }))).toBe(
-      "TBA"
-    );
-  });
-  it("returns days + TBA when no times", () => {
-    expect(formatMeetingTime(makeMeetingTime({ monday: true }))).toBe("Mon TBA");
+    expect(formatTimeRange("00:00:00", "00:50:00")).toBe("12:00–12:50 AM");
+    expect(formatTimeRange("12:00:00", "12:50:00")).toBe("12:00–12:50 PM");
   });
 });
 
@@ -192,21 +132,21 @@ describe("getPrimaryInstructor", () => {
         instructorId: 1,
         bannerId: "1",
         displayName: "A",
+        firstName: null,
+        lastName: null,
         email: "a@utsa.edu",
         isPrimary: false,
-        rmpRating: null,
-        rmpNumRatings: null,
-        rmpLegacyId: null,
+        rmp: null,
       },
       {
         instructorId: 2,
         bannerId: "2",
         displayName: "B",
+        firstName: null,
+        lastName: null,
         email: "b@utsa.edu",
         isPrimary: true,
-        rmpRating: null,
-        rmpNumRatings: null,
-        rmpLegacyId: null,
+        rmp: null,
       },
     ];
     expect(getPrimaryInstructor(instructors)?.displayName).toBe("B");
@@ -217,11 +157,11 @@ describe("getPrimaryInstructor", () => {
         instructorId: 3,
         bannerId: "1",
         displayName: "A",
+        firstName: null,
+        lastName: null,
         email: "a@utsa.edu",
         isPrimary: false,
-        rmpRating: null,
-        rmpNumRatings: null,
-        rmpLegacyId: null,
+        rmp: null,
       },
     ];
     expect(getPrimaryInstructor(instructors)?.displayName).toBe("A");
@@ -235,18 +175,14 @@ describe("formatCreditHours", () => {
   it("returns creditHours when set", () => {
     expect(
       formatCreditHours({
-        creditHours: 3,
-        creditHourLow: null,
-        creditHourHigh: null,
+        creditHours: { type: "fixed", hours: 3 },
       } as CourseResponse)
     ).toBe("3");
   });
   it("returns range when variable", () => {
     expect(
       formatCreditHours({
-        creditHours: null,
-        creditHourLow: 1,
-        creditHourHigh: 3,
+        creditHours: { type: "range", low: 1, high: 3 },
       } as CourseResponse)
     ).toBe("1–3");
   });
@@ -254,37 +190,8 @@ describe("formatCreditHours", () => {
     expect(
       formatCreditHours({
         creditHours: null,
-        creditHourLow: null,
-        creditHourHigh: null,
       } as CourseResponse)
     ).toBe("—");
-  });
-});
-
-describe("isMeetingTimeTBA", () => {
-  it("returns true when no days set", () => {
-    expect(isMeetingTimeTBA(makeMeetingTime())).toBe(true);
-  });
-  it("returns false when any day is set", () => {
-    expect(isMeetingTimeTBA(makeMeetingTime({ monday: true }))).toBe(false);
-  });
-  it("returns false when multiple days set", () => {
-    expect(isMeetingTimeTBA(makeMeetingTime({ tuesday: true, thursday: true }))).toBe(false);
-  });
-});
-
-describe("isTimeTBA", () => {
-  it("returns true when begin_time is null", () => {
-    expect(isTimeTBA(makeMeetingTime())).toBe(true);
-  });
-  it("returns true when begin_time is empty", () => {
-    expect(isTimeTBA(makeMeetingTime({ begin_time: "" }))).toBe(true);
-  });
-  it("returns true when begin_time is short", () => {
-    expect(isTimeTBA(makeMeetingTime({ begin_time: "09" }))).toBe(true);
-  });
-  it("returns false when begin_time is valid", () => {
-    expect(isTimeTBA(makeMeetingTime({ begin_time: "0900" }))).toBe(false);
   });
 });
 
@@ -298,12 +205,6 @@ describe("formatDate", () => {
   it("formats January 1st", () => {
     expect(formatDate("2026-01-01")).toBe("January 1, 2026");
   });
-  it("formats MM/DD/YYYY date", () => {
-    expect(formatDate("01/20/2026")).toBe("January 20, 2026");
-  });
-  it("formats MM/DD/YYYY with May", () => {
-    expect(formatDate("05/13/2026")).toBe("May 13, 2026");
-  });
   it("returns original string for invalid input", () => {
     expect(formatDate("bad-date")).toBe("bad-date");
   });
@@ -311,18 +212,18 @@ describe("formatDate", () => {
 
 describe("formatMeetingDaysLong", () => {
   it("returns full plural for single day", () => {
-    expect(formatMeetingDaysLong(makeMeetingTime({ thursday: true }))).toBe("Thursdays");
+    expect(formatMeetingDaysLong(makeMeetingTime({ days: ["thursday"] }))).toBe("Thursdays");
   });
   it("returns full plural for Monday only", () => {
-    expect(formatMeetingDaysLong(makeMeetingTime({ monday: true }))).toBe("Mondays");
+    expect(formatMeetingDaysLong(makeMeetingTime({ days: ["monday"] }))).toBe("Mondays");
   });
   it("returns semi-abbreviated for multiple days", () => {
     expect(
-      formatMeetingDaysLong(makeMeetingTime({ monday: true, wednesday: true, friday: true }))
+      formatMeetingDaysLong(makeMeetingTime({ days: ["monday", "wednesday", "friday"] }))
     ).toBe("Mon, Wed, Fri");
   });
   it("returns semi-abbreviated for TR", () => {
-    expect(formatMeetingDaysLong(makeMeetingTime({ tuesday: true, thursday: true }))).toBe(
+    expect(formatMeetingDaysLong(makeMeetingTime({ days: ["tuesday", "thursday"] }))).toBe(
       "Tue, Thur"
     );
   });
@@ -335,8 +236,8 @@ describe("formatDateShort", () => {
   it("formats YYYY-MM-DD to short", () => {
     expect(formatDateShort("2024-08-26")).toBe("Aug 26, 2024");
   });
-  it("formats MM/DD/YYYY to short", () => {
-    expect(formatDateShort("12/12/2024")).toBe("Dec 12, 2024");
+  it("formats December date to short", () => {
+    expect(formatDateShort("2024-12-12")).toBe("Dec 12, 2024");
   });
   it("returns original for invalid", () => {
     expect(formatDateShort("bad")).toBe("bad");
@@ -345,16 +246,16 @@ describe("formatDateShort", () => {
 
 describe("formatMeetingDaysVerbose", () => {
   it("returns plural for single day", () => {
-    expect(formatMeetingDaysVerbose(makeMeetingTime({ thursday: true }))).toBe("Thursdays");
+    expect(formatMeetingDaysVerbose(makeMeetingTime({ days: ["thursday"] }))).toBe("Thursdays");
   });
   it("joins two days with ampersand", () => {
-    expect(formatMeetingDaysVerbose(makeMeetingTime({ tuesday: true, thursday: true }))).toBe(
+    expect(formatMeetingDaysVerbose(makeMeetingTime({ days: ["tuesday", "thursday"] }))).toBe(
       "Tuesdays & Thursdays"
     );
   });
   it("uses Oxford-style ampersand for 3+ days", () => {
     expect(
-      formatMeetingDaysVerbose(makeMeetingTime({ monday: true, wednesday: true, friday: true }))
+      formatMeetingDaysVerbose(makeMeetingTime({ days: ["monday", "wednesday", "friday"] }))
     ).toBe("Mondays, Wednesdays & Fridays");
   });
   it("returns empty string when no days", () => {
@@ -365,12 +266,9 @@ describe("formatMeetingDaysVerbose", () => {
 describe("formatMeetingTimeTooltip", () => {
   it("formats full tooltip with location and dates", () => {
     const mt = makeMeetingTime({
-      tuesday: true,
-      thursday: true,
-      begin_time: "1615",
-      end_time: "1730",
-      building_description: "Main Hall",
-      room: "2.206",
+      days: ["tuesday", "thursday"],
+      timeRange: { start: "16:15:00", end: "17:30:00" },
+      location: { building: null, buildingDescription: "Main Hall", room: "2.206", campus: null },
     });
     expect(formatMeetingTimeTooltip(mt)).toBe(
       "Tuesdays & Thursdays, 4:15–5:30 PM\nMain Hall 2.206, Aug 26, 2024 – Dec 12, 2024"
@@ -380,7 +278,7 @@ describe("formatMeetingTimeTooltip", () => {
     expect(formatMeetingTimeTooltip(makeMeetingTime())).toBe("TBA\nAug 26, 2024 – Dec 12, 2024");
   });
   it("handles days with TBA times", () => {
-    expect(formatMeetingTimeTooltip(makeMeetingTime({ monday: true }))).toBe(
+    expect(formatMeetingTimeTooltip(makeMeetingTime({ days: ["monday"] }))).toBe(
       "Mondays, TBA\nAug 26, 2024 – Dec 12, 2024"
     );
   });
@@ -393,18 +291,13 @@ describe("formatMeetingTimesTooltip", () => {
   it("joins multiple meetings with blank line", () => {
     const mts = [
       makeMeetingTime({
-        monday: true,
-        wednesday: true,
-        friday: true,
-        begin_time: "0900",
-        end_time: "0950",
+        days: ["monday", "wednesday", "friday"],
+        timeRange: { start: "09:00:00", end: "09:50:00" },
       }),
       makeMeetingTime({
-        thursday: true,
-        begin_time: "1300",
-        end_time: "1400",
-        building_description: "Lab",
-        room: "101",
+        days: ["thursday"],
+        timeRange: { start: "13:00:00", end: "14:00:00" },
+        location: { building: null, buildingDescription: "Lab", room: "101", campus: null },
       }),
     ];
     const result = formatMeetingTimesTooltip(mts);
@@ -414,91 +307,49 @@ describe("formatMeetingTimesTooltip", () => {
   });
 });
 
-describe("isAsyncOnline", () => {
-  it("returns true for INT building with no times", () => {
-    const course = {
-      meetingTimes: [
-        makeMeetingTime({
-          building: "INT",
-          building_description: "Internet Class",
-          begin_time: null,
-          end_time: null,
-        }),
-      ],
-    } as CourseResponse;
-    expect(isAsyncOnline(course)).toBe(true);
+describe("formatInstructorName", () => {
+  it("formats displayName with comma", () => {
+    expect(formatInstructorName("Ramirez, Maria Elena")).toBe("Maria Elena Ramirez");
   });
-  it("returns false for INT building with meeting times", () => {
-    const course = {
-      meetingTimes: [
-        makeMeetingTime({
-          building: "INT",
-          building_description: "Internet Class",
-          tuesday: true,
-          thursday: true,
-          begin_time: "1000",
-          end_time: "1115",
-        }),
-      ],
-    } as CourseResponse;
-    expect(isAsyncOnline(course)).toBe(false);
+  it("returns name as-is without comma", () => {
+    expect(formatInstructorName("Staff")).toBe("Staff");
   });
-  it("returns false for non-INT building", () => {
-    const course = {
-      meetingTimes: [
-        makeMeetingTime({
-          building: "MH",
-          building_description: "Main Hall",
-          begin_time: null,
-          end_time: null,
-        }),
-      ],
-    } as CourseResponse;
-    expect(isAsyncOnline(course)).toBe(false);
+  it("trims whitespace", () => {
+    expect(formatInstructorName("  Smith , John  ")).toBe("John Smith");
   });
-  it("returns false for empty meeting times", () => {
-    const course = { meetingTimes: [] } as unknown as CourseResponse;
-    expect(isAsyncOnline(course)).toBe(false);
+  it("handles last-name-only after comma", () => {
+    expect(formatInstructorName("Solo,")).toBe("Solo");
   });
-});
-
-describe("formatLocationDisplay", () => {
-  it("returns 'Online' for INT building", () => {
-    const course = {
-      meetingTimes: [
-        makeMeetingTime({
-          building: "INT",
-          building_description: "Internet Class",
-        }),
-      ],
-      campus: "9",
-    } as CourseResponse;
-    expect(formatLocationDisplay(course)).toBe("Online");
+  it("uses firstName/lastName from InstructorResponse when available", () => {
+    expect(
+      formatInstructorName({
+        displayName: "Ramirez, Maria Elena",
+        firstName: "Maria",
+        lastName: "Ramirez",
+      })
+    ).toBe("Maria Ramirez");
   });
-  it("returns building and room for physical location", () => {
-    const course = {
-      meetingTimes: [
-        makeMeetingTime({
-          building: "MH",
-          building_description: "Main Hall",
-          room: "2.206",
-        }),
-      ],
-      campus: "11",
-    } as CourseResponse;
-    expect(formatLocationDisplay(course)).toBe("MH 2.206");
+  it("falls back to displayName when firstName is null", () => {
+    expect(
+      formatInstructorName({
+        displayName: "Ramirez, Maria Elena",
+        firstName: null,
+        lastName: "Ramirez",
+      })
+    ).toBe("Maria Elena Ramirez");
   });
-  it("returns building only when no room", () => {
-    const course = {
-      meetingTimes: [
-        makeMeetingTime({
-          building: "MH",
-          building_description: "Main Hall",
-          room: null,
-        }),
-      ],
-      campus: "11",
-    } as CourseResponse;
-    expect(formatLocationDisplay(course)).toBe("MH");
+  it("falls back to displayName when lastName is null", () => {
+    expect(
+      formatInstructorName({
+        displayName: "Ramirez, Maria Elena",
+        firstName: "Maria",
+        lastName: null,
+      })
+    ).toBe("Maria Elena Ramirez");
+  });
+  it("falls back to displayName when both are null", () => {
+    expect(formatInstructorName({ displayName: "Staff", firstName: null, lastName: null })).toBe(
+      "Staff"
+    );
   });
 });

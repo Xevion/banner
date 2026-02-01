@@ -2,8 +2,8 @@
 //!
 //! Used by both the Discord bot commands and the web API endpoints.
 
-use crate::data::models::DbMeetingTime;
-use chrono::{Datelike, Duration, NaiveDate, NaiveTime, Weekday};
+use crate::data::models::{DayOfWeek, DbMeetingTime};
+use chrono::{Datelike, Duration, NaiveDate, Weekday};
 
 /// Course metadata needed for calendar generation (shared interface between bot and web).
 pub struct CalendarCourse {
@@ -36,42 +36,25 @@ impl CalendarCourse {
 }
 
 // ---------------------------------------------------------------------------
-// Date parsing helpers
+// Day-of-week conversion
 // ---------------------------------------------------------------------------
 
-/// Parse a date string in either MM/DD/YYYY or YYYY-MM-DD format.
-fn parse_date(s: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(s, "%m/%d/%Y")
-        .or_else(|_| NaiveDate::parse_from_str(s, "%Y-%m-%d"))
-        .ok()
-}
-
-/// Parse an HHMM time string into `NaiveTime`.
-fn parse_hhmm(s: &str) -> Option<NaiveTime> {
-    if s.len() != 4 {
-        return None;
+/// Convert a `DayOfWeek` to a chrono `Weekday`.
+fn to_weekday(day: &DayOfWeek) -> Weekday {
+    match day {
+        DayOfWeek::Monday => Weekday::Mon,
+        DayOfWeek::Tuesday => Weekday::Tue,
+        DayOfWeek::Wednesday => Weekday::Wed,
+        DayOfWeek::Thursday => Weekday::Thu,
+        DayOfWeek::Friday => Weekday::Fri,
+        DayOfWeek::Saturday => Weekday::Sat,
+        DayOfWeek::Sunday => Weekday::Sun,
     }
-    let hours = s[..2].parse::<u32>().ok()?;
-    let minutes = s[2..].parse::<u32>().ok()?;
-    NaiveTime::from_hms_opt(hours, minutes, 0)
 }
 
 /// Active weekdays for a meeting time.
 fn active_weekdays(mt: &DbMeetingTime) -> Vec<Weekday> {
-    let mapping: [(bool, Weekday); 7] = [
-        (mt.monday, Weekday::Mon),
-        (mt.tuesday, Weekday::Tue),
-        (mt.wednesday, Weekday::Wed),
-        (mt.thursday, Weekday::Thu),
-        (mt.friday, Weekday::Fri),
-        (mt.saturday, Weekday::Sat),
-        (mt.sunday, Weekday::Sun),
-    ];
-    mapping
-        .iter()
-        .filter(|(active, _)| *active)
-        .map(|(_, day)| *day)
-        .collect()
+    mt.days.iter().map(to_weekday).collect()
 }
 
 /// ICS two-letter day code for RRULE BYDAY.
@@ -90,11 +73,16 @@ fn ics_day_code(day: Weekday) -> &'static str {
 /// Location string from a `DbMeetingTime`.
 fn location_string(mt: &DbMeetingTime) -> String {
     let building = mt
-        .building_description
-        .as_deref()
-        .or(mt.building.as_deref())
+        .location
+        .as_ref()
+        .and_then(|loc| loc.building_description.as_deref())
+        .or_else(|| mt.location.as_ref().and_then(|loc| loc.building.as_deref()))
         .unwrap_or("");
-    let room = mt.room.as_deref().unwrap_or("");
+    let room = mt
+        .location
+        .as_ref()
+        .and_then(|loc| loc.room.as_deref())
+        .unwrap_or("");
     let combined = format!("{building} {room}").trim().to_string();
     if combined.is_empty() {
         "Online".to_string()
@@ -285,13 +273,11 @@ fn generate_ics_event(
     mt: &DbMeetingTime,
     index: usize,
 ) -> Result<(String, Vec<String>), anyhow::Error> {
-    let start_date = parse_date(&mt.start_date)
-        .ok_or_else(|| anyhow::anyhow!("Invalid start_date: {}", mt.start_date))?;
-    let end_date = parse_date(&mt.end_date)
-        .ok_or_else(|| anyhow::anyhow!("Invalid end_date: {}", mt.end_date))?;
+    let start_date = mt.date_range.start;
+    let end_date = mt.date_range.end;
 
-    let start_time = mt.begin_time.as_deref().and_then(parse_hhmm);
-    let end_time = mt.end_time.as_deref().and_then(parse_hhmm);
+    let start_time = mt.time_range.as_ref().map(|tr| tr.start);
+    let end_time = mt.time_range.as_ref().map(|tr| tr.end);
 
     // DTSTART/DTEND: first occurrence with time, or all-day on start_date
     let (dtstart, dtend) = match (start_time, end_time) {
@@ -396,13 +382,11 @@ pub fn generate_gcal_url(
     course: &CalendarCourse,
     mt: &DbMeetingTime,
 ) -> Result<String, anyhow::Error> {
-    let start_date = parse_date(&mt.start_date)
-        .ok_or_else(|| anyhow::anyhow!("Invalid start_date: {}", mt.start_date))?;
-    let end_date = parse_date(&mt.end_date)
-        .ok_or_else(|| anyhow::anyhow!("Invalid end_date: {}", mt.end_date))?;
+    let start_date = mt.date_range.start;
+    let end_date = mt.date_range.end;
 
-    let start_time = mt.begin_time.as_deref().and_then(parse_hhmm);
-    let end_time = mt.end_time.as_deref().and_then(parse_hhmm);
+    let start_time = mt.time_range.as_ref().map(|tr| tr.start);
+    let end_time = mt.time_range.as_ref().map(|tr| tr.end);
 
     let dates_text = match (start_time, end_time) {
         (Some(st), Some(et)) => {

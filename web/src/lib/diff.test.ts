@@ -74,10 +74,10 @@ describe("jsonDiff", () => {
     });
 
     it("handles object with nested arrays", () => {
-      const oldVal = { meetingTimes: [{ beginTime: "0900" }] };
-      const newVal = { meetingTimes: [{ beginTime: "1000" }] };
+      const oldVal = { meetingTimes: [{ timeRange: { start: "09:00:00" } }] };
+      const newVal = { meetingTimes: [{ timeRange: { start: "10:00:00" } }] };
       expect(jsonDiff(oldVal, newVal)).toEqual([
-        { path: ".meetingTimes[0].beginTime", oldVal: "0900", newVal: "1000" },
+        { path: ".meetingTimes[0].timeRange.start", oldVal: "09:00:00", newVal: "10:00:00" },
       ]);
     });
 
@@ -126,6 +126,8 @@ describe("formatDiffPath", () => {
   });
 
   it("handles mixed paths", () => {
-    expect(formatDiffPath(".meetingTimes[0].beginTime")).toBe("meetingTimes[0].beginTime");
+    expect(formatDiffPath(".meetingTimes[0].timeRange.start")).toBe(
+      "meetingTimes[0].timeRange.start"
+    );
   });
 });

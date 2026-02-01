@@ -4,7 +4,6 @@ import {
   abbreviateInstructor,
   formatMeetingTimeSummary,
   getPrimaryInstructor,
-  openSeats,
   seatsColor,
   seatsDotColor,
 } from "$lib/course";
@@ -34,24 +33,28 @@ let {
   >
     <!-- Line 1: Course code + title + seats -->
     <div class="flex items-baseline justify-between gap-2">
+      {#snippet seatsDisplay()}
+        {@const openSeats = course.enrollment.max - course.enrollment.current}
+        <span class="inline-flex items-center gap-1 shrink-0 text-xs select-none">
+          <span class="size-1.5 rounded-full {seatsDotColor(openSeats)} shrink-0"></span>
+          <span class="{seatsColor(openSeats)} font-medium tabular-nums">
+            {#if openSeats === 0}Full{:else}{openSeats}/{formatNumber(course.enrollment.max)}{/if}
+          </span>
+        </span>
+      {/snippet}
       <div class="flex items-baseline gap-1.5 min-w-0">
         <span class="font-mono font-semibold text-sm tracking-tight shrink-0">
           {course.subject} {course.courseNumber}
         </span>
         <span class="text-sm text-muted-foreground truncate">{course.title}</span>
       </div>
-      <span class="inline-flex items-center gap-1 shrink-0 text-xs select-none">
-        <span class="size-1.5 rounded-full {seatsDotColor(course)} shrink-0"></span>
-        <span class="{seatsColor(course)} font-medium tabular-nums">
-          {#if openSeats(course) === 0}Full{:else}{openSeats(course)}/{formatNumber(course.maxEnrollment)}{/if}
-        </span>
-      </span>
+      {@render seatsDisplay()}
     </div>
 
     <!-- Line 2: Instructor + time -->
     <div class="flex items-center justify-between gap-2 mt-1">
       <span class="text-xs text-muted-foreground truncate">
-        {abbreviateInstructor(getPrimaryInstructor(course.instructors)?.displayName ?? "Staff")}
+        {abbreviateInstructor(getPrimaryInstructor(course.instructors, course.primaryInstructorId)?.displayName ?? "Staff")}
       </span>
       <span class="text-xs text-muted-foreground shrink-0">
         {formatMeetingTimeSummary(course)}

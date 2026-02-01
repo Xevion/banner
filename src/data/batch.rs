@@ -1,14 +1,22 @@
 //! Batch database operations for improved performance.
 
 use crate::banner::Course;
-use crate::data::models::{DbMeetingTime, UpsertCounts};
+use crate::banner::models::meetings::TimeRange;
+use crate::data::course_types::{DateRange, MeetingLocation};
+use crate::data::models::{DayOfWeek, DbMeetingTime, UpsertCounts};
 use crate::data::names::{decode_html_entities, parse_banner_name};
 use crate::error::Result;
+use chrono::NaiveDate;
 use sqlx::PgConnection;
 use sqlx::PgPool;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::time::Instant;
 use tracing::info;
+
+/// Parse a date string in MM/DD/YYYY format to `NaiveDate`.
+fn parse_mm_dd_yyyy(s: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(s, "%m/%d/%Y").ok()
+}
 
 /// Convert a Banner API course's meeting times to the DB JSONB shape.
 fn to_db_meeting_times(course: &Course) -> serde_json::Value {
@@ -17,22 +25,105 @@ fn to_db_meeting_times(course: &Course) -> serde_json::Value {
         .iter()
         .map(|mf| {
             let mt = &mf.meeting_time;
+
+            // Build days BTreeSet from boolean flags
+            let mut days = BTreeSet::new();
+            if mt.monday {
+                days.insert(DayOfWeek::Monday);
+            }
+            if mt.tuesday {
+                days.insert(DayOfWeek::Tuesday);
+            }
+            if mt.wednesday {
+                days.insert(DayOfWeek::Wednesday);
+            }
+            if mt.thursday {
+                days.insert(DayOfWeek::Thursday);
+            }
+            if mt.friday {
+                days.insert(DayOfWeek::Friday);
+            }
+            if mt.saturday {
+                days.insert(DayOfWeek::Saturday);
+            }
+            if mt.sunday {
+                days.insert(DayOfWeek::Sunday);
+            }
+
+            // Parse time range from HHMM strings
+            let time_range = match (mt.begin_time.as_deref(), mt.end_time.as_deref()) {
+                (Some(begin), Some(end)) => {
+                    let result = TimeRange::from_hhmm(begin, end);
+                    if result.is_none() {
+                        tracing::warn!(
+                            crn = %mt.course_reference_number,
+                            begin, end,
+                            "failed to parse meeting time range"
+                        );
+                    }
+                    result
+                }
+                _ => None,
+            };
+
+            // Parse date range from MM/DD/YYYY strings
+            let date_range = match (
+                parse_mm_dd_yyyy(&mt.start_date),
+                parse_mm_dd_yyyy(&mt.end_date),
+            ) {
+                (Some(start), Some(end)) => DateRange::new(start, end).unwrap_or_else(|err| {
+                    tracing::warn!(
+                        crn = %mt.course_reference_number,
+                        start_date = %mt.start_date,
+                        end_date = %mt.end_date,
+                        %err,
+                        "invalid date range, swapping start/end"
+                    );
+                    // Swap so the invariant holds
+                    DateRange {
+                        start: end,
+                        end: start,
+                    }
+                }),
+                _ => {
+                    tracing::warn!(
+                        crn = %mt.course_reference_number,
+                        start_date = %mt.start_date,
+                        end_date = %mt.end_date,
+                        "failed to parse meeting date range, using epoch fallback"
+                    );
+                    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+                    DateRange {
+                        start: epoch,
+                        end: epoch,
+                    }
+                }
+            };
+
+            // Build location if any field is present
+            let location = {
+                let loc = MeetingLocation {
+                    building: mt.building.clone(),
+                    building_description: mt.building_description.clone(),
+                    room: mt.room.clone(),
+                    campus: mt.campus.clone(),
+                };
+                if loc.building.is_some()
+                    || loc.building_description.is_some()
+                    || loc.room.is_some()
+                    || loc.campus.is_some()
+                {
+                    Some(loc)
+                } else {
+                    None
+                }
+            };
+
             DbMeetingTime {
-                begin_time: mt.begin_time.clone(),
-                end_time: mt.end_time.clone(),
-                start_date: mt.start_date.clone(),
-                end_date: mt.end_date.clone(),
-                monday: mt.monday,
-                tuesday: mt.tuesday,
-                wednesday: mt.wednesday,
-                thursday: mt.thursday,
-                friday: mt.friday,
-                saturday: mt.saturday,
-                sunday: mt.sunday,
-                building: mt.building.clone(),
-                building_description: mt.building_description.clone(),
-                room: mt.room.clone(),
-                campus: mt.campus.clone(),
+                time_range,
+                date_range,
+                days,
+                location,
                 meeting_type: mt.meeting_type.clone(),
                 meeting_schedule_type: mt.meeting_schedule_type.clone(),
             }

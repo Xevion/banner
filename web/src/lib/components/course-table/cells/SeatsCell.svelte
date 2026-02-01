@@ -1,13 +1,13 @@
 <script lang="ts">
 import type { CourseResponse } from "$lib/api";
-import { openSeats, seatsColor, seatsDotColor } from "$lib/course";
+import { seatsColor, seatsDotColor } from "$lib/course";
 import { formatNumber } from "$lib/utils";
 
 let { course }: { course: CourseResponse } = $props();
 
-let open = $derived(openSeats(course));
+let open = $derived(course.enrollment.max - course.enrollment.current);
 let seatsTip = $derived(
-  `${formatNumber(open)} of ${formatNumber(course.maxEnrollment)} seats open, ${formatNumber(course.enrollment)} enrolled${course.waitCount > 0 ? `, ${formatNumber(course.waitCount)} waitlisted` : ""}`
+  `${formatNumber(open)} of ${formatNumber(course.enrollment.max)} seats open, ${formatNumber(course.enrollment.current)} enrolled${course.enrollment.waitCount > 0 ? `, ${formatNumber(course.enrollment.waitCount)} waitlisted` : ""}`
 );
 </script>
 
@@ -18,13 +18,13 @@ let seatsTip = $derived(
     data-tooltip-side="left"
     data-tooltip-delay="200"
   >
-    <span class="size-1.5 rounded-full {seatsDotColor(course)} shrink-0"></span>
-    <span class="{seatsColor(course)} font-medium tabular-nums"
+    <span class="size-1.5 rounded-full {seatsDotColor(open)} shrink-0"></span>
+    <span class="{seatsColor(open)} font-medium tabular-nums"
       >{#if open === 0}Full{:else}{open} open{/if}</span
     >
     <span class="text-muted-foreground/60 tabular-nums"
-      >{formatNumber(course.enrollment)}/{formatNumber(course.maxEnrollment)}{#if course.waitCount > 0}
-        · WL {formatNumber(course.waitCount)}/{formatNumber(course.waitCapacity)}{/if}</span
+      >{formatNumber(course.enrollment.current)}/{formatNumber(course.enrollment.max)}{#if course.enrollment.waitCount > 0}
+        · WL {formatNumber(course.enrollment.waitCount)}/{formatNumber(course.enrollment.waitCapacity)}{/if}</span
     >
   </span>
 </td>

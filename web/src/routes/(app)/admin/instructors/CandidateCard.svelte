@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { CandidateResponse } from "$lib/api";
-import { isRatingValid, ratingStyle, rmpUrl } from "$lib/course";
+import { ratingStyle, rmpUrl } from "$lib/course";
 import { Check, ExternalLink, LoaderCircle, X, XCircle } from "@lucide/svelte";
 import ScoreBreakdown from "./ScoreBreakdown.svelte";
 
@@ -130,7 +130,7 @@ const isUnmatchLoading = $derived(actionLoading === `unmatch-${candidate.rmpLega
 
   <!-- Rating stats -->
   <div class="mt-2 flex items-center gap-3 text-xs flex-wrap">
-    {#if isRatingValid(candidate.avgRating, candidate.numRatings ?? 0)}
+    {#if candidate.avgRating != null}
       <span
         class="font-semibold tabular-nums"
         style={ratingStyle(candidate.avgRating!, isDark)}

@@ -7,7 +7,7 @@ import {
   client,
 } from "$lib/api";
 import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
-import { formatInstructorName, isRatingValid, ratingStyle } from "$lib/course";
+import { formatInstructorName, ratingStyle } from "$lib/course";
 import { themeStore } from "$lib/stores/theme.svelte";
 import {
   Check,
@@ -594,7 +594,7 @@ function formatScore(score: number): string {
                     {@const tc = instructor.topCandidate}
                     <div class="flex items-center gap-2">
                       <span class="text-foreground">{tc.firstName} {tc.lastName}</span>
-                      {#if isRatingValid(tc.avgRating, tc.numRatings ?? 0)}
+                      {#if tc.avgRating != null}
                         <span
                           class="font-semibold tabular-nums"
                           style={ratingStyle(tc.avgRating!, themeStore.isDark)}

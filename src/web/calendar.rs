@@ -112,16 +112,7 @@ pub async fn course_gcal(
     // Prefer the first meeting time that has actual days/times scheduled
     let mt = meeting_times
         .iter()
-        .find(|mt| {
-            mt.begin_time.is_some()
-                && (mt.monday
-                    || mt.tuesday
-                    || mt.wednesday
-                    || mt.thursday
-                    || mt.friday
-                    || mt.saturday
-                    || mt.sunday)
-        })
+        .find(|mt| mt.time_range.is_some() && !mt.days.is_empty())
         .unwrap_or(&meeting_times[0]);
 
     let url = generate_gcal_url(&cal_course, mt).map_err(|e| {
