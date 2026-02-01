@@ -318,7 +318,10 @@ export function concernAccentColor(concern: DeliveryConcern): string | null {
  * Location display text for the table cell.
  * Shows "Online" for internet class (INT building) or other online courses.
  */
-export function formatLocationDisplay(course: CourseResponse): string | null {
+export function formatLocationDisplay(
+  course: CourseResponse,
+  concern?: DeliveryConcern
+): string | null {
   // Check for Internet Class building first
   const hasIntBuilding = course.meetingTimes.some((mt) => mt.building === "INT");
   if (hasIntBuilding) return "Online";
@@ -326,14 +329,17 @@ export function formatLocationDisplay(course: CourseResponse): string | null {
   const loc = formatLocation(course);
   if (loc) return loc;
 
-  const concern = getDeliveryConcern(course);
-  if (concern === "online" || concern === "internet") return "Online";
+  const c = concern ?? getDeliveryConcern(course);
+  if (c === "online" || c === "internet") return "Online";
 
   return null;
 }
 
 /** Tooltip text for the location column: long-form location + delivery note */
-export function formatLocationTooltip(course: CourseResponse): string | null {
+export function formatLocationTooltip(
+  course: CourseResponse,
+  concern?: DeliveryConcern
+): string | null {
   const parts: string[] = [];
 
   for (const mt of course.meetingTimes) {
@@ -343,12 +349,12 @@ export function formatLocationTooltip(course: CourseResponse): string | null {
 
   const locationLine = parts.length > 0 ? parts.join(", ") : null;
 
-  const concern = getDeliveryConcern(course);
+  const c = concern ?? getDeliveryConcern(course);
   let deliveryNote: string | null = null;
-  if (concern === "online") deliveryNote = "Online";
-  else if (concern === "internet") deliveryNote = "Internet";
-  else if (concern === "hybrid") deliveryNote = "Hybrid";
-  else if (concern === "off-campus") deliveryNote = "Off-campus";
+  if (c === "online") deliveryNote = "Online";
+  else if (c === "internet") deliveryNote = "Internet";
+  else if (c === "hybrid") deliveryNote = "Hybrid";
+  else if (c === "off-campus") deliveryNote = "Off-campus";
 
   if (locationLine && deliveryNote) return `${locationLine}\n${deliveryNote}`;
   if (locationLine) return locationLine;

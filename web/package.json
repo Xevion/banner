@@ -39,6 +39,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.7.5",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@icons-pack/svelte-simple-icons": "^6.5.0",
     "d3-scale": "^4.0.2",

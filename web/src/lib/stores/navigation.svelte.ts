@@ -79,6 +79,10 @@ export function initNavigation() {
     }
 
     return new Promise((resolve) => {
+      // Suppress non-navigation view-transition-names (e.g. search-results)
+      // so they don't create independent transition groups during page nav.
+      document.documentElement.classList.add("nav-transitioning");
+
       const vt = document.startViewTransition(async () => {
         resolve();
         await navigation.complete;
@@ -86,7 +90,8 @@ export function initNavigation() {
 
       // Update navbar path only after the view transition finishes and the
       // real DOM is visible again, so CSS transitions can actually run.
-      vt.finished.then(() => {
+      vt.finished.finally(() => {
+        document.documentElement.classList.remove("nav-transitioning");
         navbar.path = window.location.pathname;
       });
     });

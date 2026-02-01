@@ -45,12 +45,11 @@ import {
 } from "@tanstack/table-core";
 import { ContextMenu, DropdownMenu } from "bits-ui";
 import { flip } from "svelte/animate";
-import { cubicOut } from "svelte/easing";
 import { fade, slide } from "svelte/transition";
+import { useTooltipDelegation } from "$lib/composables/useTooltipDelegation";
 import CourseCard from "./CourseCard.svelte";
 import CourseDetail from "./CourseDetail.svelte";
-import RichTooltip from "./RichTooltip.svelte";
-import SimpleTooltip from "./SimpleTooltip.svelte";
+import LazyRichTooltip from "./LazyRichTooltip.svelte";
 
 let {
   courses,
@@ -104,9 +103,24 @@ $effect(() => {
   expandedCrn = null;
 });
 
+// Skip FLIP on initial load: all items are new so there's nothing to animate,
+// but Svelte still measures every element's position. $effect runs AFTER the
+// DOM update, so hadResults is still false during the first results render.
+let hadResults = $state(false);
+$effect(() => {
+  if (courses.length > 0) hadResults = true;
+});
+
 useOverlayScrollbars(() => tableWrapper, {
   overflow: { x: "scroll", y: "hidden" },
   scrollbars: { autoHide: "never" },
+});
+
+// Singleton tooltip: one imperative tooltip element for all data-tooltip cells
+$effect(() => {
+  if (!tableElement) return;
+  const { destroy } = useTooltipDelegation(tableElement);
+  return destroy;
 });
 
 function resetColumnVisibility() {
@@ -130,22 +144,39 @@ function primaryInstructorDisplay(course: CourseResponse): string {
   return abbreviateInstructor(primary.displayName);
 }
 
-function primaryRating(
-  course: CourseResponse
-): { rating: number; count: number; legacyId: number | null } | null {
-  const primary = getPrimaryInstructor(course.instructors);
-  if (!primary?.rmpRating) return null;
-  return {
-    rating: primary.rmpRating,
-    count: primary.rmpNumRatings ?? 0,
-    legacyId: primary.rmpLegacyId ?? null,
-  };
-}
-
 function timeIsTBA(course: CourseResponse): boolean {
   if (course.meetingTimes.length === 0) return true;
   const mt = course.meetingTimes[0];
   return isMeetingTimeTBA(mt) && isTimeTBA(mt);
+}
+
+// Skeleton widths per column ID (used by the raw-HTML skeleton builder)
+const SKELETON_WIDTHS: Record<string, string> = {
+  crn: "w-10",
+  course_code: "w-20",
+  title: "w-40",
+  instructor: "w-20",
+  time: "w-20",
+  location: "w-20",
+  seats: "w-14 ml-auto",
+};
+
+/** Build skeleton rows as a raw HTML string — one innerHTML instead of N×M reactive nodes. */
+function buildSkeletonHtml(colIds: string[], rowCount: number): string {
+  const cells = colIds
+    .map((id) => {
+      const w = SKELETON_WIDTHS[id] ?? "w-20";
+      return `<td class="py-2.5 px-2"><div class="h-4 bg-muted rounded animate-pulse ${w}"></div></td>`;
+    })
+    .join("");
+  const row = `<tr class="border-b border-border">${cells}</tr>`;
+  return row.repeat(rowCount);
+}
+
+/** Build mobile card skeletons as raw HTML. */
+function buildCardSkeletonHtml(count: number): string {
+  const card = `<div class="rounded-lg border border-border bg-card p-3 animate-pulse"><div class="flex items-baseline justify-between gap-2"><div class="flex items-baseline gap-1.5"><div class="h-4 w-16 bg-muted rounded"></div><div class="h-4 w-32 bg-muted rounded"></div></div><div class="h-4 w-10 bg-muted rounded"></div></div><div class="flex items-center justify-between gap-2 mt-1"><div class="h-3 w-24 bg-muted rounded"></div><div class="h-3 w-20 bg-muted rounded"></div></div></div>`;
+  return card.repeat(count);
 }
 
 // Calculate max subject code length for alignment
@@ -303,21 +334,7 @@ const table = createSvelteTable({
 <!-- Mobile cards -->
 <div class="flex flex-col gap-2 sm:hidden">
     {#if loading && courses.length === 0}
-        {#each Array(skeletonRowCount) as _}
-            <div class="rounded-lg border border-border bg-card p-3 animate-pulse">
-                <div class="flex items-baseline justify-between gap-2">
-                    <div class="flex items-baseline gap-1.5">
-                        <div class="h-4 w-16 bg-muted rounded"></div>
-                        <div class="h-4 w-32 bg-muted rounded"></div>
-                    </div>
-                    <div class="h-4 w-10 bg-muted rounded"></div>
-                </div>
-                <div class="flex items-center justify-between gap-2 mt-1">
-                    <div class="h-3 w-24 bg-muted rounded"></div>
-                    <div class="h-3 w-20 bg-muted rounded"></div>
-                </div>
-            </div>
-        {/each}
+        {@html buildCardSkeletonHtml(skeletonRowCount)}
     {:else if courses.length === 0 && !loading}
         {@render emptyState()}
     {:else}
@@ -410,24 +427,7 @@ const table = createSvelteTable({
                 </thead>
                 {#if loading && courses.length === 0}
                     <tbody>
-                        {#each Array(skeletonRowCount) as _}
-                            <tr class="border-b border-border">
-                                {#each table.getVisibleLeafColumns() as col}
-                                    <td class="py-2.5 px-2">
-                                        <div
-                                            class="h-4 bg-muted rounded animate-pulse {col.id ===
-                                            'seats'
-                                                ? 'w-14 ml-auto'
-                                                : col.id === 'title'
-                                                  ? 'w-40'
-                                                  : col.id === 'crn'
-                                                    ? 'w-10'
-                                                    : 'w-20'}"
-                                        ></div>
-                                    </td>
-                                {/each}
-                            </tr>
-                        {/each}
+                        {@html buildSkeletonHtml(visibleColumnIds, skeletonRowCount)}
                     </tbody>
                 {:else if courses.length === 0 && !loading}
                     <tbody>
@@ -445,13 +445,9 @@ const table = createSvelteTable({
                     {#each table.getRowModel().rows as row, i (row.id)}
                         {@const course = row.original}
                         <tbody
-                            class="transition-opacity duration-200 {loading ? 'opacity-45 pointer-events-none' : ''}"
-                            animate:flip={{ duration: 300 }}
-                            in:fade={{
-                                duration: 200,
-                                delay: Math.min(i * 25, 300),
-                                easing: cubicOut,
-                            }}
+                            class="transition-opacity duration-200 animate-fade-in {loading ? 'opacity-45 pointer-events-none' : ''}"
+                            animate:flip={{ duration: hadResults ? 300 : 0 }}
+                            style:animation-delay="{Math.min(i * 25, 300)}ms"
                         >
                             <tr
                                 class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn ===
@@ -460,8 +456,7 @@ const table = createSvelteTable({
                                     : ''}"
                                 onclick={() => toggleRow(course.crn)}
                             >
-                                {#each row.getVisibleCells() as cell (cell.id)}
-                                    {@const colId = cell.column.id}
+                                {#each visibleColumnIds as colId (colId)}
                                     {#if colId === "crn"}
                                         <td class="py-2 px-2 relative">
                                             <button
@@ -510,42 +505,43 @@ const table = createSvelteTable({
                                                 " ",
                                             )}
                                         <td class="py-2 px-2 whitespace-nowrap">
-                                            <SimpleTooltip
-                                                text={subjectDesc
+                                            <span
+                                                data-tooltip={subjectDesc
                                                     ? `${subjectDesc} ${course.courseNumber}`
                                                     : `${course.subject} ${course.courseNumber}`}
-                                                delay={200}
-                                                side="bottom"
-                                                passthrough
+                                                data-tooltip-side="bottom"
+                                                data-tooltip-delay="200"
                                             >
                                                 <span class="font-semibold font-mono tracking-tight whitespace-pre">{paddedSubject} {course.courseNumber}</span>{#if course.sequenceNumber}<span class="text-muted-foreground font-mono tracking-tight">-{course.sequenceNumber}</span>{/if}
-                                            </SimpleTooltip>
+                                            </span>
                                         </td>
                                     {:else if colId === "title"}
                                         <td
                                             class="py-2 px-2 font-medium max-w-50 truncate"
                                         >
-                                            <SimpleTooltip
-                                                text={course.title}
-                                                delay={200}
-                                                side="bottom"
-                                                passthrough
-                                            >
-                                                <span class="block truncate"
-                                                    >{course.title}</span
-                                                >
-                                            </SimpleTooltip>
+                                            <span
+                                                class="block truncate"
+                                                data-tooltip={course.title}
+                                                data-tooltip-side="bottom"
+                                                data-tooltip-delay="200"
+                                            >{course.title}</span>
                                         </td>
                                     {:else if colId === "instructor"}
                                         {@const primary = getPrimaryInstructor(
                                             course.instructors,
                                         )}
-                                        {@const display =
-                                            primaryInstructorDisplay(course)}
+                                        {@const display = primary
+                                            ? abbreviateInstructor(primary.displayName)
+                                            : "Staff"}
                                         {@const commaIdx =
                                             display.indexOf(", ")}
-                                        {@const ratingData =
-                                            primaryRating(course)}
+                                        {@const ratingData = primary?.rmpRating != null
+                                            ? {
+                                                rating: primary.rmpRating,
+                                                count: primary.rmpNumRatings ?? 0,
+                                                legacyId: primary.rmpLegacyId ?? null,
+                                            }
+                                            : null}
                                         <td class="py-2 px-2 whitespace-nowrap">
                                             {#if display === "Staff"}
                                                 <span
@@ -553,12 +549,10 @@ const table = createSvelteTable({
                                                     >Staff</span
                                                 >
                                             {:else}
-                                                <SimpleTooltip
-                                                    text={primary?.displayName ??
-                                                        "Staff"}
-                                                    delay={200}
-                                                    side="bottom"
-                                                    passthrough
+                                                <span
+                                                    data-tooltip={primary?.displayName ?? "Staff"}
+                                                    data-tooltip-side="bottom"
+                                                    data-tooltip-delay="200"
                                                 >
                                                     {#if commaIdx !== -1}
                                                         <span
@@ -577,13 +571,13 @@ const table = createSvelteTable({
                                                     {:else}
                                                         <span>{display}</span>
                                                     {/if}
-                                                </SimpleTooltip>
+                                                </span>
                                             {/if}
                                             {#if ratingData}
                                                 {@const lowConfidence =
                                                     ratingData.count <
                                                     RMP_CONFIDENCE_THRESHOLD}
-                                                <RichTooltip
+                                                <LazyRichTooltip
                                                     side="bottom"
                                                     sideOffset={6}
                                                     contentClass="px-2.5 py-1.5"
@@ -639,17 +633,14 @@ const table = createSvelteTable({
                                                             {/if}
                                                         </span>
                                                     {/snippet}
-                                                </RichTooltip>
+                                                </LazyRichTooltip>
                                             {/if}
                                         </td>
                                     {:else if colId === "time"}
-                                        <td class="py-2 px-2 whitespace-nowrap">
-                                            <SimpleTooltip
-                                                text={formatMeetingTimesTooltip(
-                                                    course.meetingTimes,
-                                                )}
-                                                passthrough
-                                            >
+                                        <td
+                                            class="py-2 px-2 whitespace-nowrap"
+                                            data-tooltip={formatMeetingTimesTooltip(course.meetingTimes)}
+                                        >
                                                 {#if isAsyncOnline(course)}
                                                     <span
                                                         class="text-xs text-muted-foreground/60 select-none"
@@ -698,7 +689,6 @@ const table = createSvelteTable({
                                                         {/if}
                                                     </span>
                                                 {/if}
-                                            </SimpleTooltip>
                                         </td>
                                     {:else if colId === "location"}
                                         {@const concern =
@@ -706,30 +696,19 @@ const table = createSvelteTable({
                                         {@const accentColor =
                                             concernAccentColor(concern)}
                                         {@const locTooltip =
-                                            formatLocationTooltip(course)}
+                                            formatLocationTooltip(course, concern)}
                                         {@const locDisplay =
-                                            formatLocationDisplay(course)}
+                                            formatLocationDisplay(course, concern)}
                                         <td class="py-2 px-2 whitespace-nowrap">
-                                            {#if locTooltip}
-                                                <SimpleTooltip
-                                                    text={locTooltip}
-                                                    delay={200}
-                                                    passthrough
-                                                >
-                                                    <span
-                                                        class="text-muted-foreground"
-                                                        class:pl-2={accentColor !==
-                                                            null}
-                                                        style:border-left={accentColor
-                                                            ? `2px solid ${accentColor}`
-                                                            : undefined}
-                                                    >
-                                                        {locDisplay ?? "—"}
-                                                    </span>
-                                                </SimpleTooltip>
-                                            {:else if locDisplay}
+                                            {#if locDisplay}
                                                 <span
                                                     class="text-muted-foreground"
+                                                    class:pl-2={accentColor !== null}
+                                                    style:border-left={accentColor
+                                                        ? `2px solid ${accentColor}`
+                                                        : undefined}
+                                                    data-tooltip={locTooltip}
+                                                    data-tooltip-delay="200"
                                                 >
                                                     {locDisplay}
                                                 </span>
@@ -741,43 +720,34 @@ const table = createSvelteTable({
                                             {/if}
                                         </td>
                                     {:else if colId === "seats"}
+                                        {@const open = openSeats(course)}
+                                        {@const seatsTip = `${formatNumber(open)} of ${formatNumber(course.maxEnrollment)} seats open, ${formatNumber(course.enrollment)} enrolled${course.waitCount > 0 ? `, ${formatNumber(course.waitCount)} waitlisted` : ""}`}
                                         <td
                                             class="py-2 px-2 text-right whitespace-nowrap"
                                         >
-                                            <SimpleTooltip
-                                                text="{formatNumber(openSeats(
-                                                    course,
-                                                ))} of {formatNumber(course.maxEnrollment)} seats open, {formatNumber(course.enrollment)} enrolled{course.waitCount >
-                                                0
-                                                    ? `, ${formatNumber(course.waitCount)} waitlisted`
-                                                    : ''}"
-                                                delay={200}
-                                                side="left"
-                                                passthrough
+                                            <span
+                                                class="inline-flex items-center gap-1.5 select-none"
+                                                data-tooltip={seatsTip}
+                                                data-tooltip-side="left"
+                                                data-tooltip-delay="200"
                                             >
                                                 <span
-                                                    class="inline-flex items-center gap-1.5 select-none"
+                                                    class="size-1.5 rounded-full {seatsDotColor(
+                                                        course,
+                                                    )} shrink-0"
+                                                ></span>
+                                                <span
+                                                    class="{seatsColor(
+                                                        course,
+                                                    )} font-medium tabular-nums"
+                                                    >{#if open === 0}Full{:else}{open} open{/if}</span
                                                 >
-                                                    <span
-                                                        class="size-1.5 rounded-full {seatsDotColor(
-                                                            course,
-                                                        )} shrink-0"
-                                                    ></span>
-                                                    <span
-                                                        class="{seatsColor(
-                                                            course,
-                                                        )} font-medium tabular-nums"
-                                                        >{#if openSeats(course) === 0}Full{:else}{openSeats(
-                                                                course,
-                                                            )} open{/if}</span
-                                                    >
-                                                    <span
-                                                        class="text-muted-foreground/60 tabular-nums"
-                                                        >{formatNumber(course.enrollment)}/{formatNumber(course.maxEnrollment)}{#if course.waitCount > 0}
-                                                            · WL {formatNumber(course.waitCount)}/{formatNumber(course.waitCapacity)}{/if}</span
-                                                    >
-                                                </span>
-                                            </SimpleTooltip>
+                                                <span
+                                                    class="text-muted-foreground/60 tabular-nums"
+                                                    >{formatNumber(course.enrollment)}/{formatNumber(course.maxEnrollment)}{#if course.waitCount > 0}
+                                                        · WL {formatNumber(course.waitCount)}/{formatNumber(course.waitCapacity)}{/if}</span
+                                                >
+                                            </span>
                                         </td>
                                     {/if}
                                 {/each}
