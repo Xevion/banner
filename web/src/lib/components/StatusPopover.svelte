@@ -18,11 +18,11 @@ const hasActiveFilters = $derived(openOnly || waitCountMax !== null);
 <FilterPopover label="Status" active={hasActiveFilters} width="w-64">
   {#snippet content()}
     <div class="flex flex-col gap-1.5">
-      <span class="text-xs font-medium text-muted-foreground">Availability</span>
+      <span class="text-xs font-medium text-muted-foreground select-none">Availability</span>
       <button
         type="button"
         aria-pressed={openOnly}
-        class="inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-medium transition-colors cursor-pointer
+        class="inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-medium transition-colors cursor-pointer select-none
                {openOnly
           ? 'bg-primary text-primary-foreground'
           : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
@@ -48,8 +48,8 @@ const hasActiveFilters = $derived(openOnly || waitCountMax !== null);
       />
     {:else}
       <div class="flex flex-col gap-1.5">
-        <span class="text-xs font-medium text-muted-foreground">Max waitlist</span>
-        <span class="text-xs text-muted-foreground">No waitlisted courses</span>
+        <span class="text-xs font-medium text-muted-foreground select-none">Max waitlist</span>
+        <span class="text-xs text-muted-foreground select-none">No waitlisted courses</span>
       </div>
     {/if}
   {/snippet}

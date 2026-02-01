@@ -20,7 +20,7 @@ let {
 <Popover.Root>
   <Popover.Trigger
     aria-label="{label} filters"
-    class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer
+    class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none
            {active
       ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
       : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"

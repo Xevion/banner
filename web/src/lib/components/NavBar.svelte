@@ -37,7 +37,7 @@ function isActive(tabHref: string): boolean {
       {#each staticTabs as tab}
         <a
           href={tab.href}
-          class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors no-underline
+          class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors no-underline select-none
             {isActive(tab.href)
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground hover:bg-background/50'}"
@@ -46,16 +46,16 @@ function isActive(tabHref: string): boolean {
           {tab.label}
         </a>
       {/each}
-      <a
-        href={profileTab.href}
-        class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors no-underline
-          {isActive(profileTab.href)
-            ? 'bg-background text-foreground shadow-sm'
-            : 'text-muted-foreground hover:text-foreground hover:bg-background/50'}"
-      >
-        <User size={15} strokeWidth={2} />
-        {#if profileTab.label}{profileTab.label}{/if}
-      </a>
+        <a
+          href={profileTab.href}
+          class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors no-underline select-none
+            {isActive(profileTab.href)
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-background/50'}"
+        >
+          <User size={15} strokeWidth={2} />
+          {#if profileTab.label}{profileTab.label}{/if}
+        </a>
       <ThemeToggle />
     </div>
   </div>

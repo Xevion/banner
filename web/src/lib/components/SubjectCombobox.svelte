@@ -85,7 +85,7 @@ $effect(() => {
           onmousedown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onclick={(e) => { e.stopPropagation(); removeSubject(code); }}
           onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); removeSubject(code); } }}
-          class="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-xs font-mono shrink-0
+          class="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-xs font-mono shrink-0 select-none
                  text-muted-foreground hover:bg-muted-foreground/15
                  cursor-pointer transition-colors first:ml-2"
         >
@@ -93,7 +93,7 @@ $effect(() => {
         </span>
       {/each}
       {#if !open && overflowCount > 0}
-        <span class="text-xs text-muted-foreground shrink-0">+{formatNumber(overflowCount)}</span>
+        <span class="text-xs text-muted-foreground shrink-0 select-none">+{formatNumber(overflowCount)}</span>
       {/if}
     {/if}
     <Combobox.Input

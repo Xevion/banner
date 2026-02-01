@@ -24,20 +24,20 @@ onMount(async () => {
 {:else}
   <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
     <div class="bg-card border-border rounded-lg border p-4">
-      <p class="text-muted-foreground text-sm">Users</p>
-      <p class="text-3xl font-bold">{formatNumber(status.userCount)}</p>
+      <p class="text-muted-foreground text-sm select-none">Users</p>
+      <p class="text-3xl font-bold select-none">{formatNumber(status.userCount)}</p>
     </div>
     <div class="bg-card border-border rounded-lg border p-4">
-      <p class="text-muted-foreground text-sm">Active Sessions</p>
-      <p class="text-3xl font-bold">{formatNumber(status.sessionCount)}</p>
+      <p class="text-muted-foreground text-sm select-none">Active Sessions</p>
+      <p class="text-3xl font-bold select-none">{formatNumber(status.sessionCount)}</p>
     </div>
     <div class="bg-card border-border rounded-lg border p-4">
-      <p class="text-muted-foreground text-sm">Courses</p>
-      <p class="text-3xl font-bold">{formatNumber(status.courseCount)}</p>
+      <p class="text-muted-foreground text-sm select-none">Courses</p>
+      <p class="text-3xl font-bold select-none">{formatNumber(status.courseCount)}</p>
     </div>
     <div class="bg-card border-border rounded-lg border p-4">
-      <p class="text-muted-foreground text-sm">Scrape Jobs</p>
-      <p class="text-3xl font-bold">{formatNumber(status.scrapeJobCount)}</p>
+      <p class="text-muted-foreground text-sm select-none">Scrape Jobs</p>
+      <p class="text-3xl font-bold select-none">{formatNumber(status.scrapeJobCount)}</p>
     </div>
   </div>
 
@@ -45,8 +45,8 @@ onMount(async () => {
   <div class="bg-card border-border rounded-lg border">
     {#each status.services as service}
       <div class="border-border flex items-center justify-between border-b px-4 py-3 last:border-b-0">
-        <span class="font-medium">{service.name}</span>
-        <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
+        <span class="font-medium select-none">{service.name}</span>
+        <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 select-none dark:bg-green-900 dark:text-green-200">
           {service.status}
         </span>
       </div>

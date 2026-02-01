@@ -59,7 +59,7 @@ onMount(() => {
         sideOffset={0}
     >
         <span
-            class="pl-1 text-xs transition-opacity duration-200 {loading
+            class="pl-1 text-xs transition-opacity duration-200 select-none {loading
                 ? 'opacity-40'
                 : ''}"
             in:fade={{ duration: 300 }}

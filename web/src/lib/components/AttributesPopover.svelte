@@ -67,14 +67,14 @@ function toggle(key: "instructionalMethod" | "campus" | "partOfTerm" | "attribut
         <div class="h-px bg-border"></div>
       {/if}
       <div class="flex flex-col gap-1.5">
-        <span class="text-xs font-medium text-muted-foreground">{label}</span>
+        <span class="text-xs font-medium text-muted-foreground select-none">{label}</span>
         <div class="flex flex-wrap gap-1">
           {#each referenceData[dataKey] as item (item.code)}
             {@const selected = getSelected(key)}
             <button
               type="button"
               aria-pressed={selected.includes(item.code)}
-              class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer
+              class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
                      {selected.includes(item.code)
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'}"

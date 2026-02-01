@@ -98,7 +98,7 @@ function handleSingleChange(event: CustomEvent<{ value: number }>) {
 </script>
 
 <div class="range-slider-wrapper flex flex-col gap-1.5" role="group" aria-label={label}>
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between select-none">
     <span class="text-xs font-medium text-muted-foreground">{label}</span>
     {#if !isDefault}
       <span class="text-xs text-muted-foreground">

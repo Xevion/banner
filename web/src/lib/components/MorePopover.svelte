@@ -43,7 +43,7 @@ const hasActiveFilters = $derived(
     <div class="h-px bg-border"></div>
 
     <div class="flex flex-col gap-1.5">
-      <label for="instructor-input" class="text-xs font-medium text-muted-foreground">
+      <label for="instructor-input" class="text-xs font-medium text-muted-foreground select-none">
         Instructor
       </label>
       <input

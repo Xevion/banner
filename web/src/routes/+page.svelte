@@ -686,7 +686,7 @@ function clearAllFilters() {
                 {#if activeFilterCount >= 2}
                     <button
                         type="button"
-                        class="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer ml-1"
+                        class="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none ml-1"
                         onclick={clearAllFilters}
                     >
                         Clear all
@@ -698,7 +698,7 @@ function clearAllFilters() {
             <div class="pb-1.5">
                 <DropdownMenu.Root>
                     <DropdownMenu.Trigger
-                        class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer shrink-0"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer select-none shrink-0"
                     >
                         <Columns3 class="size-3.5" />
                         View
@@ -722,7 +722,7 @@ function clearAllFilters() {
                                     >
                                         <DropdownMenu.Group>
                                             <DropdownMenu.GroupHeading
-                                                class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+                                                class="px-2 py-1.5 text-xs font-medium text-muted-foreground select-none"
                                             >
                                                 Toggle columns
                                             </DropdownMenu.GroupHeading>

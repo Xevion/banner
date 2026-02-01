@@ -18,7 +18,7 @@ let {
       {/if}
       <button
         type="button"
-        class="px-2 py-0.5 hover:bg-muted/60 transition-colors cursor-pointer first:rounded-l-full last:rounded-r-full"
+        class="px-2 py-0.5 hover:bg-muted/60 transition-colors cursor-pointer select-none first:rounded-l-full last:rounded-r-full"
         onclick={() => onRemoveSegment(segment)}
         aria-label="Remove {segment} filter"
       >

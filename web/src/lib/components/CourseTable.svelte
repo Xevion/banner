@@ -250,7 +250,7 @@ const table = createSvelteTable({
 )}
     <Group>
         <GroupHeading
-            class="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+            class="px-2 py-1.5 text-xs font-medium text-muted-foreground select-none"
         >
             Toggle columns
         </GroupHeading>
@@ -313,12 +313,11 @@ const table = createSvelteTable({
                             {#each headerGroup.headers as header}
                                 {#if header.column.getIsVisible()}
                                     <th
-                                        class="py-2 px-2 font-medium {header.id ===
+                                        class="py-2 px-2 font-medium select-none {header.id ===
                                         'seats'
                                             ? 'text-right'
                                             : ''}"
                                         class:cursor-pointer={header.column.getCanSort()}
-                                        class:select-none={header.column.getCanSort()}
                                         onclick={header.column.getToggleSortingHandler()}
                                     >
                                         {#if header.column.getCanSort()}
@@ -419,7 +418,7 @@ const table = createSvelteTable({
                                     {#if colId === "crn"}
                                         <td class="py-2 px-2 relative">
                                             <button
-                                                class="relative inline-flex items-center rounded-full px-2 py-0.5 border border-border/50 bg-muted/20 hover:bg-muted/40 hover:border-foreground/30 transition-colors duration-150 cursor-copy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring font-mono text-xs text-muted-foreground/70"
+                                                class="relative inline-flex items-center rounded-full px-2 py-0.5 border border-border/50 bg-muted/20 hover:bg-muted/40 hover:border-foreground/30 transition-colors duration-150 cursor-copy select-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring font-mono text-xs text-muted-foreground/70"
                                                 onclick={(e) =>
                                                     clipboard.copy(
                                                         course.crn,
@@ -503,7 +502,7 @@ const table = createSvelteTable({
                                         <td class="py-2 px-2 whitespace-nowrap">
                                             {#if display === "Staff"}
                                                 <span
-                                                    class="text-xs text-muted-foreground/60 uppercase"
+                                                    class="text-xs text-muted-foreground/60 uppercase select-none"
                                                     >Staff</span
                                                 >
                                             {:else}
@@ -544,7 +543,7 @@ const table = createSvelteTable({
                                                 >
                                                     {#snippet children()}
                                                         <span
-                                                            class="ml-1 text-xs font-medium inline-flex items-center gap-0.5"
+                                                            class="ml-1 text-xs font-medium inline-flex items-center gap-0.5 select-none"
                                                             style={ratingStyle(
                                                                 ratingData.rating,
                                                                 themeStore.isDark,
@@ -606,12 +605,12 @@ const table = createSvelteTable({
                                             >
                                                 {#if isAsyncOnline(course)}
                                                     <span
-                                                        class="text-xs text-muted-foreground/60"
+                                                        class="text-xs text-muted-foreground/60 select-none"
                                                         >Async</span
                                                     >
                                                 {:else if timeIsTBA(course)}
                                                     <span
-                                                        class="text-xs text-muted-foreground/60"
+                                                        class="text-xs text-muted-foreground/60 select-none"
                                                         >TBA</span
                                                     >
                                                 {:else}
@@ -637,13 +636,13 @@ const table = createSvelteTable({
                                                             >
                                                         {:else}
                                                             <span
-                                                                class="text-xs text-muted-foreground/60"
+                                                                class="text-xs text-muted-foreground/60 select-none"
                                                                 >TBA</span
                                                             >
                                                         {/if}
                                                         {#if course.meetingTimes.length > 1}
                                                             <span
-                                                                class="ml-1 text-xs text-muted-foreground/70 font-medium"
+                                                                class="ml-1 text-xs text-muted-foreground/70 font-medium select-none"
                                                                 >+{course
                                                                     .meetingTimes
                                                                     .length -
@@ -710,7 +709,7 @@ const table = createSvelteTable({
                                                 passthrough
                                             >
                                                 <span
-                                                    class="inline-flex items-center gap-1.5"
+                                                    class="inline-flex items-center gap-1.5 select-none"
                                                 >
                                                     <span
                                                         class="size-1.5 rounded-full {seatsDotColor(
