@@ -9,7 +9,7 @@ import {
   type Subject,
   client,
 } from "$lib/api";
-import CourseTable from "$lib/components/CourseTable.svelte";
+import { CourseTable } from "$lib/components/course-table";
 import FilterChip from "$lib/components/FilterChip.svelte";
 import Footer from "$lib/components/Footer.svelte";
 import Pagination from "$lib/components/Pagination.svelte";
