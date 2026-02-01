@@ -73,7 +73,7 @@ const clipboard = useClipboard();
                                 </span>
                             {/snippet}
                             {#snippet content()}
-                                <div class="space-y-1.5">
+                                <div class="flex flex-col gap-y-1.5">
                                     <div class="font-medium">
                                         {instructor.displayName}
                                     </div>
@@ -136,7 +136,7 @@ const clipboard = useClipboard();
         <div>
             <h4 class="text-sm text-foreground mb-2">Meeting Times</h4>
             {#if course.meetingTimes.length > 0}
-                <ul class="space-y-2">
+                <ul class="flex flex-col gap-y-2">
                     {#each course.meetingTimes as mt}
                         <li>
                             {#if isMeetingTimeTBA(mt) && isTimeTBA(mt)}

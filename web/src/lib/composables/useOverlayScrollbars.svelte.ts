@@ -1,12 +1,13 @@
-import { themeStore } from "$lib/stores/theme.svelte";
 import { OverlayScrollbars, type PartialOptions } from "overlayscrollbars";
 import { onMount } from "svelte";
 
 /**
- * Set up OverlayScrollbars on an element with automatic theme reactivity.
+ * Set up OverlayScrollbars on an element.
+ *
+ * Theme colors are handled purely via CSS custom properties on `:root` / `.dark`
+ * (see layout.css), so no JS theme-switching is needed.
  *
  * Must be called during component initialization (uses `onMount` internally).
- * The scrollbar theme automatically syncs with `themeStore.isDark`.
  */
 export function useOverlayScrollbars(getElement: () => HTMLElement, options: PartialOptions = {}) {
   onMount(() => {
@@ -15,22 +16,11 @@ export function useOverlayScrollbars(getElement: () => HTMLElement, options: Par
       ...options,
       scrollbars: {
         ...options.scrollbars,
-        theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
+        theme: "os-theme-light",
       },
     });
 
-    const unwatch = $effect.root(() => {
-      $effect(() => {
-        osInstance.options({
-          scrollbars: {
-            theme: themeStore.isDark ? "os-theme-dark" : "os-theme-light",
-          },
-        });
-      });
-    });
-
     return () => {
-      unwatch();
       osInstance.destroy();
     };
   });

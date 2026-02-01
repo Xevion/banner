@@ -398,7 +398,7 @@ const columnCount = columns.length;
                 <td colspan={columnCount} class="p-0">
                   <div transition:slide={{ duration: 200 }}>
                     <div class="bg-muted/20 px-4 py-3">
-                      <div class="space-y-1.5">
+                      <div class="flex flex-col gap-y-1.5">
                         {#each change.diffs as d}
                           <div class="font-mono text-xs">
                             <span class="text-muted-foreground">{formatDiffPath(d.path)}:</span>

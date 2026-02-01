@@ -86,8 +86,8 @@ $effect(() => {
           onclick={(e) => { e.stopPropagation(); removeSubject(code); }}
           onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); removeSubject(code); } }}
           class="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-xs font-mono shrink-0
-                 text-muted-foreground hover:outline hover:outline-1 hover:outline-ring
-                 cursor-pointer transition-[outline] duration-100 first:ml-2"
+                 text-muted-foreground hover:bg-muted-foreground/15
+                 cursor-pointer transition-colors first:ml-2"
         >
           {code}
         </span>

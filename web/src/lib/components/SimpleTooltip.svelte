@@ -31,34 +31,40 @@ let {
 </script>
 
 <Tooltip.Root delayDuration={delay} disableHoverableContent={passthrough}>
-  <Tooltip.Trigger>
-    {#snippet child({ props })}
-      <span class={triggerClass} {...props}>
-        {@render children()}
-      </span>
-    {/snippet}
-  </Tooltip.Trigger>
-  {#if portal}
-    <Tooltip.Portal>
-      <Tooltip.Content
-        {side}
-        {sideOffset}
-        {avoidCollisions}
-        {collisionPadding}
-        class={cn("z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-sm whitespace-pre-line max-w-max text-left", contentClass)}
-      >
-        {text}
-      </Tooltip.Content>
-    </Tooltip.Portal>
-  {:else}
-    <Tooltip.Content
-      {side}
-      {sideOffset}
-      {avoidCollisions}
-      {collisionPadding}
-      class={cn("z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-sm whitespace-pre-line max-w-max text-left", contentClass)}
-    >
-      {text}
-    </Tooltip.Content>
-  {/if}
+    <Tooltip.Trigger>
+        {#snippet child({ props })}
+            <span class={triggerClass} {...props}>
+                {@render children()}
+            </span>
+        {/snippet}
+    </Tooltip.Trigger>
+    {#if portal}
+        <Tooltip.Portal>
+            <Tooltip.Content
+                {side}
+                {sideOffset}
+                {avoidCollisions}
+                {collisionPadding}
+                class={cn(
+                    "z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-sm whitespace-pre-line max-w-max text-left",
+                    contentClass,
+                )}
+            >
+                {text}
+            </Tooltip.Content>
+        </Tooltip.Portal>
+    {:else}
+        <Tooltip.Content
+            {side}
+            {sideOffset}
+            {avoidCollisions}
+            {collisionPadding}
+            class={cn(
+                "z-50 bg-card text-card-foreground text-xs border border-border rounded-md px-2.5 py-1.5 shadow-sm whitespace-pre-line max-w-max text-left",
+                contentClass,
+            )}
+        >
+            {text}
+        </Tooltip.Content>
+    {/if}
 </Tooltip.Root>

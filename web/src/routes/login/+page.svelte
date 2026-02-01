@@ -32,7 +32,7 @@ const faqItems = [
 </script>
 
 <div class="flex flex-1 items-center justify-center px-4 pb-14">
-    <div class="w-full max-w-md space-y-8">
+    <div class="w-full max-w-md flex flex-col gap-y-8">
         <!-- Sign-in card -->
         <div
             class="rounded-xl border border-border bg-card p-8 text-center shadow-sm"
@@ -51,7 +51,7 @@ const faqItems = [
         </div>
 
         <!-- FAQ section -->
-        <div class="space-y-3">
+        <div class="flex flex-col gap-y-3">
             <h2
                 class="text-center text-xs font-medium uppercase tracking-widest text-muted-foreground"
             >

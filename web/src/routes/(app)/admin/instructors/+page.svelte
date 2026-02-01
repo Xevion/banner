@@ -480,10 +480,10 @@ function formatScore(score: number): string {
   <div class="bg-muted mb-6 h-2 rounded-full overflow-hidden"></div>
   <!-- Skeleton table rows -->
   <div class="bg-card border-border overflow-hidden rounded-lg border">
-    <div class="divide-y divide-border">
-      {#each Array(8) as _}
-        <div class="flex items-center gap-4 px-4 py-3">
-          <div class="space-y-1.5 flex-1">
+    <div>
+      {#each Array(8) as _, i}
+        <div class="flex items-center gap-4 px-4 py-3{i > 0 ? ' border-t border-border' : ''}">
+          <div class="flex flex-col gap-y-1.5 flex-1">
             <div class="h-4 w-40 animate-pulse rounded bg-muted"></div>
             <div class="h-3 w-28 animate-pulse rounded bg-muted"></div>
           </div>
@@ -660,17 +660,17 @@ function formatScore(score: number): string {
                     <div transition:slide={{ duration: 200 }} class="p-4">
                       {#if detailLoading}
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                          <div class="space-y-3 animate-pulse">
+                          <div class="flex flex-col gap-y-3 animate-pulse">
                             <div class="h-4 w-20 rounded bg-muted"></div>
-                            <div class="space-y-2">
+                            <div class="flex flex-col gap-y-2">
                               <div class="h-3 w-36 rounded bg-muted"></div>
                               <div class="h-3 w-44 rounded bg-muted"></div>
                               <div class="h-3 w-28 rounded bg-muted"></div>
                             </div>
                           </div>
-                          <div class="lg:col-span-2 space-y-3 animate-pulse">
+                          <div class="lg:col-span-2 flex flex-col gap-y-3 animate-pulse">
                             <div class="h-4 w-32 rounded bg-muted"></div>
-                            <div class="space-y-2">
+                            <div class="flex flex-col gap-y-2">
                               <div class="h-20 rounded bg-muted"></div>
                               <div class="h-20 rounded bg-muted"></div>
                             </div>
@@ -683,7 +683,7 @@ function formatScore(score: number): string {
                       {:else if detail}
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                           <!-- Instructor info -->
-                          <div class="space-y-3">
+                          <div class="flex flex-col gap-y-3">
                             <h3 class="font-medium text-foreground text-sm">Instructor</h3>
                             <dl
                               class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm"
@@ -723,7 +723,7 @@ function formatScore(score: number): string {
                           </div>
 
                           <!-- Candidates -->
-                          <div class="lg:col-span-2 space-y-3">
+                          <div class="lg:col-span-2 flex flex-col gap-y-3">
                             <div class="flex items-center justify-between gap-2">
                               <h3 class="font-medium text-foreground text-sm">
                                 Candidates
@@ -785,7 +785,7 @@ function formatScore(score: number): string {
                                 No candidates available.
                               </p>
                             {:else}
-                              <div class="max-h-80 overflow-y-auto space-y-2 pr-1">
+                              <div class="max-h-80 overflow-y-auto flex flex-col gap-y-2 pr-1">
                                 {#each detail.candidates as candidate (candidate.id)}
                                   <CandidateCard
                                     {candidate}

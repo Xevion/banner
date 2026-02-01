@@ -110,7 +110,7 @@ function onKeyDown(e: KeyboardEvent) {
           >
         </div>
       </div>
-      <div class="space-y-0.5">
+      <div class="flex flex-col gap-y-0.5">
         {#each subjects as subject}
           {@const enabled = enabledSubjects.has(subject)}
           {@const color = getSubjectColor(subject)}
