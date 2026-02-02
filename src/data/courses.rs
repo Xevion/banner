@@ -57,14 +57,11 @@ const SEARCH_WHERE: &str = r#"
       AND ($8::text[] IS NULL OR campus = ANY($8))
       AND ($9::int IS NULL OR wait_count <= $9)
       AND ($10::text[] IS NULL OR EXISTS (
-          SELECT 1 FROM jsonb_array_elements(meeting_times) AS mt
-          WHERE (NOT 'monday' = ANY($10) OR (mt->>'monday')::bool)
-            AND (NOT 'tuesday' = ANY($10) OR (mt->>'tuesday')::bool)
-            AND (NOT 'wednesday' = ANY($10) OR (mt->>'wednesday')::bool)
-            AND (NOT 'thursday' = ANY($10) OR (mt->>'thursday')::bool)
-            AND (NOT 'friday' = ANY($10) OR (mt->>'friday')::bool)
-            AND (NOT 'saturday' = ANY($10) OR (mt->>'saturday')::bool)
-            AND (NOT 'sunday' = ANY($10) OR (mt->>'sunday')::bool)
+          SELECT 1 FROM jsonb_array_elements(meeting_times) AS mt,
+               LATERAL jsonb_array_elements_text(mt->'days') AS d(day)
+          WHERE d.day = ANY($10)
+          GROUP BY mt
+          HAVING COUNT(DISTINCT d.day) = array_length($10, 1)
       ))
       AND ($11::text IS NULL OR EXISTS (
           SELECT 1 FROM jsonb_array_elements(meeting_times) AS mt
