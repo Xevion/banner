@@ -31,6 +31,7 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.test.ts"],
   },
+  clearScreen: false,
   server: {
     port: 3000,
     watch: {
