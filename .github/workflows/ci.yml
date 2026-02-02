@@ -66,6 +66,10 @@ jobs:
         working-directory: web
         run: bun run typecheck
 
+      - name: Lint
+        working-directory: web
+        run: bun run lint
+
   rust-tests:
     name: Rust Tests
     runs-on: ubuntu-latest

@@ -107,6 +107,7 @@ const checks: Check[] = [
   { name: "rust-check", cmd: ["cargo", "check", "--all-features"] },
   { name: "rust-test", cmd: ["cargo", "nextest", "run", "-E", "not test(export_bindings)"] },
   { name: "svelte-check", cmd: ["bun", "run", "--cwd", "web", "check"] },
+  { name: "web-lint", cmd: ["bun", "run", "--cwd", "web", "lint"] },
   { name: "web-format", cmd: ["bun", "run", "--cwd", "web", "format:check"] },
   { name: "web-test", cmd: ["bun", "run", "--cwd", "web", "test"] },
   { name: "actionlint", cmd: ["actionlint"] },
@@ -133,7 +134,7 @@ const domains: Record<
     ],
   },
   "web-format": {
-    peers: ["svelte-check", "web-test"],
+    peers: ["svelte-check", "web-lint", "web-test"],
     format: () => runPiped(["bun", "run", "--cwd", "web", "format"]),
     recheck: [
       { name: "web-format", cmd: ["bun", "run", "--cwd", "web", "format:check"] },
