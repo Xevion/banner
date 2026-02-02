@@ -214,7 +214,6 @@ const table = createSvelteTable({
             <tbody
               class="transition-opacity duration-200 animate-fade-in {loading ? 'opacity-45 pointer-events-none' : ''}"
               animate:flip={{ duration: hadResults ? 300 : 0 }}
-              style:animation-delay="{Math.min(i * 25, 300)}ms"
             >
               <tr
                 class="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap {expandedCrn === course.crn ? 'bg-muted/30' : ''}"
