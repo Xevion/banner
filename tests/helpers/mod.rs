@@ -1,7 +1,10 @@
+use banner::banner::models::meetings::{MeetingTime, MeetingTimeResponse};
+use banner::banner::models::Term;
 use banner::banner::Course;
 use banner::data::models::{ScrapePriority, TargetType};
 use chrono::Utc;
 use sqlx::PgPool;
+use std::str::FromStr;
 
 /// Build a test `Course` (Banner API model) with sensible defaults.
 ///
@@ -55,6 +58,140 @@ pub fn make_course(
         faculty: vec![],
         meetings_faculty: vec![],
     }
+}
+
+/// Builder for constructing `MeetingTimeResponse` objects with sensible defaults.
+///
+/// Produces meeting times suitable for `batch_upsert_courses` tests without
+/// requiring callers to fill in every field on the Banner API model.
+pub struct MeetingTimeBuilder {
+    term: String,
+    crn: String,
+    monday: bool,
+    tuesday: bool,
+    wednesday: bool,
+    thursday: bool,
+    friday: bool,
+    saturday: bool,
+    sunday: bool,
+    begin_time: Option<String>,
+    end_time: Option<String>,
+    building: Option<String>,
+    building_description: Option<String>,
+    room: Option<String>,
+    start_date: String,
+    end_date: String,
+    meeting_type: String,
+    meeting_schedule_type: String,
+}
+
+impl Default for MeetingTimeBuilder {
+    fn default() -> Self {
+        Self {
+            term: "202620".to_owned(),
+            crn: "00000".to_owned(),
+            monday: false,
+            tuesday: false,
+            wednesday: false,
+            thursday: false,
+            friday: false,
+            saturday: false,
+            sunday: false,
+            begin_time: None,
+            end_time: None,
+            building: None,
+            building_description: None,
+            room: None,
+            start_date: "01/20/2026".to_owned(),
+            end_date: "05/13/2026".to_owned(),
+            meeting_type: "FF".to_owned(),
+            meeting_schedule_type: "AFF".to_owned(),
+        }
+    }
+}
+
+impl MeetingTimeBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set which days of the week this meeting occurs on.
+    pub fn days(mut self, mon: bool, tue: bool, wed: bool, thu: bool, fri: bool, sat: bool, sun: bool) -> Self {
+        self.monday = mon;
+        self.tuesday = tue;
+        self.wednesday = wed;
+        self.thursday = thu;
+        self.friday = fri;
+        self.saturday = sat;
+        self.sunday = sun;
+        self
+    }
+
+    /// Set begin/end times in HHMM format (e.g. "0900", "0950").
+    pub fn time(mut self, begin_hhmm: &str, end_hhmm: &str) -> Self {
+        self.begin_time = Some(begin_hhmm.to_owned());
+        self.end_time = Some(end_hhmm.to_owned());
+        self
+    }
+
+    /// Set building code and room number.
+    pub fn location(mut self, building: &str, room: &str) -> Self {
+        self.building = Some(building.to_owned());
+        self.building_description = Some(building.to_owned());
+        self.room = Some(room.to_owned());
+        self
+    }
+
+    /// Set start/end dates in MM/DD/YYYY format.
+    pub fn dates(mut self, start_mmddyyyy: &str, end_mmddyyyy: &str) -> Self {
+        self.start_date = start_mmddyyyy.to_owned();
+        self.end_date = end_mmddyyyy.to_owned();
+        self
+    }
+
+    /// Consume the builder and produce a `MeetingTimeResponse`.
+    pub fn build(self) -> MeetingTimeResponse {
+        MeetingTimeResponse {
+            category: Some("01".to_owned()),
+            class: "net.hedtech.banner.general.overall.SectionMeetingTimeDecorator".to_owned(),
+            course_reference_number: self.crn.clone(),
+            faculty: vec![],
+            meeting_time: MeetingTime {
+                start_date: self.start_date,
+                end_date: self.end_date,
+                begin_time: self.begin_time,
+                end_time: self.end_time,
+                category: "01".to_owned(),
+                class: "net.hedtech.banner.general.overall.SectionMeetingTime".to_owned(),
+                monday: self.monday,
+                tuesday: self.tuesday,
+                wednesday: self.wednesday,
+                thursday: self.thursday,
+                friday: self.friday,
+                saturday: self.saturday,
+                sunday: self.sunday,
+                room: self.room,
+                term: Term::from_str(&self.term).expect("valid term code"),
+                building: self.building,
+                building_description: self.building_description,
+                campus: Some("11".to_owned()),
+                campus_description: Some("Main Campus".to_owned()),
+                course_reference_number: self.crn,
+                credit_hour_session: None,
+                hours_week: 0.0,
+                meeting_schedule_type: self.meeting_schedule_type,
+                meeting_type: self.meeting_type.clone(),
+                meeting_type_description: "Face to Face".to_owned(),
+            },
+            term: self.term,
+        }
+    }
+}
+
+/// Return a copy of `course` with its `meetings_faculty` replaced.
+pub fn with_meetings(mut course: Course, meetings: Vec<MeetingTimeResponse>) -> Course {
+    course.meetings_faculty = meetings;
+    course
 }
 
 /// Insert a scrape job row directly via SQL, returning the generated ID.
