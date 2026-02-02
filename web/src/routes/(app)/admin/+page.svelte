@@ -43,7 +43,7 @@ onMount(async () => {
 
   <h2 class="mt-6 mb-3 text-sm font-semibold text-foreground">Services</h2>
   <div class="bg-card border-border rounded-lg border">
-    {#each status.services as service}
+    {#each status.services as service (service.name)}
       <div class="border-border flex items-center justify-between border-b px-4 py-3 last:border-b-0">
         <span class="font-medium select-none">{service.name}</span>
         <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 select-none dark:bg-green-900 dark:text-green-200">

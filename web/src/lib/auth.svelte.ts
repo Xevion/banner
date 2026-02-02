@@ -39,7 +39,7 @@ class AuthStore {
         const response = await fetch("/api/auth/me");
 
         if (response.ok) {
-          const user: User = await response.json();
+          const user = (await response.json()) as User;
           this.state = { mode: "authenticated", user };
           return;
         }

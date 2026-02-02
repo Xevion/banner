@@ -16,7 +16,7 @@ const clipboard = useClipboard();
   </h4>
   {#if course.instructors.length > 0}
     <div class="flex flex-col gap-1.5">
-      {#each course.instructors as instructor}
+      {#each course.instructors as instructor (instructor.instructorId)}
         <div
           class="flex items-center flex-wrap gap-x-3 gap-y-1 border border-border rounded-md px-3 py-1.5 bg-card"
         >
@@ -55,7 +55,7 @@ const clipboard = useClipboard();
           <div class="flex items-center gap-3 text-xs text-muted-foreground">
             {#if instructor.email}
               <button
-                onclick={(e) => clipboard.copy(instructor.email!, e)}
+                onclick={(e) => clipboard.copy(instructor.email, e)}
                 class="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
               >
                 {#if clipboard.copiedValue === instructor.email}

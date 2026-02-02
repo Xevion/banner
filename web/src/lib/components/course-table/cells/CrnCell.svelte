@@ -15,7 +15,7 @@ const { clipboard } = getTableContext();
     onkeydown={(e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        clipboard.copy(course.crn, e);
+        void clipboard.copy(course.crn, e);
       }
     }}
     aria-label="Copy CRN {course.crn} to clipboard"

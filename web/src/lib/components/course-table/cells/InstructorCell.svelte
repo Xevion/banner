@@ -47,19 +47,17 @@ let ratingData = $derived(
   {#if ratingData}
     {@const lowConfidence = !ratingData.isConfident}
     <LazyRichTooltip side="bottom" sideOffset={6} contentClass="px-2.5 py-1.5">
-      {#snippet children()}
-        <span
-          class="ml-1 text-xs font-medium inline-flex items-center gap-0.5 select-none"
-          style={ratingStyle(ratingData.rating, themeStore.isDark)}
-        >
-          {ratingData.rating.toFixed(1)}
-          {#if lowConfidence}
-            <Triangle class="size-2 fill-current" />
-          {:else}
-            <Star class="size-2.5 fill-current" />
-          {/if}
-        </span>
-      {/snippet}
+      <span
+        class="ml-1 text-xs font-medium inline-flex items-center gap-0.5 select-none"
+        style={ratingStyle(ratingData.rating, themeStore.isDark)}
+      >
+        {ratingData.rating.toFixed(1)}
+        {#if lowConfidence}
+          <Triangle class="size-2 fill-current" />
+        {:else}
+          <Star class="size-2.5 fill-current" />
+        {/if}
+      </span>
       {#snippet content()}
         <span class="inline-flex items-center gap-1.5 text-xs">
           {ratingData.rating.toFixed(1)}/5 · {formatNumber(ratingData.count)}

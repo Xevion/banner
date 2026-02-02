@@ -71,8 +71,7 @@ export const COLUMN_DEFS: ColumnDef<CourseResponse, unknown>[] = [
 ];
 
 /** Column ID to Svelte cell component. Used by the row renderer. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const CELL_COMPONENTS: Record<string, Component<any>> = {
+export const CELL_COMPONENTS: Record<string, Component<{ course: CourseResponse }>> = {
   crn: CrnCell,
   course_code: CourseCodeCell,
   title: TitleCell,

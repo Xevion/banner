@@ -51,13 +51,12 @@ $effect(() => {
 
 <Combobox.Root
   type="single"
-  bind:value={() => value, (v) => { if (v) value = v; }}
+  bind:value={() => value, (v: string) => { if (v) value = v; }}
   bind:open
   onOpenChange={(o: boolean) => {
     if (!o) searchValue = "";
   }}
 >
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="relative h-9 rounded-md border border-border bg-card
            flex items-center w-full md:w-40 cursor-pointer

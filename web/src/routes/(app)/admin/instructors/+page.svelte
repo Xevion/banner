@@ -18,6 +18,7 @@ import {
   Search,
   X,
 } from "@lucide/svelte";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { onDestroy, onMount } from "svelte";
 import { fade, slide } from "svelte/transition";
 import CandidateCard from "./CandidateCard.svelte";
@@ -54,8 +55,8 @@ let rescoreLoading = $state(false);
 let rescoreResult = $state<{ message: string; isError: boolean } | null>(null);
 
 // Stale row tracking: rows that changed status but haven't been refetched yet
-let recentlyChanged = $state(new Set<number>());
-let highlightTimeouts = new Map<number, ReturnType<typeof setTimeout>>();
+let recentlyChanged = new SvelteSet<number>();
+let highlightTimeouts = new SvelteMap<number, ReturnType<typeof setTimeout>>();
 
 // Reject-all inline confirmation
 let showRejectConfirm = $state<number | null>(null);
@@ -64,13 +65,13 @@ let showRejectConfirm = $state<number | null>(null);
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 
 // --- Constants ---
-const filterCards: Array<{
+const filterCards: {
   label: string;
   value: string | undefined;
   stat: keyof InstructorStats;
   textColor: string;
   ringColor: string;
-}> = [
+}[] = [
   {
     label: "Total",
     value: undefined,
@@ -127,7 +128,7 @@ let totalPages = $derived(Math.max(1, Math.ceil(totalCount / perPage)));
 async function fetchInstructors() {
   loading = true;
   error = null;
-  recentlyChanged = new Set();
+  recentlyChanged = new SvelteSet();
   clearHighlightTimeouts();
   try {
     const res = await client.getAdminInstructors({
@@ -160,11 +161,11 @@ async function fetchDetail(id: number) {
 }
 
 onMount(() => {
-  fetchInstructors();
-  client
+  void fetchInstructors();
+  void client
     .getReference("subject")
     .then((entries) => {
-      const map = new Map<string, string>();
+      const map = new SvelteMap<string, string>();
       for (const entry of entries) {
         map.set(entry.code, entry.description);
       }
@@ -186,7 +187,7 @@ function setFilter(value: string | undefined) {
   currentPage = 1;
   expandedId = null;
   showRejectConfirm = null;
-  fetchInstructors();
+  void fetchInstructors();
 }
 
 function handleSearch() {
@@ -195,7 +196,7 @@ function handleSearch() {
     searchQuery = searchInput;
     currentPage = 1;
     expandedId = null;
-    fetchInstructors();
+    void fetchInstructors();
   }, 300);
 }
 
@@ -204,7 +205,7 @@ function clearSearch() {
   searchQuery = "";
   currentPage = 1;
   expandedId = null;
-  fetchInstructors();
+  void fetchInstructors();
 }
 
 function clearAllFilters() {
@@ -213,7 +214,7 @@ function clearAllFilters() {
   activeFilter = undefined;
   currentPage = 1;
   expandedId = null;
-  fetchInstructors();
+  void fetchInstructors();
 }
 
 function goToPage(page: number) {
@@ -221,7 +222,7 @@ function goToPage(page: number) {
   currentPage = page;
   expandedId = null;
   showRejectConfirm = null;
-  fetchInstructors();
+  void fetchInstructors();
 }
 
 async function toggleExpand(id: number) {
@@ -257,10 +258,10 @@ function markChanged(id: number) {
   const existing = highlightTimeouts.get(id);
   if (existing) clearTimeout(existing);
 
-  recentlyChanged = new Set([...recentlyChanged, id]);
+  recentlyChanged = new SvelteSet([...recentlyChanged, id]);
 
   const timeout = setTimeout(() => {
-    const next = new Set(recentlyChanged);
+    const next = new SvelteSet(recentlyChanged);
     next.delete(id);
     recentlyChanged = next;
     highlightTimeouts.delete(id);
@@ -470,7 +471,7 @@ function formatScore(score: number): string {
 {#if loading && instructors.length === 0}
   <!-- Skeleton stats cards -->
   <div class="mb-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-    {#each Array(5) as _}
+    {#each Array(5) as _stat, i (i)}
       <div class="bg-card border-border rounded-lg border p-3">
         <div class="h-3 w-16 animate-pulse rounded bg-muted mb-2"></div>
         <div class="h-6 w-12 animate-pulse rounded bg-muted"></div>
@@ -481,7 +482,7 @@ function formatScore(score: number): string {
   <!-- Skeleton table rows -->
   <div class="bg-card border-border overflow-hidden rounded-lg border">
     <div>
-      {#each Array(8) as _, i}
+      {#each Array(8) as _row, i (i)}
         <div class="flex items-center gap-4 px-4 py-3{i > 0 ? ' border-t border-border' : ''}">
           <div class="flex flex-col gap-y-1.5 flex-1">
             <div class="h-4 w-40 animate-pulse rounded bg-muted"></div>
@@ -510,7 +511,7 @@ function formatScore(score: number): string {
 
     <!-- Stats / Filter Cards -->
     <div class="mb-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-      {#each filterCards as card}
+      {#each filterCards as card (card.value)}
         <button
           onclick={() => setFilter(card.value)}
           class="bg-card border-border rounded-lg border p-3 text-left transition-all duration-200
@@ -526,7 +527,7 @@ function formatScore(score: number): string {
     <!-- Progress Bar -->
     <div class="mb-6">
       <div class="bg-muted h-2 rounded-full overflow-hidden flex">
-        {#each progressSegments as seg}
+        {#each progressSegments as seg (seg.stat)}
           {@const pct = (stats[seg.stat] / progressDenom) * 100}
           <div
             class="{seg.color} h-full transition-all duration-500"
@@ -597,9 +598,9 @@ function formatScore(score: number): string {
                       {#if tc.avgRating != null}
                         <span
                           class="font-semibold tabular-nums"
-                          style={ratingStyle(tc.avgRating!, themeStore.isDark)}
+                          style={ratingStyle(tc.avgRating, themeStore.isDark)}
                         >
-                          {tc.avgRating!.toFixed(1)}
+                          {tc.avgRating.toFixed(1)}
                         </span>
                       {:else}
                         <span class="text-xs text-muted-foreground">N/A</span>
@@ -621,7 +622,7 @@ function formatScore(score: number): string {
                       <button
                         onclick={(e) => {
                           e.stopPropagation();
-                          handleMatch(instructor.id, instructor.topCandidate!.rmpLegacyId);
+                          void handleMatch(instructor.id, instructor.topCandidate!.rmpLegacyId);
                         }}
                         disabled={actionLoading !== null}
                         class="rounded p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30
@@ -638,7 +639,7 @@ function formatScore(score: number): string {
                     <button
                       onclick={(e) => {
                         e.stopPropagation();
-                        toggleExpand(instructor.id);
+                        void toggleExpand(instructor.id);
                       }}
                       class="rounded p-1 text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
                       title={isExpanded ? "Collapse" : "Expand details"}
@@ -704,7 +705,7 @@ function formatScore(score: number): string {
                               {#if detail.instructor.subjectsTaught.length > 0}
                                 <dt class="text-muted-foreground">Subjects</dt>
                                 <dd class="flex flex-wrap gap-1">
-                                  {#each detail.instructor.subjectsTaught as subj}
+                                  {#each detail.instructor.subjectsTaught as subj (subj)}
                                     {#if subjectMap.has(subj)}
                                       <SimpleTooltip text={subjectMap.get(subj)!} delay={75}>
                                         <span class="rounded bg-muted px-1.5 py-0.5 text-xs font-medium"
@@ -743,7 +744,7 @@ function formatScore(score: number): string {
                                     <button
                                       onclick={(e) => {
                                         e.stopPropagation();
-                                        confirmRejectAll(detail!.instructor.id);
+                                        void confirmRejectAll(detail!.instructor.id);
                                       }}
                                       disabled={actionLoading !== null}
                                       class="font-medium text-red-600 hover:text-red-700

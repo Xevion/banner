@@ -214,7 +214,7 @@ onMount(() => {
       <!-- Services -->
       <div class="flex flex-col gap-3 mt-4">
         {#if shouldShowSkeleton}
-          {#each Array(3) as _}
+          {#each Array(3) as _service, i (i)}
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <div class="h-6 w-[18px] bg-muted rounded animate-pulse"></div>

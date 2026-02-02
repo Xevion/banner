@@ -77,7 +77,7 @@ export function formatDiffPath(path: string): string {
  * Attempts to parse a string as JSON. Returns the parsed value on success,
  * or null if parsing fails. Used by the audit log to detect JSON values.
  */
-export function tryParseJson(value: string): unknown | null {
+export function tryParseJson(value: string): unknown {
   try {
     return JSON.parse(value);
   } catch {

@@ -11,6 +11,11 @@ import { ChevronDown } from "@lucide/svelte";
 import BottomSheet from "./BottomSheet.svelte";
 import RangeSlider from "./RangeSlider.svelte";
 
+type AttributeReferenceData = Record<
+  "instructionalMethods" | "campuses" | "partsOfTerm" | "attributes",
+  CodeDescription[]
+>;
+
 let {
   open = $bindable(false),
   openOnly = $bindable(),
@@ -27,6 +32,7 @@ let {
   instructor = $bindable(),
   courseNumberMin = $bindable(),
   courseNumberMax = $bindable(),
+
   referenceData,
   ranges,
 }: {
@@ -45,12 +51,7 @@ let {
   instructor: string;
   courseNumberMin: number | null;
   courseNumberMax: number | null;
-  referenceData: {
-    instructionalMethods: CodeDescription[];
-    campuses: CodeDescription[];
-    partsOfTerm: CodeDescription[];
-    attributes: CodeDescription[];
-  };
+  referenceData: AttributeReferenceData;
   ranges: {
     courseNumber: { min: number; max: number };
     creditHours: { min: number; max: number };

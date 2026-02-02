@@ -65,9 +65,9 @@ $effect(() => {
 
 {#if open}
   <!-- Backdrop -->
-  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
   <div
     class="fixed inset-0 z-40 bg-black/40"
+    role="presentation"
     transition:fade={{ duration: 200 }}
     onclick={close}
   ></div>
@@ -85,10 +85,10 @@ $effect(() => {
     aria-label={label}
   >
     <!-- Drag handle -->
-  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
     <div
       class="flex shrink-0 cursor-grab items-center justify-center py-3 touch-none"
       class:cursor-grabbing={dragging}
+      role="separator"
       onpointerdown={onPointerDown}
       onpointermove={onPointerMove}
       onpointerup={onPointerUp}

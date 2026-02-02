@@ -1,56 +1,55 @@
 <script lang="ts">
-    import type { CourseResponse } from "$lib/api";
-    import { formatCreditHours } from "$lib/course";
-    import { formatNumber } from "$lib/utils";
-    import { useClipboard } from "$lib/composables/useClipboard.svelte";
-    import { Check, ClipboardCopy, Info, Link } from "@lucide/svelte";
-    import { Tabs } from "bits-ui";
-    import CourseDetailInstructors from "./CourseDetailInstructors.svelte";
-    import CourseDetailSchedule from "./CourseDetailSchedule.svelte";
-    import RelatedSections from "./RelatedSections.svelte";
-    import SimpleTooltip from "../SimpleTooltip.svelte";
-    import { getCourseDetailContext } from "./context";
+import type { CourseResponse } from "$lib/api";
+import { formatCreditHours } from "$lib/course";
+import { formatNumber } from "$lib/utils";
+import { useClipboard } from "$lib/composables/useClipboard.svelte";
+import { Check, ClipboardCopy, Info, Link } from "@lucide/svelte";
+import { Tabs } from "bits-ui";
+import CourseDetailInstructors from "./CourseDetailInstructors.svelte";
+import CourseDetailSchedule from "./CourseDetailSchedule.svelte";
+import RelatedSections from "./RelatedSections.svelte";
+import SimpleTooltip from "../SimpleTooltip.svelte";
+import { getCourseDetailContext } from "./context";
 
-    let { course }: { course: CourseResponse } = $props();
+let { course }: { course: CourseResponse } = $props();
 
-    let activeTab = $state("overview");
+let activeTab = $state("overview");
 
-    const crnClipboard = useClipboard();
-    const linkClipboard = useClipboard();
+const crnClipboard = useClipboard();
+const linkClipboard = useClipboard();
 
-    const ctx = getCourseDetailContext();
+const ctx = getCourseDetailContext();
 
-    function courseUrl(): string {
-        return `${window.location.origin}/courses/${course.termCode}/${course.crn}`;
+function courseUrl(): string {
+  return `${window.location.origin}/courses/${course.termCode}/${course.crn}`;
+}
+
+let leftColumn: HTMLDivElement;
+let rightColumn: HTMLDivElement;
+let sectionCount = $state(0);
+
+$effect(() => {
+  if (!leftColumn || !rightColumn) return;
+
+  const mdQuery = window.matchMedia("(min-width: 768px)");
+
+  function update() {
+    if (mdQuery.matches) {
+      rightColumn.style.maxHeight = `${leftColumn.offsetHeight}px`;
+    } else {
+      rightColumn.style.maxHeight = "";
     }
+  }
 
-    let leftColumn: HTMLDivElement;
-    let rightColumn: HTMLDivElement;
-    let sectionCount = $state(0);
+  const observer = new ResizeObserver(update);
+  observer.observe(leftColumn);
+  mdQuery.addEventListener("change", update);
 
-
-    $effect(() => {
-        if (!leftColumn || !rightColumn) return;
-
-        const mdQuery = window.matchMedia("(min-width: 768px)");
-
-        function update() {
-            if (mdQuery.matches) {
-                rightColumn.style.maxHeight = `${leftColumn.offsetHeight}px`;
-            } else {
-                rightColumn.style.maxHeight = "";
-            }
-        }
-
-        const observer = new ResizeObserver(update);
-        observer.observe(leftColumn);
-        mdQuery.addEventListener("change", update);
-
-        return () => {
-            observer.disconnect();
-            mdQuery.removeEventListener("change", update);
-        };
-    });
+  return () => {
+    observer.disconnect();
+    mdQuery.removeEventListener("change", update);
+  };
+});
 </script>
 
 <Tabs.Root bind:value={activeTab}>
@@ -216,7 +215,7 @@
                                 <span class="text-muted-foreground text-xs mr-1"
                                     >Attributes</span
                                 >
-                                {#each course.attributes as attr}
+                                {#each course.attributes as attr (attr)}
                                     {@const description =
                                         ctx?.attributeMap[attr]}
                                     {#if description}

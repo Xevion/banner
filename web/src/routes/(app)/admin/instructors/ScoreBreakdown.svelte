@@ -5,7 +5,7 @@ let {
   breakdown = null,
   score = 0,
 }: {
-  breakdown?: { [key in string]?: number } | null;
+  breakdown?: Partial<Record<string, number>> | null;
   score?: number;
 } = $props();
 
@@ -36,7 +36,7 @@ function fmt(v: number): string {
 
 const segments = $derived(
   Object.entries(breakdown ?? {})
-    .filter(([_, value]) => value != null)
+    .filter(([, value]) => value != null)
     .map(([key, value]) => ({
       key,
       label: labels[key] ?? key,

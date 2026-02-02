@@ -8,9 +8,9 @@ import { useOverlayScrollbars } from "$lib/composables/useOverlayScrollbars.svel
 import { initNavigation } from "$lib/stores/navigation.svelte";
 import { themeStore } from "$lib/stores/theme.svelte";
 import { Tooltip } from "bits-ui";
-import { onMount } from "svelte";
+import { onMount, type Snippet } from "svelte";
 
-let { children } = $props();
+let { children }: { children: Snippet } = $props();
 
 initNavigation();
 
@@ -23,7 +23,7 @@ useOverlayScrollbars(() => document.body, {
 
 onMount(() => {
   themeStore.init();
-  authStore.init();
+  void authStore.init();
 });
 </script>
 

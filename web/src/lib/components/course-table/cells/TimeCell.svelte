@@ -23,8 +23,7 @@ function timeIsTBA(c: CourseResponse): boolean {
     {@const mt = course.meetingTimes[0]}
     <span>
       {#if mt.days.length > 0}
-        <span class="font-mono font-medium">{formatMeetingDays(mt)}</span>
-        {" "}
+        <span class="font-mono font-medium">{formatMeetingDays(mt)}</span> 
       {/if}
       {#if mt.timeRange !== null}
         <span class="text-muted-foreground"

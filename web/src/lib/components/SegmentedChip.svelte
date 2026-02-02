@@ -12,7 +12,7 @@ let {
   <span
     class="inline-flex items-center rounded-full border border-border bg-muted/40 text-xs text-muted-foreground shrink-0"
   >
-    {#each segments as segment, i}
+    {#each segments as segment, i (segment)}
       {#if i > 0}
         <span class="w-px self-stretch bg-border"></span>
       {/if}

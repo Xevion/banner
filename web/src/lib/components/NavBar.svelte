@@ -165,8 +165,8 @@ function updateTargetFromResize() {
 
 // Start animation when route changes
 $effect(() => {
-  page.url.pathname;
-  profileTab.href;
+  void page.url.pathname;
+  void profileTab.href;
 
   requestAnimationFrame(() => {
     updateTarget();
@@ -201,7 +201,7 @@ $effect(() => {
         bind:this={pillRef}
       ></div>
 
-      {#each staticTabs as tab, i}
+      {#each staticTabs as tab, i (tab.href)}
         <a
           href={tab.href}
           bind:this={tabRefs[i]}

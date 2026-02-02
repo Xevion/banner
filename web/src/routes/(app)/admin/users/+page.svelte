@@ -49,7 +49,7 @@ async function toggleAdmin(user: User) {
         </tr>
       </thead>
       <tbody>
-        {#each users as user}
+        {#each users as user (user.discordId)}
           <tr class="border-border border-b last:border-b-0">
             <td class="flex items-center gap-2 px-4 py-3">
               {#if user.discordAvatarHash}
@@ -61,10 +61,15 @@ async function toggleAdmin(user: User) {
               {/if}
               {user.discordUsername}
             </td>
-            <td class="text-muted-foreground px-4 py-3 font-mono text-xs">{user.discordId}</td>
+            <td class="text-muted-foreground px-4 py-3 font-mono text-xs"
+              >{user.discordId}</td
+            >
             <td class="px-4 py-3">
               {#if user.isAdmin}
-                <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">Admin</span>
+                <span
+                  class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                  >Admin</span
+                >
               {:else}
                 <span class="text-muted-foreground text-xs">User</span>
               {/if}

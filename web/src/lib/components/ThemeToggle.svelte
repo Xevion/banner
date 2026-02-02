@@ -8,7 +8,7 @@ import SimpleTooltip from "./SimpleTooltip.svelte";
  * Theme toggle with View Transitions API circular reveal animation.
  * The clip-path circle expands from the click point to cover the viewport.
  */
-async function handleToggle(event: MouseEvent) {
+function handleToggle(event: MouseEvent) {
   const supportsViewTransition =
     typeof document !== "undefined" &&
     "startViewTransition" in document &&
@@ -32,11 +32,11 @@ async function handleToggle(event: MouseEvent) {
     await tick();
   });
 
-  transition.finished.finally(() => {
+  void transition.finished.finally(() => {
     document.documentElement.classList.remove("theme-transitioning");
   });
 
-  transition.ready.then(() => {
+  void transition.ready.then(() => {
     document.documentElement.animate(
       {
         clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)`],

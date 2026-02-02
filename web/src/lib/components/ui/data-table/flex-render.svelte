@@ -1,9 +1,8 @@
 <script lang="ts" module>
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type FlexRenderProps<TProps = any> = {
+export interface FlexRenderProps<TProps = unknown> {
   content: unknown;
   context: TProps;
-};
+}
 </script>
 
 <script lang="ts">
@@ -19,7 +18,7 @@ export type FlexRenderProps<TProps = any> = {
       node.textContent = "";
 
       if (isRenderComponentConfig(c)) {
-        cleanup = mountComponent(c.component, node, c.props as Record<string, unknown>);
+        cleanup = mountComponent(c.component, node, c.props);
       }
     }
 
@@ -41,7 +40,7 @@ export type FlexRenderProps<TProps = any> = {
 {:else if isRenderComponentConfig(content)}
   <div use:renderAction={content}></div>
 {:else if typeof content === "function"}
-  {@const result = content(context)}
+  {@const result = (content as (ctx: unknown) => unknown)(context)}
   {#if isRenderComponentConfig(result)}
     <div use:renderAction={result}></div>
   {:else if isRenderSnippetConfig(result)}

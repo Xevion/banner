@@ -15,7 +15,7 @@ export function useCourseTableState(getCourses: () => CourseResponse[], getLimit
     }
   });
 
-  let skeletonRowCount = $derived(previousRowCount > 0 ? previousRowCount : getLimit());
+  const skeletonRowCount = $derived(previousRowCount > 0 ? previousRowCount : getLimit());
 
   // Collapse expanded row when dataset changes
   $effect(() => {

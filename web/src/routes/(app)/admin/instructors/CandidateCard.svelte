@@ -133,9 +133,9 @@ const isUnmatchLoading = $derived(actionLoading === `unmatch-${candidate.rmpLega
     {#if candidate.avgRating != null}
       <span
         class="font-semibold tabular-nums"
-        style={ratingStyle(candidate.avgRating!, isDark)}
+        style={ratingStyle(candidate.avgRating, isDark)}
       >
-        {candidate.avgRating!.toFixed(1)}
+        {candidate.avgRating.toFixed(1)}
       </span>
     {:else}
       <span class="text-muted-foreground">No rating</span>

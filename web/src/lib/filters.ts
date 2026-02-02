@@ -16,7 +16,7 @@ export function parseTimeInput(input: string): string | null {
   const trimmed = input.trim();
   if (trimmed === "") return null;
 
-  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  const ampmMatch = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(trimmed);
   if (ampmMatch) {
     let hours = parseInt(ampmMatch[1], 10);
     const minutes = parseInt(ampmMatch[2], 10);
@@ -26,7 +26,7 @@ export function parseTimeInput(input: string): string | null {
     return String(hours).padStart(2, "0") + String(minutes).padStart(2, "0");
   }
 
-  const militaryMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  const militaryMatch = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
   if (militaryMatch) {
     const hours = parseInt(militaryMatch[1], 10);
     const minutes = parseInt(militaryMatch[2], 10);
@@ -37,7 +37,7 @@ export function parseTimeInput(input: string): string | null {
 }
 
 export function formatTime(time: string | null): string {
-  if (time === null || time.length !== 4) return "";
+  if (time?.length !== 4) return "";
   const hours = parseInt(time.slice(0, 2), 10);
   const minutes = time.slice(2);
   const period = hours >= 12 ? "PM" : "AM";

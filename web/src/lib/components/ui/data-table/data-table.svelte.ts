@@ -3,8 +3,10 @@ import {
   type TableOptions,
   type TableOptionsResolved,
   type TableState,
+  type Updater,
   createTable,
 } from "@tanstack/table-core";
+import { SvelteSet } from "svelte/reactivity";
 
 /**
  * Creates a reactive TanStack table for Svelte 5 using runes.
@@ -16,7 +18,9 @@ export function createSvelteTable<TData extends RowData>(options: TableOptions<T
   const resolvedOptions: TableOptionsResolved<TData> = mergeObjects(
     {
       state: {},
-      onStateChange() {},
+      onStateChange: () => {
+        /* default noop */
+      },
       renderFallbackValue: null,
       mergeOptions: (
         defaultOptions: TableOptions<TData>,
@@ -34,12 +38,11 @@ export function createSvelteTable<TData extends RowData>(options: TableOptions<T
   function updateOptions() {
     table.setOptions((prev) => {
       return mergeObjects(prev, options, {
-        state: mergeObjects(state, options.state || {}),
+        state: mergeObjects(state, options.state ?? {}),
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        onStateChange: (updater: any) => {
-          if (updater instanceof Function) state = updater(state);
-          else state = { ...state, ...(updater as Partial<TableState>) };
+        onStateChange: (updater: Updater<TableState>) => {
+          if (updater instanceof Function) state = updater(state as TableState);
+          else state = { ...state, ...updater };
 
           options.onStateChange?.(updater);
         },
@@ -65,7 +68,7 @@ type Intersection<T extends readonly unknown[]> = (T extends [infer H, ...infer 
  * Lazily merges several objects (or thunks) while preserving
  * getter semantics from every source. Proxy-based.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- dynamic proxy-based merge intentionally operates on untyped values */
 export function mergeObjects<Sources extends readonly MaybeThunk<any>[]>(
   ...sources: Sources
 ): Intersection<{ [K in keyof Sources]: Sources[K] }> {
@@ -91,11 +94,11 @@ export function mergeObjects<Sources extends readonly MaybeThunk<any>[]>(
     },
 
     ownKeys(): (string | symbol)[] {
-      const all = new Set<string | symbol>();
+      const all = new SvelteSet<string | symbol>();
       for (const s of sources) {
         const obj = resolve(s);
         if (obj) {
-          for (const k of Reflect.ownKeys(obj) as (string | symbol)[]) {
+          for (const k of Reflect.ownKeys(obj)) {
             all.add(k);
           }
         }
@@ -109,10 +112,11 @@ export function mergeObjects<Sources extends readonly MaybeThunk<any>[]>(
       return {
         configurable: true,
         enumerable: true,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        value: (src as any)[key],
+
+        value: src[key],
         writable: true,
       };
     },
   }) as Intersection<{ [K in keyof Sources]: Sources[K] }>;
+  /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any */
 }

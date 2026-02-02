@@ -1,5 +1,6 @@
 <script lang="ts">
 import { scaleLinear, scaleTime } from "d3-scale";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { onMount } from "svelte";
 
 import {
@@ -85,7 +86,7 @@ let panVelocityY = 0;
 let pointerSamples: { time: number; x: number; y: number }[] = [];
 
 // ── Multi-touch / pinch state ────────────────────────────────────────
-let activePointers = new Map<number, { x: number; y: number }>();
+let activePointers = new SvelteMap<number, { x: number; y: number }>();
 let isPinching = false;
 let pinchStartDist = 0;
 let pinchStartSpan = 0;
@@ -125,7 +126,7 @@ let pointerOverCanvas = false;
 // ── Drawer ──────────────────────────────────────────────────────────
 let drawerOpen = $state(false);
 // Start with an empty set — subjects are populated dynamically from the API.
-let enabledSubjects: Set<string> = $state(new Set());
+let enabledSubjects = new SvelteSet<string>();
 
 // ── Data store ──────────────────────────────────────────────────────
 const store = createTimelineStore();
@@ -135,7 +136,7 @@ let allSubjects: string[] = $derived(store.subjects);
 // Auto-enable newly discovered subjects.
 $effect(() => {
   const storeSubjects = store.subjects;
-  const next = new Set(enabledSubjects);
+  const next = new SvelteSet(enabledSubjects);
   let changed = false;
   for (const s of storeSubjects) {
     if (!next.has(s)) {
@@ -170,18 +171,18 @@ let yScale = scaleLinear()
 
 // ── Subject toggling ────────────────────────────────────────────────
 function toggleSubject(subject: string) {
-  const next = new Set(enabledSubjects);
+  const next = new SvelteSet(enabledSubjects);
   if (next.has(subject)) next.delete(subject);
   else next.add(subject);
   enabledSubjects = next;
 }
 
 function enableAll() {
-  enabledSubjects = new Set(allSubjects);
+  enabledSubjects = new SvelteSet(allSubjects);
 }
 
 function disableAll() {
-  enabledSubjects = new Set();
+  enabledSubjects = new SvelteSet();
 }
 
 // ── Rendering ───────────────────────────────────────────────────────

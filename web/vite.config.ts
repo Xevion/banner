@@ -12,7 +12,7 @@ function getVersion() {
     try {
       if (!existsSync(path)) continue;
       const content = readFileSync(path, "utf8");
-      const match = content.match(/^version\s*=\s*"([^"]+)"/m);
+      const match = /^version\s*=\s*"([^"]+)"/m.exec(content);
       if (match) return match[1];
     } catch {
       // Continue to next path

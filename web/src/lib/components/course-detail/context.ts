@@ -3,12 +3,12 @@ import { getContext, setContext } from "svelte";
 
 const COURSE_DETAIL_CONTEXT_KEY = Symbol("course-detail-context");
 
-export type CourseDetailContext = {
+export interface CourseDetailContext {
   /** Attribute code -> human-readable description. Reactive via getter. */
   readonly attributeMap: Record<string, string>;
   /** Navigate to a different section's CRN in the course table. */
   navigateToSection: ((crn: string) => void) | null;
-};
+}
 
 /** Set the course detail context (call during component init). */
 export function setCourseDetailContext(ctx: CourseDetailContext): void {

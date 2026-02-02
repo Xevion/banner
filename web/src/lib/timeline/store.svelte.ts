@@ -5,6 +5,7 @@
  * the missing segments when the view expands into unloaded territory.
  * Fetches are throttled so rapid panning/zooming doesn't flood the API.
  */
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { type TimeRange, client } from "$lib/api";
 import { SLOT_INTERVAL_MS } from "./constants";
 import type { TimeSlot } from "./types";
@@ -104,13 +105,13 @@ async function fetchFromApi(gaps: Range[]): Promise<TimeSlot[]> {
  */
 export function createTimelineStore() {
   // All loaded slots keyed by aligned timestamp (ms).
-  let slotMap: Map<number, TimeSlot> = $state(new Map());
+  let slotMap = new SvelteMap<number, TimeSlot>();
 
   // Sorted, non-overlapping list of fetched ranges.
   let loadedRanges: Range[] = [];
 
   // All subject codes observed across all fetched data.
-  let knownSubjects: Set<string> = $state(new Set());
+  let knownSubjects = new SvelteSet<string>();
 
   let throttleTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingStart = 0;
@@ -139,8 +140,8 @@ export function createTimelineStore() {
     }
 
     // Merge results into the slot map.
-    const next = new Map(slotMap);
-    const nextSubjects = new Set(knownSubjects);
+    const next = new SvelteMap(slotMap);
+    const nextSubjects = new SvelteSet(knownSubjects);
     for (const slot of slots) {
       next.set(slot.time.getTime(), slot);
       for (const subject of Object.keys(slot.subjects)) {
@@ -174,16 +175,14 @@ export function createTimelineStore() {
 
     if (!hasFetchedOnce) {
       hasFetchedOnce = true;
-      fetchGaps(pendingStart, pendingEnd);
+      void fetchGaps(pendingStart, pendingEnd);
       return;
     }
 
-    if (throttleTimer === undefined) {
-      throttleTimer = setTimeout(() => {
-        throttleTimer = undefined;
-        fetchGaps(pendingStart, pendingEnd);
-      }, FETCH_THROTTLE_MS);
-    }
+    throttleTimer ??= setTimeout(() => {
+      throttleTimer = undefined;
+      void fetchGaps(pendingStart, pendingEnd);
+    }, FETCH_THROTTLE_MS);
   }
 
   /** Clean up the throttle timer (call on component destroy). */

@@ -3,23 +3,24 @@ import type { CodeDescription } from "$lib/bindings";
 import { toggleValue } from "$lib/filters";
 import FilterPopover from "./FilterPopover.svelte";
 
+type AttributeReferenceData = Record<
+  "instructionalMethods" | "campuses" | "partsOfTerm" | "attributes",
+  CodeDescription[]
+>;
+
 let {
   instructionalMethod = $bindable<string[]>([]),
   campus = $bindable<string[]>([]),
   partOfTerm = $bindable<string[]>([]),
   attributes = $bindable<string[]>([]),
+
   referenceData,
 }: {
   instructionalMethod: string[];
   campus: string[];
   partOfTerm: string[];
   attributes: string[];
-  referenceData: {
-    instructionalMethods: CodeDescription[];
-    campuses: CodeDescription[];
-    partsOfTerm: CodeDescription[];
-    attributes: CodeDescription[];
-  };
+  referenceData: AttributeReferenceData;
 } = $props();
 
 const hasActiveFilters = $derived(

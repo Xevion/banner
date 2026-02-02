@@ -16,9 +16,9 @@ import {
   User,
   Users,
 } from "@lucide/svelte";
-import { tick } from "svelte";
+import { tick, type Snippet } from "svelte";
 
-let { children } = $props();
+let { children }: { children: Snippet } = $props();
 
 let moreSheetOpen = $state(false);
 
@@ -40,13 +40,13 @@ $effect(() => {
     const reset = boundaryReset;
     boundaryReset = null;
     errorPathname = null;
-    tick().then(() => reset());
+    void tick().then(() => reset());
   }
 });
 
 $effect(() => {
   if (authStore.state.mode === "unauthenticated") {
-    goto("/login");
+    void goto("/login");
   }
 });
 
@@ -116,7 +116,7 @@ const moreSheetItems = [
 
         <nav class="flex flex-col gap-0.5">
           <span class="px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60 mb-0.5">User</span>
-          {#each userItems as item}
+          {#each userItems as item (item.href)}
             <a
               href={item.href}
               class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors
@@ -132,7 +132,7 @@ const moreSheetItems = [
           {#if authStore.isAdmin}
             <div class="my-2 mx-2 border-t border-border"></div>
             <span class="px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60 mb-0.5">Admin</span>
-            {#each adminItems as item}
+            {#each adminItems as item (item.href)}
               <a
                 href={item.href}
                 class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors
@@ -174,7 +174,7 @@ const moreSheetItems = [
   <!-- Mobile bottom tab bar -->
   <nav class="fixed bottom-0 inset-x-0 z-30 md:hidden bg-background/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom)]">
     <div class="flex">
-      {#each authStore.isAdmin ? adminTabs : nonAdminTabs as tab}
+      {#each authStore.isAdmin ? adminTabs : nonAdminTabs as tab (tab.href)}
         <a
           href={tab.href}
           class="flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[56px] no-underline
@@ -210,7 +210,7 @@ const moreSheetItems = [
   {#if authStore.isAdmin}
     <BottomSheet bind:open={moreSheetOpen} maxHeight="60vh" label="More options">
       <nav class="flex flex-col gap-0.5 px-4 pb-4">
-        {#each moreSheetItems as item}
+        {#each moreSheetItems as item (item.href)}
           <a
             href={item.href}
             onclick={() => (moreSheetOpen = false)}
@@ -225,7 +225,7 @@ const moreSheetItems = [
         {/each}
         <div class="my-2 mx-2 border-t border-border"></div>
         <button
-          onclick={() => { moreSheetOpen = false; authStore.logout(); }}
+          onclick={() => { moreSheetOpen = false; void authStore.logout(); }}
           class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer
             bg-transparent border-none text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
         >

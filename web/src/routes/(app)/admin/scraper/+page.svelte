@@ -102,24 +102,25 @@ async function fetchAll() {
     refreshError = true;
     refreshInterval = Math.min(refreshInterval * 2, MAX_INTERVAL);
   } finally {
-    if (destroyed) return;
-    const elapsed = performance.now() - startedAt;
-    const remaining = MIN_SPIN_MS - elapsed;
-    if (remaining > 0) {
-      spinHoldTimer = setTimeout(() => {
+    if (!destroyed) {
+      const elapsed = performance.now() - startedAt;
+      const remaining = MIN_SPIN_MS - elapsed;
+      if (remaining > 0) {
+        spinHoldTimer = setTimeout(() => {
+          spinnerVisible = false;
+        }, remaining);
+      } else {
         spinnerVisible = false;
-      }, remaining);
-    } else {
-      spinnerVisible = false;
+      }
+      scheduleRefresh();
     }
-    scheduleRefresh();
   }
 }
 
 function scheduleRefresh() {
   if (destroyed) return;
   clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(fetchAll, refreshInterval);
+  refreshTimer = setTimeout(() => void fetchAll(), refreshInterval);
 }
 
 async function toggleSubjectDetail(subject: string) {
@@ -141,7 +142,7 @@ async function toggleSubjectDetail(subject: string) {
 
 // --- Chart data ---
 
-type ChartPoint = { date: Date; success: number; errors: number; coursesChanged: number };
+interface ChartPoint { date: Date; success: number; errors: number; coursesChanged: number }
 
 let chartData = $derived(
   (timeseries?.points ?? []).map((p) => ({
@@ -170,7 +171,7 @@ const tweenedChart = new Tween<ChartPoint[]>([], {
 });
 
 $effect(() => {
-  tweenedChart.set(chartData);
+  void tweenedChart.set(chartData);
 });
 
 let scrapeYMax = $derived(Math.max(1, ...chartData.map((d) => d.success + d.errors)));
@@ -310,7 +311,7 @@ const detailGridCols = "grid-cols-[7fr_5fr_3fr_4fr_4fr_3fr_4fr_minmax(6rem,1fr)]
 onMount(() => {
   destroyed = false;
   mounted = true;
-  fetchAll();
+  void fetchAll();
   scheduleTick();
 });
 
@@ -327,7 +328,7 @@ let mounted = false;
 $effect(() => {
   void selectedPeriod;
   if (mounted && !destroyed) {
-    fetchAll();
+    void fetchAll();
   }
 });
 </script>
@@ -350,7 +351,7 @@ $effect(() => {
       {/if}
     </div>
     <div class="bg-muted flex rounded-md p-0.5">
-      {#each PERIODS as period}
+      {#each PERIODS as period (period)}
         <button
           class="rounded px-2.5 py-1 text-xs font-medium transition-colors
             {selectedPeriod === period
@@ -452,7 +453,7 @@ $effect(() => {
             data={tweenedChart.current}
             x="date"
             xScale={scaleTime()}
-            y={(d: any) => d.success + d.errors}
+            y={(d: ChartPoint) => d.success + d.errors}
             yScale={scaleLinear()}
             yDomain={[0, scrapeYMax]}
             yNice
@@ -481,7 +482,7 @@ $effect(() => {
               />
               <Area
                 y0="success"
-                y1={(d: any) => d.success + d.errors}
+                y1={(d: ChartPoint) => d.success + d.errors}
                 fill="var(--status-red)"
                 fillOpacity={0.4}
                 curve={curveMonotoneX}
@@ -493,15 +494,16 @@ $effect(() => {
               classes={{ root: "text-xs" }}
               variant="none"
             >
+              {@const d = data as ChartPoint}
               <div class="bg-card text-card-foreground shadow-md rounded-md px-2.5 py-1.5 flex flex-col gap-y-1">
-                <p class="text-muted-foreground font-medium">{data.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
+                <p class="text-muted-foreground font-medium">{d.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
                 <div class="flex items-center justify-between gap-4">
                   <span class="flex items-center gap-1.5"><span class="inline-block size-2 rounded-full bg-status-green"></span>Successful</span>
-                  <span class="tabular-nums font-medium">{data.success}</span>
+                  <span class="tabular-nums font-medium">{d.success}</span>
                 </div>
                 <div class="flex items-center justify-between gap-4">
                   <span class="flex items-center gap-1.5"><span class="inline-block size-2 rounded-full bg-status-red"></span>Errors</span>
-                  <span class="tabular-nums font-medium">{data.errors}</span>
+                  <span class="tabular-nums font-medium">{d.errors}</span>
                 </div>
               </div>
             </Tooltip.Root>
@@ -547,11 +549,12 @@ $effect(() => {
               classes={{ root: "text-xs" }}
               variant="none"
             >
+              {@const d = data as ChartPoint}
               <div class="bg-card text-card-foreground shadow-md rounded-md px-2.5 py-1.5 flex flex-col gap-y-1">
-                <p class="text-muted-foreground font-medium">{data.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
+                <p class="text-muted-foreground font-medium">{d.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
                 <div class="flex items-center justify-between gap-4">
                   <span class="flex items-center gap-1.5"><span class="inline-block size-2 rounded-full bg-status-blue"></span>Changed</span>
-                  <span class="tabular-nums font-medium">{data.coursesChanged}</span>
+                  <span class="tabular-nums font-medium">{d.coursesChanged}</span>
                 </div>
               </div>
             </Tooltip.Root>
@@ -568,9 +571,9 @@ $effect(() => {
       <div class="overflow-x-auto">
         <table class="w-full min-w-160 border-collapse text-xs">
           <thead>
-            {#each table.getHeaderGroups() as headerGroup}
+            {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
               <tr class="border-border border-b text-left text-muted-foreground">
-                {#each headerGroup.headers as header}
+                {#each headerGroup.headers as header (header.id)}
                   <th
                     class="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider whitespace-nowrap"
                     class:cursor-pointer={header.column.getCanSort()}
@@ -611,9 +614,9 @@ $effect(() => {
           <tbody>
             {#if !subjects.length && !error}
               <!-- Skeleton loading -->
-              {#each Array(12) as _}
+              {#each Array(12) as _, i (i)}
                 <tr class="border-border border-b">
-                  {#each columns as col}
+                  {#each columns as col (col.id)}
                     <td class="px-3 py-2">
                       <div
                         class="h-3.5 rounded bg-muted animate-pulse {skeletonWidths[col.id ?? ''] ?? 'w-16'}"
@@ -729,7 +732,7 @@ $effect(() => {
                               <!-- Body (scrollable vertically, horizontal clipped to match header) -->
                               <div class="max-h-[280px] overflow-y-auto overflow-x-hidden">
                                 {#if detailLoading}
-                                  {#each Array(8) as _}
+                                  {#each Array(8) as _, i (i)}
                                     <div class="grid {detailGridCols} border-border/50 border-t">
                                       <div class="px-3 py-1.5"><div class="h-3.5 w-16 rounded bg-muted animate-pulse"></div></div>
                                       <div class="px-3 py-1.5"><div class="h-3.5 w-12 rounded bg-muted animate-pulse"></div></div>
@@ -768,7 +771,7 @@ $effect(() => {
                                         {#if result.coursesFetched != null && result.coursesFetched > 0 && result.coursesChanged != null}
                                           <span class={emphasisClass(result.coursesChanged)}>{(result.coursesChanged / result.coursesFetched * 100).toFixed(1)}%</span>
                                         {:else}
-                                          <span class="text-muted-foreground">{"\u2014"}</span>
+                                          <span class="text-muted-foreground">—</span>
                                         {/if}
                                       </div>
                                       <div class="px-3 py-1.5">
@@ -780,7 +783,7 @@ $effect(() => {
                                             <span class="text-red-600 dark:text-red-400 max-w-[12rem] truncate inline-block align-middle">{result.errorMessage}</span>
                                           </SimpleTooltip>
                                         {:else}
-                                          <span class="text-muted-foreground">{"\u2014"}</span>
+                                          <span class="text-muted-foreground">—</span>
                                         {/if}
                                       </div>
                                     </div>
@@ -805,7 +808,7 @@ $effect(() => {
   {:else}
     <!-- Initial loading skeleton -->
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      {#each Array(8) as _}
+      {#each Array(8) as _, i (i)}
         <div class="bg-card border-border rounded-lg border p-4">
           <div class="h-4 w-24 rounded bg-muted animate-pulse"></div>
           <div class="mt-2 h-8 w-16 rounded bg-muted animate-pulse"></div>

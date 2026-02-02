@@ -31,19 +31,19 @@ export function renderSnippet<TProps>(snippet: Snippet<[TProps]>, props: TProps)
 export const RENDER_COMPONENT_SYMBOL = Symbol("renderComponent");
 export const RENDER_SNIPPET_SYMBOL = Symbol("renderSnippet");
 
-export type RenderComponentConfig<
+export interface RenderComponentConfig<
   TProps extends Record<string, unknown> = Record<string, unknown>,
-> = {
+> {
   component: Component<TProps>;
   props: TProps;
   [RENDER_COMPONENT_SYMBOL]: true;
-};
+}
 
-export type RenderSnippetConfig<TProps = unknown> = {
+export interface RenderSnippetConfig<TProps = unknown> {
   snippet: Snippet<[TProps]>;
   props: TProps;
   [RENDER_SNIPPET_SYMBOL]: true;
-};
+}
 
 export function isRenderComponentConfig(value: unknown): value is RenderComponentConfig {
   return typeof value === "object" && value !== null && RENDER_COMPONENT_SYMBOL in value;
@@ -61,7 +61,9 @@ export function mountComponent<TProps extends Record<string, unknown>>(
   component: Component<TProps>,
   target: HTMLElement,
   props: TProps
-) {
+): () => void {
   const instance = mount(component, { target, props });
-  return () => unmount(instance);
+  return () => {
+    void unmount(instance);
+  };
 }

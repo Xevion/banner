@@ -12,6 +12,7 @@ import {
   getCoreRowModel,
   getSortedRowModel,
 } from "@tanstack/table-core";
+import { SvelteMap } from "svelte/reactivity";
 import { onMount } from "svelte";
 
 let jobs = $state<ScrapeJobDto[]>([]);
@@ -20,7 +21,7 @@ let initialized = $state(false);
 let error = $state<string | null>(null);
 let sorting: SortingState = $state([]);
 let tick = $state(0);
-let subjectMap = $state(new Map<string, string>());
+let subjectMap = new SvelteMap<string, string>();
 
 let store: ScrapeJobsStore | undefined;
 
@@ -63,7 +64,7 @@ onMount(() => {
   client
     .getReference("subject")
     .then((entries) => {
-      const map = new Map<string, string>();
+      const map = new SvelteMap<string, string>();
       for (const entry of entries) {
         map.set(entry.code, entry.description);
       }
@@ -263,11 +264,12 @@ const skeletonWidths: Record<string, string> = {
 };
 
 // Unified timing display: shows the most relevant duration for the job's current state.
-// Uses _tick dependency so Svelte re-evaluates every second.
+// Uses tick dependency so Svelte re-evaluates every second.
 function getTimingDisplay(
   job: ScrapeJobDto,
-  _tick: number
+  tick: number
 ): { text: string; colorClass: string; icon: "warning" | "none"; tooltip: string } {
+  void tick;
   const now = Date.now();
   const queuedTime = new Date(job.queuedAt).getTime();
   const executeTime = new Date(job.executeAt).getTime();
@@ -377,7 +379,6 @@ function getTimingDisplay(
   <p class="text-destructive">{error}</p>
 {:else}
   <div class="bg-card border-border overflow-hidden rounded-lg border">
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <table
       class="w-full border-collapse text-xs"
       onmouseenter={showTooltip}
@@ -385,9 +386,9 @@ function getTimingDisplay(
       onmouseleave={hideTooltip}
     >
       <thead>
-        {#each table.getHeaderGroups() as headerGroup}
+        {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
           <tr class="border-b border-border text-left text-muted-foreground">
-            {#each headerGroup.headers as header}
+            {#each headerGroup.headers as header (header.id)}
               <th
                 class="px-3 py-2.5 font-medium whitespace-nowrap"
                 class:cursor-pointer={header.column.getCanSort()}
@@ -427,9 +428,9 @@ function getTimingDisplay(
       </thead>
       {#if !initialized}
         <tbody>
-          {#each Array(5) as _}
+          {#each Array(5) as _row, i (i)}
             <tr class="border-b border-border">
-              {#each columns as col}
+              {#each columns as col (col.id)}
                 <td class="px-3 py-2.5">
                   <div
                     class="h-3.5 rounded bg-muted animate-pulse {skeletonWidths[col.id ?? ''] ?? 'w-20'}"

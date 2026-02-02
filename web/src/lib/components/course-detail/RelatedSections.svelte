@@ -1,67 +1,62 @@
 <script lang="ts">
-    import { type CourseResponse, client } from "$lib/api";
-    import {
-        abbreviateInstructor,
-        formatMeetingTimeSummary,
-        getPrimaryInstructor,
-        seatsColor,
-        seatsDotColor,
-    } from "$lib/course";
-    import { formatNumber } from "$lib/utils";
-    import { Loader2 } from "@lucide/svelte";
-    import { getCourseDetailContext } from "./context";
+import { type CourseResponse, client } from "$lib/api";
+import {
+  abbreviateInstructor,
+  formatMeetingTimeSummary,
+  getPrimaryInstructor,
+  seatsColor,
+  seatsDotColor,
+} from "$lib/course";
+import { formatNumber } from "$lib/utils";
+import { Loader2 } from "@lucide/svelte";
+import { getCourseDetailContext } from "./context";
 
-    let {
-        course,
-        sectionCount = $bindable(0),
-    }: { course: CourseResponse; sectionCount?: number } = $props();
+let { course, sectionCount = $bindable(0) }: { course: CourseResponse; sectionCount?: number } =
+  $props();
 
-    const ctx = getCourseDetailContext();
+const ctx = getCourseDetailContext();
 
-    type LoadState =
-        | { mode: "loading" }
-        | { mode: "loaded"; sections: CourseResponse[] }
-        | { mode: "error"; message: string };
+type LoadState =
+  | { mode: "loading" }
+  | { mode: "loaded"; sections: CourseResponse[] }
+  | { mode: "error"; message: string };
 
-    let state = $state<LoadState>({ mode: "loading" });
+let state = $state<LoadState>({ mode: "loading" });
 
-    $effect(() => {
-        const { termCode, subject, courseNumber } = course;
-        state = { mode: "loading" };
+$effect(() => {
+  const { termCode, subject, courseNumber } = course;
+  state = { mode: "loading" };
 
-        client
-            .getRelatedSections(termCode, subject, courseNumber)
-            .then((sections) => {
-                state = { mode: "loaded", sections };
-                sectionCount = sections.filter(
-                    (s) => s.crn !== course.crn,
-                ).length;
-            })
-            .catch((err) => {
-                state = {
-                    mode: "error",
-                    message:
-                        err instanceof Error ? err.message : "Failed to load",
-                };
-            });
+  client
+    .getRelatedSections(termCode, subject, courseNumber)
+    .then((sections) => {
+      state = { mode: "loaded", sections };
+      sectionCount = sections.filter((s) => s.crn !== course.crn).length;
+    })
+    .catch((err) => {
+      state = {
+        mode: "error",
+        message: err instanceof Error ? err.message : "Failed to load",
+      };
     });
+});
 
-    // How far the scroll container pulls up behind the header (header height + gap)
-    const OVERLAP = 24;
-    // How much of the mask is fully transparent (should cover the header text)
-    const HIDDEN = 16;
-    // Width of the transparent-to-opaque fade band
-    const FADE = 0;
-    // Extra spacing between the opaque boundary and the first card
-    const INSET = 4;
+// How far the scroll container pulls up behind the header (header height + gap)
+const OVERLAP = 24;
+// How much of the mask is fully transparent (should cover the header text)
+const HIDDEN = 16;
+// Width of the transparent-to-opaque fade band
+const FADE = 0;
+// Extra spacing between the opaque boundary and the first card
+const INSET = 4;
 
-    const pad = HIDDEN + FADE + INSET;
-    const fadeMask = `linear-gradient(to bottom, transparent 16px, black ${16}px, black calc(100% - ${24}px), transparent`;
-    let maskStyle = $derived(sectionCount >= 2 ? fadeMask : "none");
+const pad = HIDDEN + FADE + INSET;
+const fadeMask = `linear-gradient(to bottom, transparent 16px, black ${16}px, black calc(100% - ${24}px), transparent`;
+let maskStyle = $derived(sectionCount >= 2 ? fadeMask : "none");
 
-    function handleNavigate(crn: string) {
-        ctx?.navigateToSection?.(crn);
-    }
+function handleNavigate(crn: string) {
+  ctx?.navigateToSection?.(crn);
+}
 </script>
 
 <div class="flex flex-col gap-2 min-h-0 md:flex-1">
@@ -77,11 +72,11 @@
         </div>
     {:else if state.mode === "error"}
         <p class="text-xs text-muted-foreground italic">{state.message}</p>
-    {:else if state.sections.length <= 1}
+    {:else if state.mode === "loaded" && state.sections.length <= 1}
         <p class="text-xs text-muted-foreground italic">
             No other sections available.
         </p>
-    {:else}
+    {:else if state.mode === "loaded"}
         <div
             class="sections-scroll flex flex-col gap-1.5 grow md:overflow-y-auto scrollbar-none"
             style:mask-image={maskStyle}
@@ -154,6 +149,7 @@
                     </div>
 
                     <!-- Line 3 (conditional): Location + waitlist -->
+                    <!-- eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -->
                     {#if section.primaryLocation || (section.enrollment.waitCapacity > 0 && section.enrollment.waitCount > 0)}
                         <div
                             class="flex items-center justify-between gap-2 mt-0.5"

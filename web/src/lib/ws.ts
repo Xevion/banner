@@ -159,7 +159,7 @@ export class ScrapeJobsStore {
   }
 
   resync(): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: "resync" }));
     }
   }

@@ -103,7 +103,7 @@ export function formatTimeRange(begin: string | null, end: string | null): strin
  *
  * Names without a comma (e.g. "Staff") are returned as-is.
  */
-export function abbreviateInstructor(name: string, maxLen: number = 18): string {
+export function abbreviateInstructor(name: string, maxLen = 18): string {
   if (name.length <= maxLen) return name;
 
   const commaIdx = name.indexOf(", ");

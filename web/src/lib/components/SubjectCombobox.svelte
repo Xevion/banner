@@ -51,7 +51,7 @@ function removeSubject(code: string) {
 
 // bits-ui sets the input text to the last selected item's label — clear it
 $effect(() => {
-  value;
+  void value;
   const input = containerEl?.querySelector("input");
   if (input) {
     input.value = "";

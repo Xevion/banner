@@ -15,16 +15,27 @@ import FilterChip from "$lib/components/FilterChip.svelte";
 import Footer from "$lib/components/Footer.svelte";
 import Pagination from "$lib/components/Pagination.svelte";
 import SearchFilters from "$lib/components/SearchFilters.svelte";
-import SearchStatus, { type SearchMeta } from "$lib/components/SearchStatus.svelte";
+import SearchStatus from "$lib/components/SearchStatus.svelte";
 import SegmentedChip from "$lib/components/SegmentedChip.svelte";
 import { Check, Columns3, RotateCcw } from "@lucide/svelte";
 import type { SortingState, VisibilityState } from "@tanstack/table-core";
 import { DropdownMenu } from "bits-ui";
+import { SvelteSet, SvelteURLSearchParams } from "svelte/reactivity";
 import { tick, untrack } from "svelte";
 import { type ScrollMetrics, maskGradient as computeMaskGradient } from "$lib/scroll-fade";
 import { fly } from "svelte/transition";
 
-let { data } = $props();
+interface PageLoadData {
+  searchOptions: SearchOptionsResponse | null;
+  url: URL;
+}
+
+let { data }: { data: PageLoadData } = $props();
+
+/** No-op function to register Svelte reactivity dependencies for `$effect` tracking */
+function track(..._deps: unknown[]) {
+  /* noop */
+}
 
 let courseTableRef: CourseTable | undefined = $state();
 
@@ -71,12 +82,7 @@ let instructor = $state(initialParams.get("instructor") ?? "");
 let courseNumberMin = $state<number | null>(parseNumParam("course_number_low"));
 let courseNumberMax = $state<number | null>(parseNumParam("course_number_high"));
 
-let searchOptions = $state<SearchOptionsResponse | null>(null);
-
-// Sync data prop to local state
-$effect(() => {
-  searchOptions = data.searchOptions;
-});
+let searchOptions = $state<SearchOptionsResponse | null>(data.searchOptions);
 
 // Derived from search options
 const terms = $derived(searchOptions?.terms ?? []);
@@ -105,7 +111,8 @@ setCourseDetailContext(courseDetailCtx);
 // Wire up navigation callback once CourseTable is mounted
 $effect(() => {
   if (courseTableRef) {
-    courseDetailCtx.navigateToSection = (crn: string) => courseTableRef!.navigateToSection(crn);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+    courseDetailCtx.navigateToSection = (crn: string) => courseTableRef?.navigateToSection(crn);
   }
 });
 
@@ -144,7 +151,7 @@ function handleSortingChange(newSorting: SortingState) {
 
 // Data state
 let searchResult: SearchResponse | null = $state(null);
-let searchMeta: SearchMeta | null = $state(null);
+let searchMeta: { totalCount: number; durationMs: number; timestamp: Date } | null = $state(null);
 let loading = $state(false);
 let error = $state<string | null>(null);
 
@@ -229,19 +236,19 @@ function scheduleSearch(source: keyof typeof THROTTLE_MS) {
   searchTimeout = setTimeout(() => {
     const key = buildSearchKey();
     if (key === lastSearchKey) return;
-    performSearch();
+    void performSearch();
   }, THROTTLE_MS[source]);
 }
 
 // Separate effects for each trigger source with appropriate throttling
 $effect(() => {
-  selectedTerm;
+  track(selectedTerm);
   scheduleSearch("term");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  selectedSubjects;
+  track(selectedSubjects);
   if (!validatingSubjects) {
     scheduleSearch("subjects");
   }
@@ -249,103 +256,103 @@ $effect(() => {
 });
 
 $effect(() => {
-  query;
+  track(query);
   scheduleSearch("query");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  openOnly;
+  track(openOnly);
   scheduleSearch("openOnly");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  offset;
+  track(offset);
   scheduleSearch("offset");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  sorting;
+  track(sorting);
   scheduleSearch("sorting");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  waitCountMax;
+  track(waitCountMax);
   scheduleSearch("waitCountMax");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  days;
+  track(days);
   scheduleSearch("days");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  timeStart;
+  track(timeStart);
   scheduleSearch("timeStart");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  timeEnd;
+  track(timeEnd);
   scheduleSearch("timeEnd");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  instructionalMethod;
+  track(instructionalMethod);
   scheduleSearch("instructionalMethod");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  campus;
+  track(campus);
   scheduleSearch("campus");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  partOfTerm;
+  track(partOfTerm);
   scheduleSearch("partOfTerm");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  attributes;
+  track(attributes);
   scheduleSearch("attributes");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  creditHourMin;
+  track(creditHourMin);
   scheduleSearch("creditHourMin");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  creditHourMax;
+  track(creditHourMax);
   scheduleSearch("creditHourMax");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  instructor;
+  track(instructor);
   scheduleSearch("instructor");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  courseNumberMin;
+  track(courseNumberMin);
   scheduleSearch("courseNumberMin");
   return () => clearTimeout(searchTimeout);
 });
 
 $effect(() => {
-  courseNumberMax;
+  track(courseNumberMax);
   scheduleSearch("courseNumberMax");
   return () => clearTimeout(searchTimeout);
 });
@@ -395,7 +402,7 @@ async function performSearch() {
     sorting.length > 0 ? (sorting[0].desc ? "desc" : "asc") : undefined;
 
   // Build URL params for browser URL sync
-  const params = new URLSearchParams();
+  const params = new SvelteURLSearchParams();
   for (const s of selectedSubjects) {
     params.append("subject", s);
   }
@@ -430,7 +437,7 @@ async function performSearch() {
   const now = Date.now();
   const shouldBatch = now - lastNavigationTime < BATCH_WINDOW_MS;
 
-  goto(`?${params.toString()}`, {
+  void goto(`?${params.toString()}`, {
     replaceState: shouldBatch,
     noScroll: true,
     keepFocus: true,
@@ -478,10 +485,15 @@ async function performSearch() {
     // apply visibility:hidden to the entire page for the transition duration,
     // blocking all pointer interactions — so we skip those entirely and let
     // Svelte's animate:flip / in:fade handle the visual update instead.
-    const tableEl = document.querySelector("[data-search-results]") as HTMLElement | null;
+    const tableEl = document.querySelector("[data-search-results]");
 
     if (tableEl && "startViewTransition" in tableEl) {
-      const transition = (tableEl as any).startViewTransition(async () => {
+      const startViewTransition = (
+        tableEl as unknown as {
+          startViewTransition: (cb: () => Promise<void>) => { updateCallbackDone: Promise<void> };
+        }
+      ).startViewTransition;
+      const transition = startViewTransition(async () => {
         applyUpdate();
         await tick();
       });
@@ -506,7 +518,7 @@ let columnVisibility: VisibilityState = $state({});
 // Responsive column hiding: hide CRN and Location in the sm-to-md range (640-768px)
 let isCompactTable = $state(false);
 // Track columns the user has explicitly toggled so we don't override their choices
-let userToggledColumns = $state(new Set<string>());
+let userToggledColumns = new SvelteSet<string>();
 
 $effect(() => {
   if (typeof window === "undefined") return;
@@ -543,7 +555,7 @@ $effect(() => {
 
 function resetColumnVisibility() {
   columnVisibility = {};
-  userToggledColumns = new Set();
+  userToggledColumns = new SvelteSet();
 }
 
 let hasCustomVisibility = $derived(Object.values(columnVisibility).some((v) => v === false));
@@ -825,7 +837,7 @@ $effect(() => {
                                             >
                                                 Toggle columns
                                             </DropdownMenu.GroupHeading>
-                                            {#each columnDefs as col}
+                                            {#each columnDefs as col (col.id)}
                                                 <DropdownMenu.CheckboxItem
                                                     checked={columnVisibility[
                                                         col.id
@@ -834,7 +846,7 @@ $effect(() => {
                                                     onCheckedChange={(
                                                         checked,
                                                     ) => {
-                                                        userToggledColumns = new Set(userToggledColumns).add(col.id);
+                                                        userToggledColumns.add(col.id);
                                                         columnVisibility = {
                                                             ...columnVisibility,
                                                             [col.id]: checked,

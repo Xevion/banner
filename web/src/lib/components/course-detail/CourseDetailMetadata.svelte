@@ -75,7 +75,7 @@ const ctx = getCourseDetailContext();
   {#if course.attributes.length > 0}
     <div class="flex flex-wrap items-center gap-1.5">
       <span class="text-muted-foreground text-xs mr-1">Attributes</span>
-      {#each course.attributes as attr}
+      {#each course.attributes as attr (attr)}
         {@const description = ctx?.attributeMap[attr]}
         {#if description}
           <SimpleTooltip text={description} delay={100} passthrough>

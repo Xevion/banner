@@ -95,11 +95,11 @@ async function fetchData() {
 
 function scheduleRefresh() {
   clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(fetchData, refreshInterval);
+  refreshTimer = setTimeout(() => void fetchData(), refreshInterval);
 }
 
 onMount(() => {
-  fetchData();
+  void fetchData();
   scheduleTick();
 });
 
@@ -257,9 +257,9 @@ const columnCount = columns.length;
   <div class="bg-card border-border overflow-hidden rounded-lg border">
     <table class="w-full text-sm">
       <thead>
-        {#each table.getHeaderGroups() as headerGroup}
+        {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
           <tr class="border-b border-border text-left text-muted-foreground">
-            {#each headerGroup.headers as header}
+            {#each headerGroup.headers as header (header.id)}
               <th
                 class="px-4 py-3 font-medium"
                 class:cursor-pointer={header.column.getCanSort()}
@@ -300,9 +300,9 @@ const columnCount = columns.length;
       <tbody>
         {#if !data}
           <!-- Skeleton loading -->
-          {#each Array(20) as _}
+          {#each Array(20) as _entry, i (i)}
             <tr class="border-b border-border">
-              {#each columns as col}
+              {#each columns as col (col.id)}
                 <td class="px-4 py-3">
                   <div
                     class="h-4 rounded bg-muted animate-pulse {skeletonWidths[col.id ?? ''] ?? 'w-20'}"
@@ -367,9 +367,7 @@ const columnCount = columns.length;
                       {#if change.diffs.length === 1}
                         {@const d = change.diffs[0]}
                         <span class="font-mono text-xs">
-                          <span class="text-muted-foreground">{formatDiffPath(d.path)}:</span>
-                          {" "}
-                          <span class="text-red-400">{stringify(d.oldVal)}</span>
+                          <span class="text-muted-foreground">{formatDiffPath(d.path)}:</span> <span class="text-red-400">{stringify(d.oldVal)}</span>
                           <span class="text-muted-foreground"> → </span>
                           <span class="text-green-600 dark:text-green-400">{stringify(d.newVal)}</span>
                         </span>
@@ -399,11 +397,9 @@ const columnCount = columns.length;
                   <div transition:slide={{ duration: 200 }}>
                     <div class="bg-muted/20 px-4 py-3">
                       <div class="flex flex-col gap-y-1.5">
-                        {#each change.diffs as d}
+                        {#each change.diffs as d (d.path)}
                           <div class="font-mono text-xs">
-                            <span class="text-muted-foreground">{formatDiffPath(d.path)}:</span>
-                            {" "}
-                            <span class="text-red-400">{stringify(d.oldVal)}</span>
+                            <span class="text-muted-foreground">{formatDiffPath(d.path)}:</span> <span class="text-red-400">{stringify(d.oldVal)}</span>
                             <span class="text-muted-foreground"> → </span>
                             <span class="text-green-600 dark:text-green-400">{stringify(d.newVal)}</span>
                           </div>

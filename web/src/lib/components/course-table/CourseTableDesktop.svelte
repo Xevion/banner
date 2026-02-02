@@ -75,8 +75,8 @@ useOverlayScrollbars(() => tableWrapper, {
 // Singleton tooltip delegation
 $effect(() => {
   if (!tableElement) return;
-  const { destroy } = useTooltipDelegation(tableElement);
-  return destroy;
+  const tooltipDelegation = useTooltipDelegation(tableElement);
+  return () => tooltipDelegation.destroy();
 });
 
 // Height observation via composable
@@ -151,9 +151,9 @@ const table = createSvelteTable({
     <ContextMenu.Trigger class="contents">
       <table bind:this={tableElement} class="w-full min-w-120 md:min-w-160 border-collapse text-sm">
         <thead>
-          {#each table.getHeaderGroups() as headerGroup}
+          {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
             <tr class="border-b border-border text-left text-muted-foreground">
-              {#each headerGroup.headers as header}
+              {#each headerGroup.headers as header (header.id)}
                 {#if header.column.getIsVisible()}
                   <th
                     class="py-2 px-2 font-medium select-none {header.id === 'seats' ? 'text-right' : ''}"
@@ -194,6 +194,7 @@ const table = createSvelteTable({
         </thead>
         {#if loading && courses.length === 0}
           <tbody>
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static skeleton markup, no user input -->
             {@html buildSkeletonHtml(visibleColumnIds, skeletonRowCount)}
           </tbody>
         {:else if courses.length === 0 && !loading}
@@ -261,7 +262,7 @@ const table = createSvelteTable({
                   >
                     Toggle columns
                   </ContextMenu.GroupHeading>
-                  {#each COLUMN_DEFS as col}
+                  {#each COLUMN_DEFS as col (col.id)}
                     {@const id = col.id!}
                     {@const label = typeof col.header === "string" ? col.header : id}
                     <ContextMenu.CheckboxItem

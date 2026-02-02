@@ -67,7 +67,7 @@ let hasCalendar = $derived(course.meetingTimes.length > 0);
 
   {#if course.meetingTimes.length > 0}
     <div class="flex flex-col gap-1">
-      {#each course.meetingTimes as mt}
+      {#each course.meetingTimes as mt, i (i)}
         <div class="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 text-sm">
           {#if mt.days.length === 0 && mt.timeRange === null}
             <span class="italic text-muted-foreground">TBA</span>
@@ -82,7 +82,7 @@ let hasCalendar = $derived(course.meetingTimes.length > 0);
             {:else}
               <span class="italic text-muted-foreground">Time TBA</span>
             {/if}
-            {#if mt.location?.building || mt.location?.room}
+            {#if mt.location?.building ?? mt.location?.room}
               <span class="text-muted-foreground">&middot;</span>
               <span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <MapPin class="size-3 shrink-0" />

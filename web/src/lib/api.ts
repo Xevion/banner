@@ -137,9 +137,12 @@ function toURLSearchParams(obj: Record<string, unknown>): URLSearchParams {
           params.append(key, String(item));
         }
       }
+    } else if (typeof value === "object") {
+      // JSON stringify objects
+      params.set(key, JSON.stringify(value));
     } else {
-      // Convert primitives to string
-      params.set(key, String(value));
+      // Convert primitives to string (string, number, boolean, bigint, symbol)
+      params.set(key, String(value as string | number | boolean));
     }
   }
 
@@ -151,7 +154,7 @@ function toURLSearchParams(obj: Record<string, unknown>): URLSearchParams {
  */
 export class ApiErrorClass extends Error {
   public readonly code: ApiErrorCode;
-  public readonly details: unknown | null;
+  public readonly details: unknown;
 
   constructor(apiError: ApiError) {
     super(apiError.message);
@@ -298,7 +301,7 @@ export class BannerApiClient {
   private static SEARCH_OPTIONS_TTL = 10 * 60 * 1000; // 10 minutes
 
   async getSearchOptions(term?: string): Promise<SearchOptionsResponse> {
-    const cacheKey = term || "__default__";
+    const cacheKey = term ?? "__default__";
     const cached = this.searchOptionsCache.get(cacheKey);
     if (cached && Date.now() - cached.fetchedAt < BannerApiClient.SEARCH_OPTIONS_TTL) {
       return cached.data;

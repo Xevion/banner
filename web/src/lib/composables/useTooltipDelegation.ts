@@ -56,7 +56,7 @@ export function useTooltipDelegation(container: HTMLElement) {
       el.textContent = text;
       el.style.opacity = "1";
 
-      computePosition(target, el, {
+      void computePosition(target, el, {
         strategy: "fixed",
         placement: side,
         middleware: [offset(6), flip(), shift({ padding: 8 })],
@@ -84,8 +84,8 @@ export function useTooltipDelegation(container: HTMLElement) {
   }
 
   function onMouseOver(e: MouseEvent) {
-    const target = (e.target as HTMLElement).closest?.("[data-tooltip]") as HTMLElement | null;
-    if (target) {
+    const target = (e.target as HTMLElement).closest?.("[data-tooltip]");
+    if (target instanceof HTMLElement) {
       showTooltip(target);
     } else if (currentTarget) {
       hideTooltip();
@@ -97,8 +97,8 @@ export function useTooltipDelegation(container: HTMLElement) {
   }
 
   function onFocusIn(e: FocusEvent) {
-    const target = (e.target as HTMLElement).closest?.("[data-tooltip]") as HTMLElement | null;
-    if (target) showTooltip(target);
+    const target = (e.target as HTMLElement).closest?.("[data-tooltip]");
+    if (target instanceof HTMLElement) showTooltip(target);
   }
 
   function onFocusOut() {

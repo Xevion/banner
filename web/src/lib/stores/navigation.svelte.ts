@@ -78,7 +78,7 @@ export function initNavigation() {
     const isPageChange = fromPath !== toPath;
 
     if (!document.startViewTransition || !isPageChange) {
-      navigation.complete.then(() => {
+      void navigation.complete.then(() => {
         navbar.path = window.location.pathname;
       });
       return;
@@ -96,7 +96,7 @@ export function initNavigation() {
 
       // Update navbar path only after the view transition finishes and the
       // real DOM is visible again, so CSS transitions can actually run.
-      vt.finished.finally(() => {
+      void vt.finished.finally(() => {
         document.documentElement.classList.remove("nav-transitioning");
         navbar.path = window.location.pathname;
       });
