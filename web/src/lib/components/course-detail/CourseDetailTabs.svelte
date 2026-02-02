@@ -3,13 +3,13 @@ import type { CourseResponse } from "$lib/api";
 import { formatCreditHours } from "$lib/course";
 import { formatNumber } from "$lib/utils";
 import { useClipboard } from "$lib/composables/useClipboard.svelte";
+import { getInstructionalMethodLabel, getCampusLabel, getAttributeLabel } from "$lib/labels";
 import { Check, ClipboardCopy, Info, Link } from "@lucide/svelte";
 import { Tabs } from "bits-ui";
 import CourseDetailInstructors from "./CourseDetailInstructors.svelte";
 import CourseDetailSchedule from "./CourseDetailSchedule.svelte";
 import RelatedSections from "./RelatedSections.svelte";
 import SimpleTooltip from "../SimpleTooltip.svelte";
-import { getCourseDetailContext } from "./context";
 
 let { course }: { course: CourseResponse } = $props();
 
@@ -17,8 +17,6 @@ let activeTab = $state("overview");
 
 const crnClipboard = useClipboard();
 const linkClipboard = useClipboard();
-
-const ctx = getCourseDetailContext();
 
 function courseUrl(): string {
   return `${window.location.origin}/courses/${course.termCode}/${course.crn}`;
@@ -70,14 +68,11 @@ $effect(() => {
 
     <Tabs.Content value="overview">
         <div class="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-x-6">
-            <!-- Left column: course details -->
             <div
                 bind:this={leftColumn}
                 class="flex flex-col gap-4 min-w-0 pt-4 px-4 md:pb-4"
             >
-                <!-- Top row: Identity + Metadata side by side -->
                 <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
-                    <!-- Identity -->
                     <div class="min-w-0">
                         <div class="flex items-center gap-1.5">
                             <h3
@@ -127,7 +122,6 @@ $effect(() => {
                         </div>
                     </div>
 
-                    <!-- Metadata (delivery, credits, waitlist, attributes) -->
                     <div class="flex flex-col gap-1.5">
                         <div
                             class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
@@ -137,11 +131,15 @@ $effect(() => {
                                     >Delivery</span
                                 >
                                 <span class="text-foreground">
-                                    {course.instructionalMethod ?? "\u2014"}
+                                    {#if course.instructionalMethod}
+                                        {getInstructionalMethodLabel(course.instructionalMethod, "detail")}
+                                    {:else}
+                                        &mdash;
+                                    {/if}
                                     {#if course.campus}
                                         <span class="text-muted-foreground">
-                                            &middot; {course.campus}</span
-                                        >
+                                            &middot; {getCampusLabel(course.campus, "detail")}
+                                        </span>
                                     {/if}
                                 </span>
                             </span>
@@ -216,41 +214,29 @@ $effect(() => {
                                     >Attributes</span
                                 >
                                 {#each course.attributes as attr (attr)}
-                                    {@const description =
-                                        ctx?.attributeMap[attr]}
-                                    {#if description}
-                                        <SimpleTooltip
-                                            text={description}
-                                            delay={100}
-                                            passthrough
-                                        >
-                                            <span
-                                                class="inline-flex text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors cursor-default"
-                                            >
-                                                {attr}
-                                            </span>
-                                        </SimpleTooltip>
-                                    {:else}
+                                    <SimpleTooltip
+                                        text={getAttributeLabel(attr, "tooltip")}
+                                        delay={100}
+                                        passthrough
+                                    >
                                         <span
-                                            class="inline-flex text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground"
+                                            class="inline-flex text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors cursor-default"
                                         >
-                                            {attr}
+                                            {getAttributeLabel(attr, "filter")}
                                         </span>
-                                    {/if}
+                                    </SimpleTooltip>
                                 {/each}
                             </div>
                         {/if}
                     </div>
                 </div>
 
-                <!-- Schedule + Instructors -->
                 <div class="flex flex-wrap items-start gap-x-6 gap-y-4">
                     <CourseDetailSchedule {course} />
                     <CourseDetailInstructors {course} />
                 </div>
             </div>
 
-            <!-- Right column: Related Sections -->
             <div
                 bind:this={rightColumn}
                 class="min-w-0 px-4 py-4 md:border-l md:border-border md:pb-4 flex flex-col"

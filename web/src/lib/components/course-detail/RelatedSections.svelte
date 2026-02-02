@@ -8,6 +8,7 @@ import {
   seatsDotColor,
 } from "$lib/course";
 import { formatNumber } from "$lib/utils";
+import { getInstructionalMethodLabel } from "$lib/labels";
 import { Loader2 } from "@lucide/svelte";
 import { getCourseDetailContext } from "./context";
 
@@ -96,7 +97,6 @@ function handleNavigate(crn: string) {
             border-border bg-card hover:bg-muted/50 shrink-0"
                     onclick={() => handleNavigate(section.crn)}
                 >
-                    <!-- Line 1: CRN, delivery, seats -->
                     <div class="flex items-center justify-between gap-2">
                         <div class="flex items-center gap-2 min-w-0">
                             <span
@@ -107,7 +107,7 @@ function handleNavigate(crn: string) {
                                 <span
                                     class="text-xs text-muted-foreground truncate"
                                 >
-                                    {section.instructionalMethod}
+                                    {getInstructionalMethodLabel(section.instructionalMethod, "filter")}
                                 </span>
                             {/if}
                         </div>
@@ -131,7 +131,6 @@ function handleNavigate(crn: string) {
                         </span>
                     </div>
 
-                    <!-- Line 2: Instructor + schedule -->
                     <div class="flex items-center justify-between gap-2 mt-0.5">
                         <span class="text-xs text-muted-foreground truncate">
                             {abbreviateInstructor(
@@ -148,7 +147,6 @@ function handleNavigate(crn: string) {
                         </span>
                     </div>
 
-                    <!-- Line 3 (conditional): Location + waitlist -->
                     <!-- eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -->
                     {#if section.primaryLocation || (section.enrollment.waitCapacity > 0 && section.enrollment.waitCount > 0)}
                         <div

@@ -4,7 +4,7 @@ import { concernAccentColor, formatLocationTooltip } from "$lib/course";
 
 let { course }: { course: CourseResponse } = $props();
 
-let accentColor = $derived(concernAccentColor(course.deliveryMode));
+let accentColor = $derived(concernAccentColor(course.instructionalMethod, course.campus));
 let locTooltip = $derived(formatLocationTooltip(course));
 let locDisplay = $derived(course.primaryLocation);
 </script>

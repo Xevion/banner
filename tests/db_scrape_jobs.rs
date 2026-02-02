@@ -6,8 +6,6 @@ use banner::data::scrape_jobs;
 use serde_json::json;
 use sqlx::PgPool;
 
-// ── fetch_and_lock_job ──────────────────────────────────────────────
-
 #[sqlx::test]
 async fn fetch_and_lock_empty_queue(pool: PgPool) {
     let result = scrape_jobs::fetch_and_lock_job(&pool).await.unwrap();
@@ -146,8 +144,6 @@ async fn fetch_and_lock_execute_at_asc_ordering(pool: PgPool) {
     );
 }
 
-// ── delete_job ──────────────────────────────────────────────────────
-
 #[sqlx::test]
 async fn delete_job_removes_row(pool: PgPool) {
     let id = helpers::insert_scrape_job(
@@ -177,8 +173,6 @@ async fn delete_job_nonexistent_id_no_error(pool: PgPool) {
     scrape_jobs::delete_job(999_999, &pool).await.unwrap();
 }
 
-// ── unlock_job ──────────────────────────────────────────────────────
-
 #[sqlx::test]
 async fn unlock_job_clears_locked_at(pool: PgPool) {
     let id = helpers::insert_scrape_job(
@@ -202,8 +196,6 @@ async fn unlock_job_clears_locked_at(pool: PgPool) {
             .unwrap();
     assert!(locked_at.is_none(), "locked_at should be cleared");
 }
-
-// ── unlock_and_increment_retry ──────────────────────────────────────
 
 #[sqlx::test]
 async fn unlock_and_increment_retry_has_retries_remaining(pool: PgPool) {
@@ -296,8 +288,6 @@ async fn unlock_and_increment_retry_already_exceeded(pool: PgPool) {
             .unwrap();
     assert_eq!(retry_count, 6);
 }
-
-// ── find_existing_job_payloads ──────────────────────────────────────
 
 #[sqlx::test]
 async fn find_existing_payloads_returns_matching(pool: PgPool) {
@@ -398,8 +388,6 @@ async fn find_existing_payloads_empty_candidates(pool: PgPool) {
         "empty candidates should return empty result"
     );
 }
-
-// ── batch_insert_jobs ───────────────────────────────────────────────
 
 #[sqlx::test]
 async fn batch_insert_jobs_inserts_multiple(pool: PgPool) {

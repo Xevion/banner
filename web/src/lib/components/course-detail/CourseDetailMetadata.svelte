@@ -2,25 +2,25 @@
 import type { CourseResponse } from "$lib/api";
 import { formatCreditHours } from "$lib/course";
 import { formatNumber } from "$lib/utils";
+import { getInstructionalMethodLabel, getCampusLabel, getAttributeLabel } from "$lib/labels";
 import { Info } from "@lucide/svelte";
 import SimpleTooltip from "../SimpleTooltip.svelte";
-import { getCourseDetailContext } from "./context";
 
 let { course }: { course: CourseResponse } = $props();
-
-const ctx = getCourseDetailContext();
 </script>
 
-<!-- Compact key-value metadata strip -->
 <div class="flex flex-col gap-2">
-  <!-- Primary row: always-present fields -->
   <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
     <span class="inline-flex items-center gap-1.5">
       <span class="text-muted-foreground text-xs">Delivery</span>
       <span class="text-foreground">
-        {course.instructionalMethod ?? "\u2014"}
+        {#if course.instructionalMethod}
+          {getInstructionalMethodLabel(course.instructionalMethod, "detail")}
+        {:else}
+          &mdash;
+        {/if}
         {#if course.campus}
-          <span class="text-muted-foreground"> &middot; {course.campus}</span>
+          <span class="text-muted-foreground"> &middot; {getCampusLabel(course.campus, "detail")}</span>
         {/if}
       </span>
     </span>
@@ -69,29 +69,19 @@ const ctx = getCourseDetailContext();
         {/if}
       </span>
     {/if}
-  </div>
+    </div>
 
-  <!-- Attributes row: only if present -->
   {#if course.attributes.length > 0}
     <div class="flex flex-wrap items-center gap-1.5">
       <span class="text-muted-foreground text-xs mr-1">Attributes</span>
       {#each course.attributes as attr (attr)}
-        {@const description = ctx?.attributeMap[attr]}
-        {#if description}
-          <SimpleTooltip text={description} delay={100} passthrough>
-            <span
-              class="inline-flex text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors cursor-default"
-            >
-              {attr}
-            </span>
-          </SimpleTooltip>
-        {:else}
+        <SimpleTooltip text={getAttributeLabel(attr, "tooltip")} delay={100} passthrough>
           <span
-            class="inline-flex text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground"
+            class="inline-flex text-xs font-medium bg-muted border border-border rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors cursor-default"
           >
-            {attr}
+            {getAttributeLabel(attr, "filter")}
           </span>
-        {/if}
+        </SimpleTooltip>
       {/each}
     </div>
   {/if}

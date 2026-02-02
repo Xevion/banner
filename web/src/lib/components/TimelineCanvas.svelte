@@ -123,35 +123,24 @@ let lastPointerClientX = 0;
 let lastPointerClientY = 0;
 let pointerOverCanvas = false;
 
-// ── Drawer ──────────────────────────────────────────────────────────
 let drawerOpen = $state(false);
-// Start with an empty set — subjects are populated dynamically from the API.
 let enabledSubjects = new SvelteSet<string>();
 
-// ── Data store ──────────────────────────────────────────────────────
 const store = createTimelineStore();
 let data: TimeSlot[] = $derived(store.data);
 let allSubjects: string[] = $derived(store.subjects);
 
-// Auto-enable newly discovered subjects.
 $effect(() => {
   const storeSubjects = store.subjects;
-  const next = new SvelteSet(enabledSubjects);
-  let changed = false;
   for (const s of storeSubjects) {
-    if (!next.has(s)) {
-      next.add(s);
-      changed = true;
+    if (!enabledSubjects.has(s)) {
+      enabledSubjects.add(s);
     }
-  }
-  if (changed) {
-    enabledSubjects = next;
   }
 });
 
 let activeSubjects = $derived(allSubjects.filter((s) => enabledSubjects.has(s)));
 
-// ── Derived layout ──────────────────────────────────────────────────
 let viewStart = $derived(viewCenter - viewSpan / 2);
 let viewEnd = $derived(viewCenter + viewSpan / 2);
 let chartHeight = $derived(height * CHART_HEIGHT_RATIO);
@@ -164,34 +153,29 @@ let xScale = $derived(
     .range([PADDING.left, width - PADDING.right])
 );
 
-// Reused across frames — domain/range updated imperatively in render().
 let yScale = scaleLinear()
   .domain([0, MIN_MAXY * 1.1])
   .range([0, 1]);
 
-// ── Subject toggling ────────────────────────────────────────────────
 function toggleSubject(subject: string) {
-  const next = new SvelteSet(enabledSubjects);
-  if (next.has(subject)) next.delete(subject);
-  else next.add(subject);
-  enabledSubjects = next;
+  if (enabledSubjects.has(subject)) enabledSubjects.delete(subject);
+  else enabledSubjects.add(subject);
 }
 
 function enableAll() {
-  enabledSubjects = new SvelteSet(allSubjects);
+  enabledSubjects.clear();
+  for (const s of allSubjects) enabledSubjects.add(s);
 }
 
 function disableAll() {
-  enabledSubjects = new SvelteSet();
+  enabledSubjects.clear();
 }
 
-// ── Rendering ───────────────────────────────────────────────────────
 function render() {
   if (!canvasEl) return;
   const ctx = canvasEl.getContext("2d");
   if (!ctx) return;
 
-  // Update yScale in-place (no allocation per frame).
   yScale.domain([0, animatedMaxY * 1.1]).range([chartBottom, chartTop]);
 
   ctx.save();
@@ -222,7 +206,6 @@ function render() {
   ctx.restore();
 }
 
-// ── Hover logic ─────────────────────────────────────────────────────
 function updateHover() {
   if (!pointerOverCanvas || isDragging || !canvasEl) return;
 
@@ -252,7 +235,6 @@ function updateHover() {
     return;
   }
 
-  // Bypass area overlap check when CTRL is held.
   if (!ctrlHeld) {
     const stackTopY = yScale(total);
     if (y < stackTopY) {
@@ -269,7 +251,6 @@ function updateHover() {
   hoverSlotTime = snappedTime;
 }
 
-// ── Interaction helpers ───────────────────────────────────────────────
 function pinchDistance(): number {
   const pts = [...activePointers.values()];
   if (pts.length < 2) return 0;
@@ -284,13 +265,11 @@ function pinchMidpoint(): { x: number; y: number } {
   return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
 }
 
-// ── Interaction handlers ────────────────────────────────────────────
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  // Two fingers down → start pinch-to-zoom
   if (activePointers.size === 2) {
     isDragging = false;
     isPinching = true;
@@ -307,7 +286,6 @@ function onPointerDown(e: PointerEvent) {
     return;
   }
 
-  // Single finger / mouse → start drag
   isDragging = true;
   dragStartX = e.clientX;
   dragStartY = e.clientY;
@@ -334,11 +312,10 @@ function onPointerMove(e: PointerEvent) {
   pointerOverCanvas = true;
   activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  // Pinch-to-zoom (two-finger gesture)
   if (isPinching && activePointers.size >= 2) {
     const dist = pinchDistance();
     if (pinchStartDist > 0) {
-      const scale = pinchStartDist / dist; // fingers apart = zoom in
+      const scale = pinchStartDist / dist;
       const newSpan = Math.min(MAX_SPAN_MS, Math.max(MIN_SPAN_MS, pinchStartSpan * scale));
       viewSpan = newSpan;
       targetSpan = newSpan;
@@ -367,11 +344,9 @@ function onPointerUp(e: PointerEvent) {
   (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
   activePointers.delete(e.pointerId);
 
-  // End pinch when fewer than 2 fingers remain
   if (isPinching) {
     if (activePointers.size < 2) {
       isPinching = false;
-      // If one finger remains, reset drag origin to that finger's position
       if (activePointers.size === 1) {
         const remaining = [...activePointers.values()][0];
         isDragging = true;
@@ -387,20 +362,17 @@ function onPointerUp(e: PointerEvent) {
 
   isDragging = false;
 
-  // Tap detection: short duration + minimal movement → show tooltip
   const elapsed = performance.now() - pointerDownTime;
   const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
   if (elapsed < TAP_MAX_DURATION_MS && dist < TAP_MAX_DISTANCE_PX) {
     lastPointerClientX = e.clientX;
     lastPointerClientY = e.clientY;
     pointerOverCanvas = true;
-    // Bypass the isDragging guard in updateHover since we just cleared it
     updateHover();
     pointerSamples = [];
     return;
   }
 
-  // Momentum from drag
   if (pointerSamples.length >= 2) {
     const first = pointerSamples[0];
     const last = pointerSamples[pointerSamples.length - 1];
@@ -516,7 +488,6 @@ function resumeFollow() {
   followEnabled = true;
 }
 
-// ── Resize ──────────────────────────────────────────────────────────
 function updateSize() {
   if (!containerEl) return;
   const rect = containerEl.getBoundingClientRect();
@@ -529,14 +500,12 @@ function updateSize() {
   }
 }
 
-// ── Animation loop ──────────────────────────────────────────────────
 function tick(timestamp: number) {
   const dt = lastFrameTime > 0 ? Math.min(timestamp - lastFrameTime, MAX_DT) : DEFAULT_DT;
   lastFrameTime = timestamp;
 
   const friction = Math.pow(PAN_FRICTION, dt / 16);
 
-  // Momentum panning
   if (
     !isDragging &&
     (Math.abs(panVelocity) > PAN_STOP_THRESHOLD || Math.abs(panVelocityY) > PAN_STOP_THRESHOLD_Y)
@@ -549,7 +518,6 @@ function tick(timestamp: number) {
     if (Math.abs(panVelocityY) < PAN_STOP_THRESHOLD_Y) panVelocityY = 0;
   }
 
-  // Smooth zoom
   if (isZoomAnimating && !isDragging) {
     const spanDiff = targetSpan - viewSpan;
     if (Math.abs(spanDiff) < ZOOM_SETTLE_THRESHOLD) {
@@ -563,7 +531,6 @@ function tick(timestamp: number) {
     }
   }
 
-  // Keyboard pan
   if (isPanAnimating && !isDragging) {
     const panDiff = targetCenter - viewCenter;
     const msPerPx = viewSpan / (width - PADDING.left - PADDING.right);
@@ -575,7 +542,6 @@ function tick(timestamp: number) {
     }
   }
 
-  // Y-axis pan
   if (isYPanAnimating && !isDragging) {
     const yDiff = targetYRatio - viewYRatio;
     if (Math.abs(yDiff) < YRATIO_SETTLE_THRESHOLD) {
@@ -586,13 +552,11 @@ function tick(timestamp: number) {
     }
   }
 
-  // Follow mode
   if (followEnabled && !isDragging) {
     const target = Date.now();
     viewCenter += (target - viewCenter) * (1 - Math.pow(1 - FOLLOW_EASE, dt / 16));
   }
 
-  // Step value animations & prune offscreen entries
   const result = stepAnimations(animMap, dt, animatedMaxY);
   animatedMaxY = result.maxY;
   pruneAnimMap(animMap, viewStart, viewEnd, viewSpan);
@@ -601,7 +565,6 @@ function tick(timestamp: number) {
   animationFrameId = requestAnimationFrame(tick);
 }
 
-// ── Animation sync ──────────────────────────────────────────────────
 $effect(() => {
   const slots = data;
   const subs = allSubjects;
@@ -609,12 +572,10 @@ $effect(() => {
   syncAnimTargets(animMap, slots, subs, enabled);
 });
 
-// Request data whenever the visible window changes.
 $effect(() => {
   store.requestRange(viewStart, viewEnd);
 });
 
-// ── Lifecycle ───────────────────────────────────────────────────────
 onMount(() => {
   updateSize();
 
@@ -639,39 +600,36 @@ onMount(() => {
 </script>
 
 <div class="absolute inset-0 select-none" bind:this={containerEl}>
-  <canvas
-    bind:this={canvasEl}
-    class="w-full h-full cursor-grab outline-none"
-    class:cursor-grabbing={isDragging}
-    style="display: block; touch-action: none;"
-    tabindex="0"
-    aria-label="Interactive enrollment timeline chart"
-    onpointerdown={(e) => { canvasEl?.focus(); onPointerDown(e); }}
-    onpointermove={onPointerMove}
-    onpointerup={onPointerUp}
-    onpointerleave={onPointerLeave}
-    onpointercancel={onPointerCancel}
-    onwheel={onWheel}
-    onkeydown={onKeyDown}
-    onkeyup={onKeyUp}
-  ></canvas>
+    <canvas
+        bind:this={canvasEl}
+        class="w-full h-full cursor-grab outline-none"
+        class:cursor-grabbing={isDragging}
+        style="display: block; touch-action: none;"
+        tabindex="0"
+        aria-label="Interactive enrollment timeline chart"
+        onpointerdown={(e) => {
+            canvasEl?.focus();
+            onPointerDown(e);
+        }}
+        onpointermove={onPointerMove}
+        onpointerup={onPointerUp}
+        onpointerleave={onPointerLeave}
+        onpointercancel={onPointerCancel}
+        onwheel={onWheel}
+        onkeydown={onKeyDown}
+        onkeyup={onKeyUp}
+    ></canvas>
 
-  <TimelineDrawer
-    bind:open={drawerOpen}
-    subjects={allSubjects}
-    {enabledSubjects}
-    {followEnabled}
-    onToggleSubject={toggleSubject}
-    onEnableAll={enableAll}
-    onDisableAll={disableAll}
-    onResumeFollow={resumeFollow}
-  />
+    <TimelineDrawer
+        bind:open={drawerOpen}
+        subjects={allSubjects}
+        {enabledSubjects}
+        {followEnabled}
+        onToggleSubject={toggleSubject}
+        onEnableAll={enableAll}
+        onDisableAll={disableAll}
+        onResumeFollow={resumeFollow}
+    />
 
-  <TimelineTooltip
-    visible={tooltipVisible}
-    x={tooltipX}
-    y={tooltipY}
-    slot={tooltipSlot}
-    {activeSubjects}
-  />
+    <TimelineTooltip visible={tooltipVisible} x={tooltipX} y={tooltipY} slot={tooltipSlot} {activeSubjects} />
 </div>

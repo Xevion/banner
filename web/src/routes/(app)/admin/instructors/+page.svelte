@@ -128,7 +128,7 @@ let totalPages = $derived(Math.max(1, Math.ceil(totalCount / perPage)));
 async function fetchInstructors() {
   loading = true;
   error = null;
-  recentlyChanged = new SvelteSet();
+  recentlyChanged.clear();
   clearHighlightTimeouts();
   try {
     const res = await client.getAdminInstructors({
@@ -258,12 +258,10 @@ function markChanged(id: number) {
   const existing = highlightTimeouts.get(id);
   if (existing) clearTimeout(existing);
 
-  recentlyChanged = new SvelteSet([...recentlyChanged, id]);
+  recentlyChanged.add(id);
 
   const timeout = setTimeout(() => {
-    const next = new SvelteSet(recentlyChanged);
-    next.delete(id);
-    recentlyChanged = next;
+    recentlyChanged.delete(id);
     highlightTimeouts.delete(id);
   }, 2000);
   highlightTimeouts.set(id, timeout);

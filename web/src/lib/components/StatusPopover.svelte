@@ -15,7 +15,7 @@ let {
 const hasActiveFilters = $derived(openOnly || waitCountMax !== null);
 </script>
 
-<FilterPopover label="Status" active={hasActiveFilters} width="w-64">
+<FilterPopover label="Status" active={hasActiveFilters} width="min-w-64">
   {#snippet content()}
     <div class="flex flex-col gap-1.5">
       <span class="text-xs font-medium text-muted-foreground select-none">Availability</span>

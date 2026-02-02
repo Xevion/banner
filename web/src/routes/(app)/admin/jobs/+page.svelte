@@ -64,11 +64,10 @@ onMount(() => {
   client
     .getReference("subject")
     .then((entries) => {
-      const map = new SvelteMap<string, string>();
+      subjectMap.clear();
       for (const entry of entries) {
-        map.set(entry.code, entry.description);
+        subjectMap.set(entry.code, entry.description);
       }
-      subjectMap = map;
     })
     .catch(() => {
       // Subject lookup is best-effort

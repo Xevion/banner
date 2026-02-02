@@ -27,6 +27,7 @@ type Props = Omit<
   max: number;
   label: string;
   formatValue?: (v: number) => string;
+  formatPip?: (v: number) => string;
   dual?: boolean;
   float?: boolean;
   hoverable?: boolean;
@@ -44,6 +45,7 @@ let {
   value = $bindable(null),
   label,
   formatValue = (v: number) => String(v),
+  formatPip,
   dual = true,
   float = true,
   hoverable = true,
@@ -52,7 +54,12 @@ let {
   ...libProps
 }: Props = $props();
 
+// Use formatPip for pips if provided, otherwise fall back to formatValue
+const pipFormatter = $derived(formatPip ?? formatValue);
+
+// svelte-ignore state_referenced_locally
 let internalValues = $state<number[]>([min, max]);
+// svelte-ignore state_referenced_locally
 let internalValue = $state(max);
 
 if (import.meta.env.DEV) {
@@ -121,7 +128,7 @@ function handleSingleChange(event: CustomEvent<{ value: number }>) {
         {hoverable}
         {springValues}
         range
-        formatter={formatValue}
+        formatter={pipFormatter}
         {...libProps}
         on:change={handleDualChange}
       />
@@ -133,7 +140,7 @@ function handleSingleChange(event: CustomEvent<{ value: number }>) {
         {float}
         {hoverable}
         {springValues}
-        formatter={formatValue}
+        formatter={pipFormatter}
         {...libProps}
         on:change={handleSingleChange}
       />
@@ -142,24 +149,35 @@ function handleSingleChange(event: CustomEvent<{ value: number }>) {
 </div>
 
 <style>
-/* Theme color mapping */
+/* Theme color mapping for slider */
 .range-slider-wrapper :global(.rangeSlider) {
-  --range-slider: var(--border);
-  --range-handle-inactive: var(--muted-foreground);
-  --range-handle: var(--muted-foreground);
-  --range-handle-focus: var(--foreground);
-  --range-handle-border: var(--muted-foreground);
-  --range-range-inactive: var(--muted-foreground);
-  --range-range: var(--foreground);
-  --range-range-hover: var(--foreground);
-  --range-range-press: var(--foreground);
-  --range-float-inactive: var(--card);
-  --range-float: var(--card);
-  --range-float-text: var(--card-foreground);
-  --range-range-limit: var(--muted);
+  --slider: var(--border);
+  --handle-inactive: var(--muted-foreground);
+  --handle: var(--muted-foreground);
+  --handle-focus: var(--muted-foreground);
+  --handle-border: var(--muted-foreground);
+  --range-inactive: var(--ring);
+  --range: var(--muted-foreground);
+  --range-hover: var(--muted-foreground);
+  --range-limit: var(--muted);
+  --float-inactive: var(--card);
+  --float: var(--card);
+  --float-text: var(--card-foreground);
   font-size: 0.75rem;
   margin: 0.5em;
   height: 0.375em;
+}
+
+/* Theme color mapping for pips */
+.range-slider-wrapper :global(.rangePips) {
+  --pip: var(--ring);
+  --pip-text: var(--ring);
+  --pip-active: var(--ring);
+  --pip-active-text: var(--ring);
+  --pip-hover: var(--muted-foreground);
+  --pip-hover-text: var(--muted-foreground);
+  --pip-in-range: var(--ring);
+  --pip-in-range-text: var(--ring);
 }
 
 /* Smaller handles, plain circles */
@@ -205,9 +223,8 @@ function handleSingleChange(event: CustomEvent<{ value: number }>) {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-/* Pip labels */
-.range-slider-wrapper :global(.rangeSlider .rangePip .pipVal) {
-  color: var(--muted-foreground);
+/* Pip label sizing */
+.range-slider-wrapper :global(.rangePips .pipVal) {
   font-size: 0.6em;
   font-weight: 400;
 }

@@ -9,10 +9,31 @@ use axum::{
 };
 
 use crate::data::course_types::{CreditHours, CrossList, Enrollment, RmpRating, SectionLink};
+use crate::data::reference_types::{
+    Attribute, Campus, FilterValue, InstructionalMethod, PartOfTerm,
+};
+
+/// Convert a raw Banner code to its typed filter string for a given reference category.
+fn code_to_filter_value(category: &str, code: &str, description: Option<&str>) -> String {
+    match category {
+        "instructional_method" => InstructionalMethod::from_code(code)
+            .map(|m| m.to_filter_str().to_owned())
+            .unwrap_or_else(|_| format!("raw:{code}")),
+        "campus" => Campus::from_code(code, description)
+            .to_filter_str()
+            .into_owned(),
+        "attribute" => Attribute::from_code(code, description)
+            .to_filter_str()
+            .into_owned(),
+        "part_of_term" => PartOfTerm::from_code(code, description)
+            .to_filter_str()
+            .into_owned(),
+        _ => format!("raw:{code}"),
+    }
+}
 use crate::web::admin_scraper;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::calendar;
-use crate::web::delivery::{DeliveryMode, classify_delivery_mode};
 use crate::web::error::{ApiError, ApiErrorCode, db_error};
 use crate::web::timeline;
 use crate::web::ws;
@@ -160,7 +181,6 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
                         Duration::from_millis(1000)
                     };
 
-                    // Format latency, status, and code
                     let (latency_str, status) = (
                         format!("{latency:.2?}"),
                         format!(
@@ -170,7 +190,6 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
                         ),
                     );
 
-                    // Log in warn if latency is above threshold, otherwise debug
                     if latency > latency_threshold {
                         warn!(latency = latency_str, status = status, "Response");
                     } else {
@@ -206,7 +225,6 @@ async fn fallback(request: Request) -> axum::response::Response {
 async fn handle_spa_fallback(uri: Uri, request_headers: HeaderMap) -> axum::response::Response {
     let path = uri.path();
 
-    // Try serving the exact asset (with encoding negotiation)
     if let Some(response) = try_serve_asset_with_encoding(path, &request_headers) {
         return response;
     }
@@ -217,7 +235,6 @@ async fn handle_spa_fallback(uri: Uri, request_headers: HeaderMap) -> axum::resp
         return (StatusCode::NOT_FOUND, "Asset not found").into_response();
     }
 
-    // SPA fallback: serve index.html with encoding negotiation
     match try_serve_asset_with_encoding("/index.html", &request_headers) {
         Some(response) => response,
         None => (
@@ -299,7 +316,6 @@ async fn metrics(
 ) -> Result<Json<MetricsResponse>, ApiError> {
     let limit = params.limit.clamp(1, 5000);
 
-    // Parse range shorthand, defaulting to 24h
     let range_str = params.range.as_deref().unwrap_or("24h");
     let duration = match range_str {
         "1h" => chrono::Duration::hours(1),
@@ -316,7 +332,6 @@ async fn metrics(
     };
     let since = chrono::Utc::now() - duration;
 
-    // Resolve course_id: explicit param takes priority, then term+crn lookup
     let course_id = if let Some(id) = params.course_id {
         Some(id)
     } else if let (Some(term), Some(crn)) = (params.term.as_deref(), params.crn.as_deref()) {
@@ -332,7 +347,6 @@ async fn metrics(
         None
     };
 
-    // Build query dynamically based on filters
     let metrics: Vec<(i32, i32, chrono::DateTime<chrono::Utc>, i32, i32, i32)> =
         if let Some(cid) = course_id {
             sqlx::query_as(
@@ -383,10 +397,6 @@ async fn metrics(
         timestamp: chrono::Utc::now().to_rfc3339(),
     }))
 }
-
-// ============================================================
-// Course search & detail API
-// ============================================================
 
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -445,9 +455,11 @@ pub struct SearchParams {
     #[serde(default, alias = "open_only")]
     pub open_only: bool,
     #[serde(default, alias = "instructional_method")]
-    pub instructional_method: Vec<String>,
+    #[ts(type = "Array<string>")]
+    pub instructional_method: Vec<FilterValue<InstructionalMethod>>,
     #[serde(default)]
-    pub campus: Vec<String>,
+    #[ts(type = "Array<string>")]
+    pub campus: Vec<FilterValue<Campus>>,
     #[serde(default = "default_limit")]
     pub limit: i32,
     #[serde(default)]
@@ -465,9 +477,11 @@ pub struct SearchParams {
     #[serde(skip_serializing_if = "Option::is_none", alias = "time_end")]
     pub time_end: Option<String>,
     #[serde(default, alias = "part_of_term")]
-    pub part_of_term: Vec<String>,
+    #[ts(type = "Array<string>")]
+    pub part_of_term: Vec<FilterValue<PartOfTerm>>,
     #[serde(default)]
-    pub attributes: Vec<String>,
+    #[ts(type = "Array<string>")]
+    pub attributes: Vec<FilterValue<Attribute>>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "credit_hour_min")]
     pub credit_hour_min: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "credit_hour_max")]
@@ -492,17 +506,19 @@ pub struct CourseResponse {
     title: String,
     term_code: String,
     sequence_number: Option<String>,
-    instructional_method: Option<String>,
-    campus: Option<String>,
+    instructional_method: Option<InstructionalMethod>,
+    /// Raw instructional method code, included when parsing fails (Tier 1 fallback).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instructional_method_code: Option<String>,
+    campus: Option<Campus>,
     enrollment: Enrollment,
     credit_hours: Option<CreditHours>,
     cross_list: Option<CrossList>,
     section_link: Option<SectionLink>,
-    part_of_term: Option<String>,
+    part_of_term: Option<PartOfTerm>,
     meeting_times: Vec<models::DbMeetingTime>,
-    attributes: Vec<String>,
+    attributes: Vec<Attribute>,
     is_async_online: bool,
-    delivery_mode: Option<DeliveryMode>,
     /// Best display-ready location: physical room ("MH 2.206"), "Online", or campus fallback.
     primary_location: Option<String>,
     /// Whether a physical (non-INT) building was found in meeting times.
@@ -539,6 +555,8 @@ pub struct SearchResponse {
 pub struct CodeDescription {
     code: String,
     description: String,
+    /// Typed filter string for query params (e.g. "Online.Async", "Main", "raw:XYZ").
+    filter_value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -576,7 +594,6 @@ pub struct SearchOptionsParams {
     pub term: Option<String>,
 }
 
-/// Minimum number of ratings needed to consider RMP data reliable.
 const RMP_CONFIDENCE_THRESHOLD: i32 = 7;
 
 /// Build a `CourseResponse` from a DB course with pre-fetched instructor details.
@@ -587,7 +604,6 @@ fn build_course_response(
     let instructors: Vec<InstructorResponse> = instructors
         .into_iter()
         .map(|i| {
-            // Filter out the (0.0, 0) sentinel — treat as unrated
             let has_rating =
                 i.avg_rating.is_some_and(|r| r != 0.0) || i.num_ratings.is_some_and(|n| n != 0);
             let rmp = if has_rating {
@@ -616,7 +632,6 @@ fn build_course_response(
         })
         .collect();
 
-    // Primary = first with is_primary flag, or fall back to first instructor
     let primary_instructor_id = instructors
         .iter()
         .find(|i| i.is_primary)
@@ -637,31 +652,53 @@ fn build_course_response(
             })
             .unwrap_or_default();
 
-    let attributes = serde_json::from_value(course.attributes.clone())
-        .map_err(|e| {
-            tracing::error!(
-                course_id = course.id,
-                crn = %course.crn,
-                term = %course.term_code,
-                error = %e,
-                "Failed to deserialize attributes JSONB"
-            );
-            e
-        })
-        .unwrap_or_default();
+    let attributes: Vec<Attribute> =
+        serde_json::from_value::<Vec<String>>(course.attributes.clone())
+            .map_err(|e| {
+                tracing::error!(
+                    course_id = course.id,
+                    crn = %course.crn,
+                    term = %course.term_code,
+                    error = %e,
+                    "Failed to deserialize attributes JSONB"
+                );
+                e
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .map(|code| Attribute::from_code(&code, None))
+            .collect();
+
+    let (instructional_method, instructional_method_code) = match &course.instructional_method {
+        Some(code) => match InstructionalMethod::from_code(code) {
+            Ok(method) => (Some(method), None),
+            Err(_) => {
+                tracing::warn!(
+                    crn = %course.crn,
+                    term = %course.term_code,
+                    code = %code,
+                    "Unknown instructional method code"
+                );
+                (None, Some(code.clone()))
+            }
+        },
+        None => (None, None),
+    };
+
+    let campus = course
+        .campus
+        .as_ref()
+        .map(|code| Campus::from_code(code, None));
+    let part_of_term = course
+        .part_of_term
+        .as_ref()
+        .map(|code| PartOfTerm::from_code(code, None));
 
     let is_async_online = meeting_times.first().is_some_and(|mt| {
         mt.location.as_ref().and_then(|loc| loc.building.as_deref()) == Some("INT")
             && mt.is_time_tba()
     });
 
-    let delivery_mode = classify_delivery_mode(
-        course.instructional_method.as_deref(),
-        course.campus.as_deref(),
-        &meeting_times,
-    );
-
-    // Compute primary_location: first non-INT building+room, else "Online" or campus fallback
     let physical_location = meeting_times
         .iter()
         .filter(|mt| mt.location.as_ref().and_then(|loc| loc.building.as_deref()) != Some("INT"))
@@ -675,9 +712,23 @@ fn build_course_response(
         });
     let has_physical_location = physical_location.is_some();
 
-    let primary_location = physical_location.or_else(|| match delivery_mode {
-        Some(DeliveryMode::Online | DeliveryMode::Internet) => Some("Online".to_string()),
-        _ => None,
+    let primary_location = physical_location.or_else(|| {
+        let is_hybrid = instructional_method
+            .as_ref()
+            .is_some_and(|m| matches!(m, InstructionalMethod::Hybrid(_)));
+        let is_online_method = instructional_method
+            .as_ref()
+            .is_some_and(|m| matches!(m, InstructionalMethod::Online(_)));
+        let is_virtual_campus = campus
+            .as_ref()
+            .is_some_and(|c| matches!(c, Campus::Internet | Campus::OnlinePrograms));
+        if is_hybrid {
+            Some("Hybrid".to_string())
+        } else if is_online_method || is_virtual_campus {
+            Some("Online".to_string())
+        } else {
+            None
+        }
     });
 
     let enrollment = Enrollment {
@@ -720,15 +771,15 @@ fn build_course_response(
         title: course.title.clone(),
         term_code: course.term_code.clone(),
         sequence_number: course.sequence_number.clone(),
-        instructional_method: course.instructional_method.clone(),
-        campus: course.campus.clone(),
+        instructional_method,
+        instructional_method_code,
+        campus,
         enrollment,
         credit_hours,
         cross_list,
         section_link,
-        part_of_term: course.part_of_term.clone(),
+        part_of_term,
         is_async_online,
-        delivery_mode,
         primary_location,
         has_physical_location,
         primary_instructor_id,
@@ -750,6 +801,28 @@ async fn search_courses(
     let limit = params.limit.clamp(1, 100);
     let offset = params.offset.max(0);
 
+    // Convert typed filter values to raw Banner codes for SQL
+    let method_codes: Vec<String> = params
+        .instructional_method
+        .iter()
+        .map(|fv| fv.to_code().into_owned())
+        .collect();
+    let campus_codes: Vec<String> = params
+        .campus
+        .iter()
+        .map(|fv| fv.to_code().into_owned())
+        .collect();
+    let pot_codes: Vec<String> = params
+        .part_of_term
+        .iter()
+        .map(|fv| fv.to_code().into_owned())
+        .collect();
+    let attr_codes: Vec<String> = params
+        .attributes
+        .iter()
+        .map(|fv| fv.to_code().into_owned())
+        .collect();
+
     let (courses, total_count) = data::courses::search_courses(
         &state.db_pool,
         &term_code,
@@ -762,15 +835,15 @@ async fn search_courses(
         params.course_number_low,
         params.course_number_high,
         params.open_only,
-        if params.instructional_method.is_empty() {
+        if method_codes.is_empty() {
             None
         } else {
-            Some(&params.instructional_method)
+            Some(&method_codes)
         },
-        if params.campus.is_empty() {
+        if campus_codes.is_empty() {
             None
         } else {
-            Some(&params.campus)
+            Some(&campus_codes)
         },
         params.wait_count_max,
         if params.days.is_empty() {
@@ -780,15 +853,15 @@ async fn search_courses(
         },
         params.time_start.as_deref(),
         params.time_end.as_deref(),
-        if params.part_of_term.is_empty() {
+        if pot_codes.is_empty() {
             None
         } else {
-            Some(&params.part_of_term)
+            Some(&pot_codes)
         },
-        if params.attributes.is_empty() {
+        if attr_codes.is_empty() {
             None
         } else {
-            Some(&params.attributes)
+            Some(&attr_codes)
         },
         params.credit_hour_min,
         params.credit_hour_max,
@@ -801,7 +874,6 @@ async fn search_courses(
     .await
     .map_err(|e| db_error("Course search", e))?;
 
-    // Batch-fetch all instructors in a single query instead of N+1
     let course_ids: Vec<i32> = courses.iter().map(|c| c.id).collect();
     let mut instructor_map =
         data::courses::get_instructors_for_courses(&state.db_pool, &course_ids)
@@ -876,7 +948,6 @@ async fn get_reference(
     let entries = cache.entries_for_category(&category);
 
     if entries.is_empty() {
-        // Fall back to DB query in case cache doesn't have this category
         drop(cache);
         let rows = data::reference::get_by_category(&category, &state.db_pool)
             .await
@@ -884,9 +955,14 @@ async fn get_reference(
 
         return Ok(Json(
             rows.into_iter()
-                .map(|r| CodeDescription {
-                    code: r.code,
-                    description: r.description,
+                .map(|r| {
+                    let filter_value =
+                        code_to_filter_value(&category, &r.code, Some(&r.description));
+                    CodeDescription {
+                        code: r.code,
+                        description: r.description,
+                        filter_value,
+                    }
                 })
                 .collect(),
         ));
@@ -895,9 +971,13 @@ async fn get_reference(
     Ok(Json(
         entries
             .into_iter()
-            .map(|(code, desc)| CodeDescription {
-                code: code.to_string(),
-                description: desc.to_string(),
+            .map(|(code, desc)| {
+                let filter_value = code_to_filter_value(&category, code, Some(desc));
+                CodeDescription {
+                    code: code.to_string(),
+                    description: desc.to_string(),
+                    filter_value,
+                }
             })
             .collect(),
     ))
@@ -911,7 +991,6 @@ async fn get_search_options(
     use crate::banner::models::terms::Term;
     use std::time::Instant;
 
-    // If no term specified, get the latest term
     let term_slug = if let Some(ref t) = params.term {
         t.clone()
     } else {
@@ -931,7 +1010,6 @@ async fn get_search_options(
     let term_code =
         Term::resolve_to_code(&term_slug).ok_or_else(|| ApiError::invalid_term(&term_slug))?;
 
-    // Check cache (10-minute TTL)
     if let Some(entry) = state.search_options_cache.get(&term_code) {
         let (cached_at, ref cached_value) = *entry;
         if cached_at.elapsed() < Duration::from_secs(600) {
@@ -943,7 +1021,6 @@ async fn get_search_options(
         }
     }
 
-    // Fetch all data in parallel
     let (term_codes, subject_rows, ranges) = tokio::try_join!(
         data::courses::get_available_terms(&state.db_pool),
         data::courses::get_subjects_by_enrollment(&state.db_pool, &term_code),
@@ -951,7 +1028,6 @@ async fn get_search_options(
     )
     .map_err(|e| db_error("Search options", e))?;
 
-    // Build terms
     let terms: Vec<TermResponse> = term_codes
         .into_iter()
         .filter_map(|code| {
@@ -964,21 +1040,30 @@ async fn get_search_options(
         })
         .collect();
 
-    // Build subjects
     let subjects: Vec<CodeDescription> = subject_rows
         .into_iter()
-        .map(|(code, description, _enrollment)| CodeDescription { code, description })
+        .map(|(code, description, _enrollment)| {
+            let filter_value = code.clone();
+            CodeDescription {
+                code,
+                description,
+                filter_value,
+            }
+        })
         .collect();
 
-    // Build reference data from in-memory cache
     let ref_cache = state.reference_cache.read().await;
     let build_ref = |category: &str| -> Vec<CodeDescription> {
         ref_cache
             .entries_for_category(category)
             .into_iter()
-            .map(|(code, desc)| CodeDescription {
-                code: code.to_string(),
-                description: desc.to_string(),
+            .map(|(code, desc)| {
+                let filter_value = code_to_filter_value(category, code, Some(desc));
+                CodeDescription {
+                    code: code.to_string(),
+                    description: desc.to_string(),
+                    filter_value,
+                }
             })
             .collect()
     };
@@ -997,7 +1082,6 @@ async fn get_search_options(
         ranges,
     };
 
-    // Cache the response
     let cached_value = serde_json::to_value(&response).unwrap_or_default();
     state
         .search_options_cache

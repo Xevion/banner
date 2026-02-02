@@ -20,20 +20,12 @@ use crate::state::AppState;
 use crate::web::error::ApiError;
 use crate::web::schedule_cache::weekday_bit;
 
-/// 15 minutes in seconds, matching the frontend `SLOT_INTERVAL_MS`.
 const SLOT_SECONDS: i64 = 15 * 60;
 const SLOT_MINUTES: u16 = 15;
 
-/// Maximum number of ranges in a single request.
 const MAX_RANGES: usize = 20;
-
-/// Maximum span of a single range (72 hours).
 const MAX_RANGE_SPAN: Duration = Duration::hours(72);
-
-/// Maximum total span across all ranges to prevent excessive queries.
-const MAX_TOTAL_SPAN: Duration = Duration::hours(168); // 1 week
-
-// ── Request / Response types ────────────────────────────────────────
+const MAX_TOTAL_SPAN: Duration = Duration::hours(168);
 
 #[derive(Debug, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -76,8 +68,6 @@ pub struct TimelineSlot {
     subjects: BTreeMap<String, i64>,
 }
 
-// ── Alignment helpers ───────────────────────────────────────────────
-
 /// Floor a timestamp to the nearest 15-minute boundary.
 fn align_floor(ts: DateTime<Utc>) -> DateTime<Utc> {
     let secs = ts.timestamp();
@@ -92,9 +82,6 @@ fn align_ceil(ts: DateTime<Utc>) -> DateTime<Utc> {
     DateTime::from_timestamp(aligned, 0).unwrap_or(ts)
 }
 
-// ── Range merging ───────────────────────────────────────────────────
-
-/// Aligned, validated range.
 #[derive(Debug, Clone, Copy)]
 struct AlignedRange {
     start: DateTime<Utc>,
@@ -132,8 +119,6 @@ fn generate_slots(merged: &[AlignedRange]) -> BTreeSet<DateTime<Utc>> {
     slots
 }
 
-// ── Handler ─────────────────────────────────────────────────────────
-
 /// `POST /api/timeline`
 ///
 /// Accepts a JSON body with multiple time ranges. Returns per-subject
@@ -143,7 +128,6 @@ pub(crate) async fn timeline(
     State(state): State<AppState>,
     Json(body): Json<TimelineRequest>,
 ) -> Result<Json<TimelineResponse>, ApiError> {
-    // ── Validate ────────────────────────────────────────────────────
     if body.ranges.is_empty() {
         return Err(ApiError::bad_request("At least one range is required"));
     }
@@ -187,11 +171,9 @@ pub(crate) async fn timeline(
         )));
     }
 
-    // ── Get cached schedule data (ISR: stale-while-revalidate) ───────
     state.schedule_cache.ensure_fresh();
     let snapshot = state.schedule_cache.snapshot();
 
-    // ── Build per-slot enrollment by filtering on meeting times ──────
     let slot_times = generate_slots(&merged);
     let mut all_subjects: BTreeSet<String> = BTreeSet::new();
 

@@ -1,8 +1,9 @@
 import type {
+  Campus,
   CourseResponse,
   DayOfWeek,
   DbMeetingTime,
-  DeliveryMode,
+  InstructionalMethod,
   InstructorResponse,
 } from "$lib/api";
 
@@ -233,20 +234,37 @@ export function formatMeetingTimesTooltip(meetingTimes: DbMeetingTime[]): string
   return meetingTimes.map(formatMeetingTimeTooltip).join("\n\n");
 }
 
-/** Border accent color for each delivery mode type. */
-export function concernAccentColor(concern: DeliveryMode | null): string | null {
-  switch (concern) {
-    case "online":
-      return "#3b82f6"; // blue-500
-    case "internet":
-      return "#06b6d4"; // cyan-500
-    case "hybrid":
-      return "#a855f7"; // purple-500
-    case "off-campus":
-      return "#f59e0b"; // amber-500
-    default:
-      return null;
+/** Border accent color based on instructional method and campus. */
+export function concernAccentColor(
+  method: InstructionalMethod | null,
+  campus: Campus | null
+): string | null {
+  // Online variants get blue accents
+  if (method?.type === "Online") {
+    return "#3b82f6"; // blue-500
   }
+
+  // Hybrid variants get purple accents
+  if (method?.type === "Hybrid") {
+    return "#a855f7"; // purple-500
+  }
+
+  // OnlinePrograms campus gets cyan accent (restricted access)
+  if (campus?.type === "OnlinePrograms") {
+    return "#06b6d4"; // cyan-500
+  }
+
+  // Off-campus locations get amber accent
+  if (
+    campus?.type === "Downtown" ||
+    campus?.type === "Southwest" ||
+    campus?.type === "Laredo" ||
+    campus?.type === "Unknown"
+  ) {
+    return "#f59e0b"; // amber-500
+  }
+
+  return null;
 }
 
 /** Tooltip text for the location column: long-form location + delivery note */
@@ -260,12 +278,32 @@ export function formatLocationTooltip(course: CourseResponse): string | null {
 
   const locationLine = parts.length > 0 ? parts.join(", ") : null;
 
-  const c = course.deliveryMode;
+  // Build delivery note from instructional method
   let deliveryNote: string | null = null;
-  if (c === "online") deliveryNote = "Online";
-  else if (c === "internet") deliveryNote = "Internet";
-  else if (c === "hybrid") deliveryNote = "Hybrid";
-  else if (c === "off-campus") deliveryNote = "Off-campus";
+  const method = course.instructionalMethod;
+  if (method) {
+    switch (method.type) {
+      case "Online":
+        deliveryNote =
+          method.variant === "Async"
+            ? "Online (Async)"
+            : method.variant === "Sync"
+              ? "Online (Sync)"
+              : "Online";
+        break;
+      case "Hybrid":
+        deliveryNote = "Hybrid";
+        break;
+      case "Independent":
+        deliveryNote = "Independent Study";
+        break;
+    }
+  }
+
+  // Add campus restriction note
+  if (course.campus?.type === "OnlinePrograms") {
+    deliveryNote = deliveryNote ? `${deliveryNote} — Online Programs only` : "Online Programs only";
+  }
 
   if (locationLine && deliveryNote) return `${locationLine}\n${deliveryNote}`;
   if (locationLine) return locationLine;

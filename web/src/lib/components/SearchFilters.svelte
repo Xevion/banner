@@ -1,7 +1,8 @@
 <script lang="ts">
 import type { CodeDescription, Subject, Term } from "$lib/api";
 import { SlidersHorizontal } from "@lucide/svelte";
-import AttributesPopover from "./AttributesPopover.svelte";
+import CatalogPopover from "./CatalogPopover.svelte";
+import FormatPopover from "./FormatPopover.svelte";
 import MobileFilterSheet from "./MobileFilterSheet.svelte";
 import MorePopover from "./MorePopover.svelte";
 import SchedulePopover from "./SchedulePopover.svelte";
@@ -141,13 +142,18 @@ let activeFilterCount = $derived(
 <!-- Desktop row 2: Category filter popovers -->
 <div class="hidden md:flex flex-wrap gap-2 items-center">
   <StatusPopover bind:openOnly bind:waitCountMax waitCountMaxRange={ranges.waitCount.max} />
-  <SchedulePopover bind:days bind:timeStart bind:timeEnd />
-  <AttributesPopover
-    bind:instructionalMethod
-    bind:campus
+  <FormatPopover bind:instructionalMethod />
+  <SchedulePopover
+    bind:days
+    bind:timeStart
+    bind:timeEnd
     bind:partOfTerm
+    referenceData={{ partsOfTerm: referenceData.partsOfTerm }}
+  />
+  <CatalogPopover
+    bind:campus
     bind:attributes
-    {referenceData}
+    referenceData={{ attributes: referenceData.attributes }}
   />
   <MorePopover
     bind:creditHourMin

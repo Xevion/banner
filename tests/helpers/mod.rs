@@ -1,6 +1,8 @@
-use banner::banner::models::meetings::{MeetingTime, MeetingTimeResponse};
-use banner::banner::models::Term;
+#![allow(dead_code)]
+
 use banner::banner::Course;
+use banner::banner::models::Term;
+use banner::banner::models::meetings::{MeetingTime, MeetingTimeResponse};
 use banner::data::models::{ScrapePriority, TargetType};
 use chrono::Utc;
 use sqlx::PgPool;
@@ -116,7 +118,16 @@ impl MeetingTimeBuilder {
     }
 
     /// Set which days of the week this meeting occurs on.
-    pub fn days(mut self, mon: bool, tue: bool, wed: bool, thu: bool, fri: bool, sat: bool, sun: bool) -> Self {
+    pub fn days(
+        mut self,
+        mon: bool,
+        tue: bool,
+        wed: bool,
+        thu: bool,
+        fri: bool,
+        sat: bool,
+        sun: bool,
+    ) -> Self {
         self.monday = mon;
         self.tuesday = tue;
         self.wednesday = wed;

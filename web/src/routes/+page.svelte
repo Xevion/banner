@@ -1,7 +1,6 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
 import {
-  type CodeDescription,
   type SearchOptionsResponse,
   type SearchResponse,
   type SortColumn,
@@ -23,6 +22,11 @@ import { DropdownMenu } from "bits-ui";
 import { SvelteSet, SvelteURLSearchParams } from "svelte/reactivity";
 import { tick, untrack } from "svelte";
 import { type ScrollMetrics, maskGradient as computeMaskGradient } from "$lib/scroll-fade";
+import {
+  getCampusFilterLabel,
+  getAttributeFilterLabel,
+  getPartOfTermFilterLabel,
+} from "$lib/labels";
 import { fly } from "svelte/transition";
 
 interface PageLoadData {
@@ -82,6 +86,7 @@ let instructor = $state(initialParams.get("instructor") ?? "");
 let courseNumberMin = $state<number | null>(parseNumParam("course_number_low"));
 let courseNumberMax = $state<number | null>(parseNumParam("course_number_high"));
 
+// svelte-ignore state_referenced_locally
 let searchOptions = $state<SearchOptionsResponse | null>(data.searchOptions);
 
 // Derived from search options
@@ -118,7 +123,7 @@ $effect(() => {
 
 const ranges = $derived(
   searchOptions?.ranges ?? {
-    courseNumberMin: 1000,
+    courseNumberMin: 0,
     courseNumberMax: 9000,
     creditHourMin: 0,
     creditHourMax: 8,
@@ -490,7 +495,9 @@ async function performSearch() {
     if (tableEl && "startViewTransition" in tableEl) {
       const startViewTransition = (
         tableEl as unknown as {
-          startViewTransition: (cb: () => Promise<void>) => { updateCallbackDone: Promise<void> };
+          startViewTransition: (cb: () => Promise<void>) => {
+            updateCallbackDone: Promise<void>;
+          };
         }
       ).startViewTransition;
       const transition = startViewTransition(async () => {
@@ -601,12 +608,69 @@ function formatTimeChip(start: string | null, end: string | null): string {
   return "";
 }
 
-function formatMultiChip(codes: string[], refItems: CodeDescription[]): string {
-  const lookup = new Map(refItems.map((r) => [r.code, r.description]));
-  const first = lookup.get(codes[0]) ?? codes[0];
+function formatMultiChip(codes: string[], labelFn: (filterValue: string) => string): string {
+  const first = labelFn(codes[0]);
   if (codes.length === 1) return first;
   return `${first} + ${codes.length - 1} more`;
 }
+
+// Group instructional methods by type for separate chips
+interface FormatChipGroup {
+  type: "InPerson" | "Online" | "Hybrid" | "Independent";
+  codes: string[];
+  label: string;
+}
+
+const VARIANT_LABELS: Record<string, string> = {
+  "Online.Async": "Async",
+  "Online.Sync": "Sync",
+  "Online.Mixed": "Mix",
+  "Hybrid.Half": "Half",
+  "Hybrid.OneThird": "One Third",
+  "Hybrid.TwoThirds": "Two Thirds",
+};
+
+function groupInstructionalMethods(methods: string[]): FormatChipGroup[] {
+  const groups: FormatChipGroup[] = [];
+
+  // Check for simple types
+  if (methods.includes("InPerson")) {
+    groups.push({ type: "InPerson", codes: ["InPerson"], label: "In Person" });
+  }
+  if (methods.includes("Independent")) {
+    groups.push({ type: "Independent", codes: ["Independent"], label: "Independent" });
+  }
+
+  // Check for Online variants
+  const onlineCodes = methods.filter((m) => m.startsWith("Online."));
+  if (onlineCodes.length > 0) {
+    const variantLabels = onlineCodes.map((c) => VARIANT_LABELS[c] || c);
+    groups.push({
+      type: "Online",
+      codes: onlineCodes,
+      label: `Online: ${variantLabels.join(", ")}`,
+    });
+  }
+
+  // Check for Hybrid variants
+  const hybridCodes = methods.filter((m) => m.startsWith("Hybrid."));
+  if (hybridCodes.length > 0) {
+    const variantLabels = hybridCodes.map((c) => VARIANT_LABELS[c] || c);
+    groups.push({
+      type: "Hybrid",
+      codes: hybridCodes,
+      label: `Hybrid: ${variantLabels.join(", ")}`,
+    });
+  }
+
+  return groups;
+}
+
+function removeFormatGroup(group: FormatChipGroup) {
+  instructionalMethod = instructionalMethod.filter((m) => !group.codes.includes(m));
+}
+
+let formatChipGroups = $derived(groupInstructionalMethods(instructionalMethod));
 
 let activeFilterCount = $derived(
   (selectedSubjects.length > 0 ? 1 : 0) +
@@ -694,28 +758,16 @@ $effect(() => {
                 style:-webkit-mask-image={maskGradient}
             >
                 {#if selectedSubjects.length > 0}
-                    <SegmentedChip
-                        segments={selectedSubjects}
-                        onRemoveSegment={removeSubject}
-                    />
+                    <SegmentedChip segments={selectedSubjects} onRemoveSegment={removeSubject} />
                 {/if}
                 {#if openOnly}
-                    <FilterChip
-                        label="Open only"
-                        onRemove={() => (openOnly = false)}
-                    />
+                    <FilterChip label="Open only" onRemove={() => (openOnly = false)} />
                 {/if}
                 {#if waitCountMax !== null}
-                    <FilterChip
-                        label="Waitlist ≤ {waitCountMax}"
-                        onRemove={() => (waitCountMax = null)}
-                    />
+                    <FilterChip label="Waitlist ≤ {waitCountMax}" onRemove={() => (waitCountMax = null)} />
                 {/if}
                 {#if days.length > 0}
-                    <FilterChip
-                        label={formatDaysChip(days)}
-                        onRemove={() => (days = [])}
-                    />
+                    <FilterChip label={formatDaysChip(days)} onRemove={() => (days = [])} />
                 {/if}
                 {#if timeStart !== null || timeEnd !== null}
                     <FilterChip
@@ -726,36 +778,24 @@ $effect(() => {
                         }}
                     />
                 {/if}
-                {#if instructionalMethod.length > 0}
-                    <FilterChip
-                        label={formatMultiChip(
-                            instructionalMethod,
-                            referenceData.instructionalMethods,
-                        )}
-                        onRemove={() => (instructionalMethod = [])}
-                    />
-                {/if}
+                {#each formatChipGroups as group (group.type)}
+                    <FilterChip label={group.label} onRemove={() => removeFormatGroup(group)} />
+                {/each}
                 {#if campus.length > 0}
                     <FilterChip
-                        label={formatMultiChip(campus, referenceData.campuses)}
+                        label={formatMultiChip(campus, getCampusFilterLabel)}
                         onRemove={() => (campus = [])}
                     />
                 {/if}
                 {#if partOfTerm.length > 0}
                     <FilterChip
-                        label={formatMultiChip(
-                            partOfTerm,
-                            referenceData.partsOfTerm,
-                        )}
+                        label={formatMultiChip(partOfTerm, getPartOfTermFilterLabel)}
                         onRemove={() => (partOfTerm = [])}
                     />
                 {/if}
                 {#if attributes.length > 0}
                     <FilterChip
-                        label={formatMultiChip(
-                            attributes,
-                            referenceData.attributes,
-                        )}
+                        label={formatMultiChip(attributes, getAttributeFilterLabel)}
                         onRemove={() => (attributes = [])}
                     />
                 {/if}
@@ -773,15 +813,11 @@ $effect(() => {
                     />
                 {/if}
                 {#if instructor !== ""}
-                    <FilterChip
-                        label="Instructor: {instructor}"
-                        onRemove={() => (instructor = "")}
-                    />
+                    <FilterChip label="Instructor: {instructor}" onRemove={() => (instructor = "")} />
                 {/if}
                 {#if courseNumberMin !== null || courseNumberMax !== null}
                     <FilterChip
-                        label={courseNumberMin !== null &&
-                        courseNumberMax !== null
+                        label={courseNumberMin !== null && courseNumberMax !== null
                             ? `Course ${courseNumberMin}–${courseNumberMax}`
                             : courseNumberMin !== null
                               ? `Course ≥ ${courseNumberMin}`
@@ -814,82 +850,72 @@ $effect(() => {
                         <Columns3 class="size-3.5" />
                         View
                     </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                    <DropdownMenu.Content
-                        class="z-50 min-w-40 rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
-                        align="end"
-                        sideOffset={4}
-                        forceMount
-                    >
-                        {#snippet child({ wrapperProps, props, open })}
-                            {#if open}
-                                <div {...wrapperProps}>
-                                    <div
-                                        {...props}
-                                        transition:fly={{
-                                            duration: 150,
-                                            y: -10,
-                                        }}
-                                    >
-                                        <DropdownMenu.Group>
-                                            <DropdownMenu.GroupHeading
-                                                class="px-2 py-1.5 text-xs font-medium text-muted-foreground select-none"
-                                            >
-                                                Toggle columns
-                                            </DropdownMenu.GroupHeading>
-                                            {#each columnDefs as col (col.id)}
-                                                <DropdownMenu.CheckboxItem
-                                                    checked={columnVisibility[
-                                                        col.id
-                                                    ] !== false}
-                                                    closeOnSelect={false}
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) => {
-                                                        userToggledColumns.add(col.id);
-                                                        columnVisibility = {
-                                                            ...columnVisibility,
-                                                            [col.id]: checked,
-                                                        };
-                                                    }}
-                                                    class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    <DropdownMenu.Portal>
+                        <DropdownMenu.Content
+                            class="z-50 min-w-40 rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg"
+                            align="end"
+                            sideOffset={4}
+                            forceMount
+                        >
+                            {#snippet child({ wrapperProps, props, open })}
+                                {#if open}
+                                    <div {...wrapperProps}>
+                                        <div
+                                            {...props}
+                                            transition:fly={{
+                                                duration: 150,
+                                                y: -10,
+                                            }}
+                                        >
+                                            <DropdownMenu.Group>
+                                                <DropdownMenu.GroupHeading
+                                                    class="px-2 py-1.5 text-xs font-medium text-muted-foreground select-none"
                                                 >
-                                                    {#snippet children({
-                                                        checked,
-                                                    })}
-                                                        <span
-                                                            class="flex size-4 items-center justify-center rounded-sm border border-border"
-                                                        >
-                                                            {#if checked}
-                                                                <Check
-                                                                    class="size-3"
-                                                                />
-                                                            {/if}
-                                                        </span>
-                                                        {col.label}
-                                                    {/snippet}
-                                                </DropdownMenu.CheckboxItem>
-                                            {/each}
-                                        </DropdownMenu.Group>
-                                        {#if hasCustomVisibility}
-                                            <DropdownMenu.Separator
-                                                class="mx-1 my-1 h-px bg-border"
-                                            />
-                                            <DropdownMenu.Item
-                                                class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                                                onSelect={resetColumnVisibility}
-                                            >
-                                                <RotateCcw class="size-3.5" />
-                                                Reset to default
-                                            </DropdownMenu.Item>
-                                        {/if}
+                                                    Toggle columns
+                                                </DropdownMenu.GroupHeading>
+                                                {#each columnDefs as col (col.id)}
+                                                    <DropdownMenu.CheckboxItem
+                                                        checked={columnVisibility[col.id] !== false}
+                                                        closeOnSelect={false}
+                                                        onCheckedChange={(checked) => {
+                                                            userToggledColumns.add(col.id);
+                                                            columnVisibility = {
+                                                                ...columnVisibility,
+                                                                [col.id]: checked,
+                                                            };
+                                                        }}
+                                                        class="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                                                    >
+                                                        {#snippet children({ checked })}
+                                                            <span
+                                                                class="flex size-4 items-center justify-center rounded-sm border border-border"
+                                                            >
+                                                                {#if checked}
+                                                                    <Check class="size-3" />
+                                                                {/if}
+                                                            </span>
+                                                            {col.label}
+                                                        {/snippet}
+                                                    </DropdownMenu.CheckboxItem>
+                                                {/each}
+                                            </DropdownMenu.Group>
+                                            {#if hasCustomVisibility}
+                                                <DropdownMenu.Separator class="mx-1 my-1 h-px bg-border" />
+                                                <DropdownMenu.Item
+                                                    class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer select-none outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                                                    onSelect={resetColumnVisibility}
+                                                >
+                                                    <RotateCcw class="size-3.5" />
+                                                    Reset to default
+                                                </DropdownMenu.Item>
+                                            {/if}
+                                        </div>
                                     </div>
-                                </div>
-                            {/if}
-                        {/snippet}
-                    </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-            </DropdownMenu.Root>
+                                {/if}
+                            {/snippet}
+                        </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                </DropdownMenu.Root>
             </div>
         </div>
 

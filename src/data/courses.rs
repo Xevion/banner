@@ -370,14 +370,12 @@ pub async fn get_filter_ranges(db_pool: &PgPool, term_code: &str) -> Result<Filt
     .fetch_one(db_pool)
     .await?;
 
-    let cn_min = row.0.unwrap_or(1000);
     let cn_max = row.1.unwrap_or(9000);
     let ch_min = row.2.unwrap_or(0);
     let ch_max = row.3.unwrap_or(8);
     let wc_max_raw = row.4.unwrap_or(0);
 
     // Round course number to hundreds: floor min, ceil max
-    let cn_min_rounded = (cn_min / 100) * 100;
     let cn_max_rounded = ((cn_max + 99) / 100) * 100;
 
     // Waitlist ceiling: (max / 10 + 1) * 10
@@ -388,7 +386,7 @@ pub async fn get_filter_ranges(db_pool: &PgPool, term_code: &str) -> Result<Filt
     };
 
     Ok(FilterRanges {
-        course_number_min: cn_min_rounded,
+        course_number_min: 0,
         course_number_max: cn_max_rounded,
         credit_hour_min: ch_min,
         credit_hour_max: ch_max,

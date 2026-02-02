@@ -14,10 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::watch;
 use tracing::{debug, error, info};
 
-/// How often the cache is considered fresh (1 hour).
 const REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60 * 60);
-
-// ── Compact schedule representation ─────────────────────────────────
 
 /// A single meeting time block, pre-parsed for fast filtering.
 #[derive(Debug, Clone)]
@@ -48,8 +45,6 @@ pub(crate) struct ScheduleSnapshot {
     pub(crate) courses: Vec<CachedCourse>,
     refreshed_at: std::time::Instant,
 }
-
-// ── Cache handle ────────────────────────────────────────────────────
 
 /// Shared schedule cache. Clone-cheap (all `Arc`-wrapped internals).
 #[derive(Clone)]
@@ -92,7 +87,6 @@ impl ScheduleCache {
         if snap.refreshed_at.elapsed() < REFRESH_INTERVAL {
             return;
         }
-        // Singleflight: only one refresh at a time.
         if self
             .refreshing
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -127,9 +121,6 @@ impl ScheduleCache {
     }
 }
 
-// ── Database loading ────────────────────────────────────────────────
-
-/// Row returned from the lightweight schedule query.
 #[derive(sqlx::FromRow)]
 struct ScheduleRow {
     subject: String,
@@ -169,8 +160,6 @@ async fn load_snapshot(pool: &PgPool) -> anyhow::Result<ScheduleSnapshot> {
         refreshed_at: std::time::Instant::now(),
     })
 }
-
-// ── Meeting time parsing ────────────────────────────────────────────
 
 /// Parse the JSONB `meeting_times` array into compact `ParsedSchedule` values.
 fn parse_meeting_times(value: &Value) -> Vec<ParsedSchedule> {
@@ -244,8 +233,6 @@ fn parse_date(s: &str) -> Option<NaiveDate> {
         .or_else(|_| NaiveDate::parse_from_str(s, "%Y-%m-%d"))
         .ok()
 }
-
-// ── Slot matching ───────────────────────────────────────────────────
 
 /// Day-of-week as our bitmask index (Monday = 0 .. Sunday = 6).
 /// Chrono's `weekday().num_days_from_monday()` already gives 0=Mon..6=Sun.

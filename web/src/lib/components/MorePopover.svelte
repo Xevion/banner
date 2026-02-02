@@ -25,6 +25,12 @@ const hasActiveFilters = $derived(
     courseNumberMin !== null ||
     courseNumberMax !== null
 );
+
+// Format course number pips as "0", "1k", "2k", etc.
+function formatCourseNumberPip(v: number): string {
+  if (v === 0) return "0";
+  return `${v / 1000}k`;
+}
 </script>
 
 <FilterPopover label="More" active={hasActiveFilters}>
@@ -66,8 +72,10 @@ const hasActiveFilters = $derived(
       bind:valueLow={courseNumberMin}
       bind:valueHigh={courseNumberMax}
       label="Course number"
+      formatPip={formatCourseNumberPip}
       pips
       pipstep={10}
+      all="label"
     />
   {/snippet}
 </FilterPopover>

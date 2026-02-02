@@ -7,7 +7,7 @@ import { fly } from "svelte/transition";
 let {
   label,
   active = false,
-  width = "w-72",
+  width = "min-w-72",
   content,
 }: {
   label: string;
@@ -15,9 +15,14 @@ let {
   width?: string;
   content: Snippet;
 } = $props();
+
+let open = $state(false);
+
+// Show chevron when popover is open OR when filter is not active
+let showChevron = $derived(open || !active);
 </script>
 
-<Popover.Root>
+<Popover.Root bind:open>
   <Popover.Trigger
     aria-label="{label} filters"
     class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none
@@ -25,11 +30,19 @@ let {
       ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
       : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
   >
-    {#if active}
-      <span class="size-1.5 rounded-full bg-primary"></span>
-    {/if}
     {label}
-    <ChevronDown class="size-3" />
+    <div class="relative size-3 flex items-center justify-center">
+      <ChevronDown
+        class="size-3 absolute transition-all duration-150 {showChevron
+          ? 'opacity-100 scale-100'
+          : 'opacity-0 scale-75'} {open ? 'rotate-180' : ''}"
+      />
+      <span
+        class="size-1.5 rounded-full bg-primary absolute transition-all duration-150 {showChevron
+          ? 'opacity-0 scale-75'
+          : 'opacity-100 scale-100'}"
+      ></span>
+    </div>
   </Popover.Trigger>
   <Popover.Content
     class="z-50 rounded-md border border-border bg-card p-3 text-card-foreground shadow-lg {width}"

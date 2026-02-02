@@ -7,8 +7,12 @@ import {
   formatTime,
   toggleValue,
 } from "$lib/filters";
+import { InstructionalMethodValues as IM, AttributeValues as AV } from "$lib/filterValues";
+import { getPartOfTermFilterLabel, getAttributeFilterLabel } from "$lib/labels";
 import { ChevronDown } from "@lucide/svelte";
 import BottomSheet from "./BottomSheet.svelte";
+import CompoundFilterButton from "./CompoundFilterButton.svelte";
+import AvailabilityFilter from "./AvailabilityFilter.svelte";
 import RangeSlider from "./RangeSlider.svelte";
 
 type AttributeReferenceData = Record<
@@ -69,35 +73,91 @@ function toggleDay(day: string) {
   days = _toggleDay(days, day);
 }
 
-const attributeSections: {
-  label: string;
-  key: "instructionalMethod" | "campus" | "partOfTerm" | "attributes";
-  dataKey: "instructionalMethods" | "campuses" | "partsOfTerm" | "attributes";
-}[] = [
-  { label: "Instructional Method", key: "instructionalMethod", dataKey: "instructionalMethods" },
-  { label: "Campus", key: "campus", dataKey: "campuses" },
-  { label: "Part of Term", key: "partOfTerm", dataKey: "partsOfTerm" },
-  { label: "Course Attributes", key: "attributes", dataKey: "attributes" },
+// Instructional method compound button config (same as FormatPopover)
+const imButtons = [
+  { label: "In Person", codes: [IM.InPerson] },
+  {
+    label: "Online",
+    codes: [IM.Online.Async, IM.Online.Sync, IM.Online.Mixed],
+    variants: [
+      { code: IM.Online.Async, label: "Async" },
+      { code: IM.Online.Sync, label: "Sync" },
+    ],
+  },
+  {
+    label: "Hybrid",
+    codes: [IM.Hybrid.Half, IM.Hybrid.OneThird, IM.Hybrid.TwoThirds],
+    variants: [
+      { code: IM.Hybrid.Half, label: "Half" },
+      { code: IM.Hybrid.OneThird, label: "One Third" },
+      { code: IM.Hybrid.TwoThirds, label: "Two Thirds" },
+    ],
+  },
+  { label: "Independent", codes: [IM.Independent] },
 ];
 
-function getAttrSelected(
-  key: "instructionalMethod" | "campus" | "partOfTerm" | "attributes"
-): string[] {
-  if (key === "instructionalMethod") return instructionalMethod;
-  if (key === "campus") return campus;
-  if (key === "partOfTerm") return partOfTerm;
-  return attributes;
+// Attribute grouping (same as CatalogPopover)
+const CORE_CODES = new Set<string>([
+  AV.CoreCommunication,
+  AV.CoreMathematics,
+  AV.CoreLifePhysicalSciences,
+  AV.CoreLanguagePhilosophy,
+  AV.CoreCreativeArts,
+  AV.CoreAmericanHistory,
+  AV.CoreGovernment,
+  AV.CoreSocialBehavioral,
+  AV.CoreComponentArea,
+]);
+const LEVEL_CODES = new Set<string>([
+  AV.Developmental,
+  AV.LowerDivision,
+  AV.UpperDivision,
+  AV.Graduate,
+]);
+
+const coreAttributes = $derived(
+  referenceData.attributes.filter((a) => CORE_CODES.has(a.filterValue))
+);
+const levelAttributes = $derived(
+  referenceData.attributes.filter((a) => LEVEL_CODES.has(a.filterValue))
+);
+const specialAttributes = $derived(
+  referenceData.attributes.filter(
+    (a) => !CORE_CODES.has(a.filterValue) && !LEVEL_CODES.has(a.filterValue)
+  )
+);
+
+function toggleAttr(code: string) {
+  attributes = toggleValue(attributes, code);
 }
 
-function toggleAttr(
-  key: "instructionalMethod" | "campus" | "partOfTerm" | "attributes",
-  code: string
-) {
-  if (key === "instructionalMethod") instructionalMethod = toggleValue(instructionalMethod, code);
-  else if (key === "campus") campus = toggleValue(campus, code);
-  else if (key === "partOfTerm") partOfTerm = toggleValue(partOfTerm, code);
-  else attributes = toggleValue(attributes, code);
+// Format course number pips as "0", "1k", "2k", etc.
+function formatCourseNumberPip(v: number): string {
+  if (v === 0) return "0";
+  return `${v / 1000}k`;
 }
+
+// Active state for each filter section
+const statusActive = $derived(openOnly || waitCountMax !== null);
+const formatActive = $derived(instructionalMethod.length > 0);
+const scheduleActive = $derived(
+  days.length > 0 || timeStart !== null || timeEnd !== null || partOfTerm.length > 0
+);
+const catalogActive = $derived(campus.length > 0 || attributes.length > 0);
+const moreActive = $derived(
+  creditHourMin !== null ||
+    creditHourMax !== null ||
+    instructor !== "" ||
+    courseNumberMin !== null ||
+    courseNumberMax !== null
+);
+
+// Show chevron when section is expanded OR when filter is not active
+const showStatusChevron = $derived(expandedSection === "status" || !statusActive);
+const showFormatChevron = $derived(expandedSection === "format" || !formatActive);
+const showScheduleChevron = $derived(expandedSection === "schedule" || !scheduleActive);
+const showCatalogChevron = $derived(expandedSection === "catalog" || !catalogActive);
+const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
 </script>
 
 <BottomSheet bind:open>
@@ -107,17 +167,19 @@ function toggleAttr(
       onclick={() => toggleSection("status")}
       class="flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground"
     >
-      <span class="flex items-center gap-2">
-        Status
-        {#if openOnly || waitCountMax !== null}
-          <span class="size-1.5 rounded-full bg-primary"></span>
-        {/if}
-      </span>
-      <ChevronDown
-        class="size-4 text-muted-foreground transition-transform {expandedSection === 'status'
-          ? 'rotate-180'
-          : ''}"
-      />
+      <span>Status</span>
+      <div class="relative size-4 flex items-center justify-center">
+        <ChevronDown
+          class="size-4 text-muted-foreground absolute transition-all duration-150 {showStatusChevron
+            ? 'opacity-100 scale-100'
+            : 'opacity-0 scale-75'} {expandedSection === 'status' ? 'rotate-180' : ''}"
+        />
+        <span
+          class="size-1.5 rounded-full bg-primary absolute transition-all duration-150 {showStatusChevron
+            ? 'opacity-0 scale-75'
+            : 'opacity-100 scale-100'}"
+        ></span>
+      </div>
     </button>
     {#if expandedSection === "status"}
       <div class="px-4 pb-3 flex flex-col gap-3">
@@ -160,22 +222,57 @@ function toggleAttr(
     {/if}
     <div class="h-px bg-border mx-4"></div>
 
-    <!-- Schedule section -->
+    <!-- Format section (was part of Attributes) -->
+    <button
+      onclick={() => toggleSection("format")}
+      class="flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground"
+    >
+      <span>Format</span>
+      <div class="relative size-4 flex items-center justify-center">
+        <ChevronDown
+          class="size-4 text-muted-foreground absolute transition-all duration-150 {showFormatChevron
+            ? 'opacity-100 scale-100'
+            : 'opacity-0 scale-75'} {expandedSection === 'format' ? 'rotate-180' : ''}"
+        />
+        <span
+          class="size-1.5 rounded-full bg-primary absolute transition-all duration-150 {showFormatChevron
+            ? 'opacity-0 scale-75'
+            : 'opacity-100 scale-100'}"
+        ></span>
+      </div>
+    </button>
+    {#if expandedSection === "format"}
+      <div class="px-4 pb-3 flex flex-col gap-1.5">
+        {#each imButtons as btn (btn.label)}
+          <CompoundFilterButton
+            label={btn.label}
+            codes={btn.codes}
+            variants={btn.variants}
+            bind:selected={instructionalMethod}
+          />
+        {/each}
+      </div>
+    {/if}
+    <div class="h-px bg-border mx-4"></div>
+
+    <!-- Schedule section (now includes Part of Term) -->
     <button
       onclick={() => toggleSection("schedule")}
       class="flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground"
     >
-      <span class="flex items-center gap-2">
-        Schedule
-        {#if days.length > 0 || timeStart !== null || timeEnd !== null}
-          <span class="size-1.5 rounded-full bg-primary"></span>
-        {/if}
-      </span>
-      <ChevronDown
-        class="size-4 text-muted-foreground transition-transform {expandedSection === 'schedule'
-          ? 'rotate-180'
-          : ''}"
-      />
+      <span>Schedule</span>
+      <div class="relative size-4 flex items-center justify-center">
+        <ChevronDown
+          class="size-4 text-muted-foreground absolute transition-all duration-150 {showScheduleChevron
+            ? 'opacity-100 scale-100'
+            : 'opacity-0 scale-75'} {expandedSection === 'schedule' ? 'rotate-180' : ''}"
+        />
+        <span
+          class="size-1.5 rounded-full bg-primary absolute transition-all duration-150 {showScheduleChevron
+            ? 'opacity-0 scale-75'
+            : 'opacity-100 scale-100'}"
+        ></span>
+      </div>
     </button>
     {#if expandedSection === "schedule"}
       <div class="px-4 pb-3 flex flex-col gap-3">
@@ -231,54 +328,125 @@ function toggleAttr(
             />
           </div>
         </div>
-      </div>
-    {/if}
-    <div class="h-px bg-border mx-4"></div>
 
-    <!-- Attributes section -->
-    <button
-      onclick={() => toggleSection("attributes")}
-      class="flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground"
-    >
-      <span class="flex items-center gap-2">
-        Attributes
-        {#if instructionalMethod.length > 0 || campus.length > 0 || partOfTerm.length > 0 || attributes.length > 0}
-          <span class="size-1.5 rounded-full bg-primary"></span>
-        {/if}
-      </span>
-      <ChevronDown
-        class="size-4 text-muted-foreground transition-transform {expandedSection === 'attributes'
-          ? 'rotate-180'
-          : ''}"
-      />
-    </button>
-    {#if expandedSection === "attributes"}
-      <div class="px-4 pb-3 flex flex-col gap-3">
-        {#each attributeSections as { label, key, dataKey }, i (key)}
-          {#if i > 0}
-            <div class="h-px bg-border"></div>
-          {/if}
+        {#if referenceData.partsOfTerm.length > 0}
+          <div class="h-px bg-border"></div>
+
           <div class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-muted-foreground select-none">{label}</span>
+            <span class="text-xs font-medium text-muted-foreground select-none">Part of Term</span>
             <div class="flex flex-wrap gap-1">
-              {#each referenceData[dataKey] as item (item.code)}
-                {@const selected = getAttrSelected(key)}
+              {#each referenceData.partsOfTerm as item (item.filterValue)}
                 <button
                   type="button"
-                  aria-pressed={selected.includes(item.code)}
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
-                         {selected.includes(item.code)
+                  aria-pressed={partOfTerm.includes(item.filterValue)}
+                  class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
+                         {partOfTerm.includes(item.filterValue)
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                  onclick={() => toggleAttr(key, item.code)}
+                  onclick={() => (partOfTerm = toggleValue(partOfTerm, item.filterValue))}
                   title={item.description}
                 >
-                  {item.description}
+                  {getPartOfTermFilterLabel(item.filterValue)}
                 </button>
               {/each}
             </div>
           </div>
-        {/each}
+        {/if}
+      </div>
+    {/if}
+    <div class="h-px bg-border mx-4"></div>
+
+    <!-- Catalog section (Availability + Course Attributes) -->
+    <button
+      onclick={() => toggleSection("catalog")}
+      class="flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground"
+    >
+      <span>Catalog</span>
+      <div class="relative size-4 flex items-center justify-center">
+        <ChevronDown
+          class="size-4 text-muted-foreground absolute transition-all duration-150 {showCatalogChevron
+            ? 'opacity-100 scale-100'
+            : 'opacity-0 scale-75'} {expandedSection === 'catalog' ? 'rotate-180' : ''}"
+        />
+        <span
+          class="size-1.5 rounded-full bg-primary absolute transition-all duration-150 {showCatalogChevron
+            ? 'opacity-0 scale-75'
+            : 'opacity-100 scale-100'}"
+        ></span>
+      </div>
+    </button>
+    {#if expandedSection === "catalog"}
+      <div class="px-4 pb-3 flex flex-col gap-3">
+        <AvailabilityFilter bind:campus />
+
+        {#if levelAttributes.length > 0}
+          <div class="h-px bg-border"></div>
+          <div class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-muted-foreground select-none">Course Level</span>
+            <div class="flex flex-wrap gap-1">
+              {#each levelAttributes as item (item.filterValue)}
+                <button
+                  type="button"
+                  aria-pressed={attributes.includes(item.filterValue)}
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
+                         {attributes.includes(item.filterValue)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
+                  onclick={() => toggleAttr(item.filterValue)}
+                  title={item.description}
+                >
+                  {getAttributeFilterLabel(item.filterValue)}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if coreAttributes.length > 0}
+          <div class="h-px bg-border"></div>
+          <div class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-muted-foreground select-none">Core Curriculum</span>
+            <div class="flex flex-wrap gap-1">
+              {#each coreAttributes as item (item.filterValue)}
+                <button
+                  type="button"
+                  aria-pressed={attributes.includes(item.filterValue)}
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
+                         {attributes.includes(item.filterValue)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
+                  onclick={() => toggleAttr(item.filterValue)}
+                  title={item.description}
+                >
+                  {getAttributeFilterLabel(item.filterValue)}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if specialAttributes.length > 0}
+          <div class="h-px bg-border"></div>
+          <div class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium text-muted-foreground select-none">Designations</span>
+            <div class="flex flex-wrap gap-1">
+              {#each specialAttributes as item (item.filterValue)}
+                <button
+                  type="button"
+                  aria-pressed={attributes.includes(item.filterValue)}
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
+                         {attributes.includes(item.filterValue)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
+                  onclick={() => toggleAttr(item.filterValue)}
+                  title={item.description}
+                >
+                  {getAttributeFilterLabel(item.filterValue)}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {/if}
     <div class="h-px bg-border mx-4"></div>
@@ -288,17 +456,19 @@ function toggleAttr(
       onclick={() => toggleSection("more")}
       class="flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground"
     >
-      <span class="flex items-center gap-2">
-        More
-        {#if creditHourMin !== null || creditHourMax !== null || instructor !== "" || courseNumberMin !== null || courseNumberMax !== null}
-          <span class="size-1.5 rounded-full bg-primary"></span>
-        {/if}
-      </span>
-      <ChevronDown
-        class="size-4 text-muted-foreground transition-transform {expandedSection === 'more'
-          ? 'rotate-180'
-          : ''}"
-      />
+      <span>More</span>
+      <div class="relative size-4 flex items-center justify-center">
+        <ChevronDown
+          class="size-4 text-muted-foreground absolute transition-all duration-150 {showMoreChevron
+            ? 'opacity-100 scale-100'
+            : 'opacity-0 scale-75'} {expandedSection === 'more' ? 'rotate-180' : ''}"
+        />
+        <span
+          class="size-1.5 rounded-full bg-primary absolute transition-all duration-150 {showMoreChevron
+            ? 'opacity-0 scale-75'
+            : 'opacity-100 scale-100'}"
+        ></span>
+      </div>
     </button>
     {#if expandedSection === "more"}
       <div class="px-4 pb-3 flex flex-col gap-3">
@@ -342,8 +512,10 @@ function toggleAttr(
           bind:valueLow={courseNumberMin}
           bind:valueHigh={courseNumberMax}
           label="Course number"
+          formatPip={formatCourseNumberPip}
           pips
           pipstep={10}
+          all="label"
         />
       </div>
     {/if}
