@@ -1,13 +1,6 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
-import {
-  type SearchOptionsResponse,
-  type SearchResponse,
-  type SortColumn,
-  type SortDirection,
-  type Subject,
-  client,
-} from "$lib/api";
+import { type SearchOptionsResponse, type SearchResponse, type Subject, client } from "$lib/api";
 import { CourseTable } from "$lib/components/course-table";
 import { buildAttributeMap, setCourseDetailContext } from "$lib/components/course-detail/context";
 import FilterChip from "$lib/components/FilterChip.svelte";
@@ -19,7 +12,7 @@ import SegmentedChip from "$lib/components/SegmentedChip.svelte";
 import { Check, Columns3, RotateCcw } from "@lucide/svelte";
 import type { SortingState, VisibilityState } from "@tanstack/table-core";
 import { DropdownMenu } from "bits-ui";
-import { SvelteSet, SvelteURLSearchParams } from "svelte/reactivity";
+import { SvelteSet } from "svelte/reactivity";
 import { tick, untrack } from "svelte";
 import { type ScrollMetrics, maskGradient as computeMaskGradient } from "$lib/scroll-fade";
 import {
@@ -28,6 +21,10 @@ import {
   getPartOfTermFilterLabel,
 } from "$lib/labels";
 import { fly } from "svelte/transition";
+import {
+  SearchFilters as SearchFiltersStore,
+  setFiltersContext,
+} from "$lib/stores/search-filters.svelte";
 
 interface PageLoadData {
   searchOptions: SearchOptionsResponse | null;
@@ -49,14 +46,6 @@ const initialParams = untrack(() => new URLSearchParams(data.url.search));
 // The default term is the first one returned by the backend (most current)
 const defaultTermSlug = untrack(() => data.searchOptions?.terms[0]?.slug ?? "");
 
-// Helper to parse a URL param as a number or null
-function parseNumParam(key: string): number | null {
-  const v = initialParams.get(key);
-  if (v === null || v === "") return null;
-  const n = Number(v);
-  return Number.isNaN(n) ? null : n;
-}
-
 // Default to the first term when no URL param is present
 const urlTerm = initialParams.get("term");
 let selectedTerm = $state(
@@ -65,26 +54,17 @@ let selectedTerm = $state(
     return urlTerm && terms.some((t) => t.slug === urlTerm) ? urlTerm : defaultTermSlug;
   })
 );
-let selectedSubjects: string[] = $state(untrack(() => initialParams.getAll("subject")));
-let query = $state(initialParams.get("q") ?? "");
-let openOnly = $state(initialParams.get("open") === "true");
+
+// Initialize filters from URL params and provide via context
+const filters = new SearchFiltersStore();
+setFiltersContext(filters);
+untrack(() => {
+  const validSubjects = new Set(data.searchOptions?.subjects.map((s) => s.code));
+  filters.fromURLParams(initialParams, validSubjects);
+});
+
 let offset = $state(Number(initialParams.get("offset")) || 0);
 const limit = 25;
-
-// New filter state from URL
-let waitCountMax = $state<number | null>(parseNumParam("wait_count_max"));
-let days: string[] = $state(initialParams.getAll("days"));
-let timeStart = $state<string | null>(initialParams.get("time_start"));
-let timeEnd = $state<string | null>(initialParams.get("time_end"));
-let instructionalMethod: string[] = $state(initialParams.getAll("instructional_method"));
-let campus: string[] = $state(initialParams.getAll("campus"));
-let partOfTerm: string[] = $state(initialParams.getAll("part_of_term"));
-let attributes: string[] = $state(initialParams.getAll("attributes"));
-let creditHourMin = $state<number | null>(parseNumParam("credit_hour_min"));
-let creditHourMax = $state<number | null>(parseNumParam("credit_hour_max"));
-let instructor = $state(initialParams.get("instructor") ?? "");
-let courseNumberMin = $state<number | null>(parseNumParam("course_number_low"));
-let courseNumberMax = $state<number | null>(parseNumParam("course_number_high"));
 
 // svelte-ignore state_referenced_locally
 let searchOptions = $state<SearchOptionsResponse | null>(data.searchOptions);
@@ -131,15 +111,7 @@ const ranges = $derived(
   }
 );
 
-// Sorting state — maps TanStack column IDs to server sort params
-const SORT_COLUMN_MAP: Record<string, SortColumn> = {
-  course_code: "course_code",
-  title: "title",
-  instructor: "instructor",
-  time: "time",
-  seats: "seats",
-};
-
+// Sorting state
 let sorting: SortingState = $state(
   (() => {
     const sortBy = initialParams.get("sort_by");
@@ -173,10 +145,10 @@ $effect(() => {
       searchOptions = opts;
       // Validate selected subjects against new term's subjects
       const validCodes = new Set(opts.subjects.map((s) => s.code));
-      const filtered = selectedSubjects.filter((code) => validCodes.has(code));
-      if (filtered.length !== selectedSubjects.length) {
+      const filtered = filters.subject.filter((code) => validCodes.has(code));
+      if (filtered.length !== filters.subject.length) {
         validatingSubjects = true;
-        selectedSubjects = filtered;
+        filters.subject = filtered;
         validatingSubjects = false;
       }
     })
@@ -185,210 +157,39 @@ $effect(() => {
     });
 });
 
-// Centralized throttle configuration - maps trigger source to throttle delay (ms)
-const THROTTLE_MS = {
-  term: 0,
-  subjects: 100,
-  query: 300,
-  openOnly: 0,
-  offset: 0,
-  sorting: 0,
-  waitCountMax: 300,
-  days: 100,
-  timeStart: 300,
-  timeEnd: 300,
-  instructionalMethod: 100,
-  campus: 100,
-  partOfTerm: 100,
-  attributes: 100,
-  creditHourMin: 300,
-  creditHourMax: 300,
-  instructor: 300,
-  courseNumberMin: 300,
-  courseNumberMax: 300,
-} as const;
-
+// Search throttling
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 let lastSearchKey = "";
 let lastNavigationTime = 0;
 
-function buildSearchKey(): string {
-  return [
-    selectedTerm,
-    selectedSubjects.join(","),
-    query,
-    openOnly,
-    offset,
-    JSON.stringify(sorting),
-    waitCountMax,
-    days.join(","),
-    timeStart,
-    timeEnd,
-    instructionalMethod.join(","),
-    campus.join(","),
-    partOfTerm.join(","),
-    attributes.join(","),
-    creditHourMin,
-    creditHourMax,
-    instructor,
-    courseNumberMin,
-    courseNumberMax,
-  ].join("|");
-}
+// Unified search effect - watches all filter properties, term, offset, and sorting
+$effect(() => {
+  // Track dependencies
+  const term = selectedTerm;
+  const filterKey = filters.toSearchKey();
+  track(offset, sorting);
 
-function scheduleSearch(source: keyof typeof THROTTLE_MS) {
+  // Skip search if we're in subject validation
+  if (validatingSubjects) return;
+
+  // Build complete search key including pagination and sorting
+  const searchKey = [term, filterKey, offset, JSON.stringify(sorting)].join("|");
+
+  // Throttle based on what changed
+  const THROTTLE_MS = 300;
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    const key = buildSearchKey();
-    if (key === lastSearchKey) return;
+    if (searchKey === lastSearchKey) return;
     void performSearch();
-  }, THROTTLE_MS[source]);
-}
+  }, THROTTLE_MS);
 
-// Separate effects for each trigger source with appropriate throttling
-$effect(() => {
-  track(selectedTerm);
-  scheduleSearch("term");
   return () => clearTimeout(searchTimeout);
 });
 
-$effect(() => {
-  track(selectedSubjects);
-  if (!validatingSubjects) {
-    scheduleSearch("subjects");
-  }
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(query);
-  scheduleSearch("query");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(openOnly);
-  scheduleSearch("openOnly");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(offset);
-  scheduleSearch("offset");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(sorting);
-  scheduleSearch("sorting");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(waitCountMax);
-  scheduleSearch("waitCountMax");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(days);
-  scheduleSearch("days");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(timeStart);
-  scheduleSearch("timeStart");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(timeEnd);
-  scheduleSearch("timeEnd");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(instructionalMethod);
-  scheduleSearch("instructionalMethod");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(campus);
-  scheduleSearch("campus");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(partOfTerm);
-  scheduleSearch("partOfTerm");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(attributes);
-  scheduleSearch("attributes");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(creditHourMin);
-  scheduleSearch("creditHourMin");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(creditHourMax);
-  scheduleSearch("creditHourMax");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(instructor);
-  scheduleSearch("instructor");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(courseNumberMin);
-  scheduleSearch("courseNumberMin");
-  return () => clearTimeout(searchTimeout);
-});
-
-$effect(() => {
-  track(courseNumberMax);
-  scheduleSearch("courseNumberMax");
-  return () => clearTimeout(searchTimeout);
-});
-
-// Build a filter key that excludes offset/sorting — used to detect filter changes for offset reset
-function buildFilterKey(): string {
-  return [
-    selectedTerm,
-    selectedSubjects.join(","),
-    query,
-    openOnly,
-    waitCountMax,
-    days.join(","),
-    timeStart,
-    timeEnd,
-    instructionalMethod.join(","),
-    campus.join(","),
-    partOfTerm.join(","),
-    attributes.join(","),
-    creditHourMin,
-    creditHourMax,
-    instructor,
-    courseNumberMin,
-    courseNumberMax,
-  ].join("|");
-}
-
-// Reset offset when filters change (not offset itself)
+// Reset offset when filters change (not offset/sorting itself)
 let prevFilters = $state("");
 $effect(() => {
-  const key = buildFilterKey();
+  const key = filters.toFilterKey();
   if (prevFilters && key !== prevFilters) {
     offset = 0;
   }
@@ -397,38 +198,18 @@ $effect(() => {
 
 async function performSearch() {
   if (!selectedTerm) return;
-  const key = buildSearchKey();
+  const key = [selectedTerm, filters.toSearchKey(), offset, JSON.stringify(sorting)].join("|");
   lastSearchKey = key;
   loading = true;
   error = null;
 
-  const sortBy = sorting.length > 0 ? SORT_COLUMN_MAP[sorting[0].id] : undefined;
-  const sortDir: SortDirection | undefined =
-    sorting.length > 0 ? (sorting[0].desc ? "desc" : "asc") : undefined;
-
   // Build URL params for browser URL sync
-  const params = new SvelteURLSearchParams();
-  for (const s of selectedSubjects) {
-    params.append("subject", s);
-  }
-  if (query) params.set("q", query);
-  if (openOnly) params.set("open", "true");
+  const params = filters.toURLParams();
   if (offset > 0) params.set("offset", String(offset));
-  if (sortBy) params.set("sort_by", sortBy);
-  if (sortDir && sortBy) params.set("sort_dir", sortDir);
-  if (waitCountMax !== null) params.set("wait_count_max", String(waitCountMax));
-  for (const d of days) params.append("days", d);
-  if (timeStart) params.set("time_start", timeStart);
-  if (timeEnd) params.set("time_end", timeEnd);
-  for (const m of instructionalMethod) params.append("instructional_method", m);
-  for (const c of campus) params.append("campus", c);
-  for (const p of partOfTerm) params.append("part_of_term", p);
-  for (const a of attributes) params.append("attributes", a);
-  if (creditHourMin !== null) params.set("credit_hour_min", String(creditHourMin));
-  if (creditHourMax !== null) params.set("credit_hour_max", String(creditHourMax));
-  if (instructor) params.set("instructor", instructor);
-  if (courseNumberMin !== null) params.set("course_number_low", String(courseNumberMin));
-  if (courseNumberMax !== null) params.set("course_number_high", String(courseNumberMax));
+  if (sorting.length > 0) {
+    params.set("sort_by", sorting[0].id);
+    params.set("sort_dir", sorting[0].desc ? "desc" : "asc");
+  }
 
   // Include term in URL only when it differs from the default or other params are active
   const hasOtherParams = params.size > 0;
@@ -452,29 +233,8 @@ async function performSearch() {
 
   const t0 = performance.now();
   try {
-    const result = await client.searchCourses({
-      term: selectedTerm,
-      subject: selectedSubjects.length > 0 ? selectedSubjects : [],
-      q: query || undefined,
-      openOnly: openOnly || false,
-      limit,
-      offset,
-      sortBy,
-      sortDir,
-      waitCountMax: waitCountMax ?? undefined,
-      days: days.length > 0 ? days : undefined,
-      timeStart: timeStart ?? undefined,
-      timeEnd: timeEnd ?? undefined,
-      instructionalMethod: instructionalMethod.length > 0 ? instructionalMethod : undefined,
-      campus: campus.length > 0 ? campus : undefined,
-      partOfTerm: partOfTerm.length > 0 ? partOfTerm : undefined,
-      attributes: attributes.length > 0 ? attributes : undefined,
-      creditHourMin: creditHourMin ?? undefined,
-      creditHourMax: creditHourMax ?? undefined,
-      instructor: instructor || undefined,
-      courseNumberLow: courseNumberMin ?? undefined,
-      courseNumberHigh: courseNumberMax ?? undefined,
-    });
+    const apiParams = filters.toAPIParams(selectedTerm, limit, offset, sorting);
+    const result = await client.searchCourses(apiParams);
 
     const applyUpdate = () => {
       searchResult = result;
@@ -667,46 +427,13 @@ function groupInstructionalMethods(methods: string[]): FormatChipGroup[] {
 }
 
 function removeFormatGroup(group: FormatChipGroup) {
-  instructionalMethod = instructionalMethod.filter((m) => !group.codes.includes(m));
+  filters.instructionalMethod = filters.instructionalMethod.filter((m) => !group.codes.includes(m));
 }
 
-let formatChipGroups = $derived(groupInstructionalMethods(instructionalMethod));
-
-let activeFilterCount = $derived(
-  (selectedSubjects.length > 0 ? 1 : 0) +
-    (openOnly ? 1 : 0) +
-    (waitCountMax !== null ? 1 : 0) +
-    (days.length > 0 ? 1 : 0) +
-    (timeStart !== null || timeEnd !== null ? 1 : 0) +
-    (instructionalMethod.length > 0 ? 1 : 0) +
-    (campus.length > 0 ? 1 : 0) +
-    (partOfTerm.length > 0 ? 1 : 0) +
-    (attributes.length > 0 ? 1 : 0) +
-    (creditHourMin !== null || creditHourMax !== null ? 1 : 0) +
-    (instructor !== "" ? 1 : 0) +
-    (courseNumberMin !== null || courseNumberMax !== null ? 1 : 0)
-);
+let formatChipGroups = $derived(groupInstructionalMethods(filters.instructionalMethod));
 
 function removeSubject(code: string) {
-  selectedSubjects = selectedSubjects.filter((s) => s !== code);
-}
-
-function clearAllFilters() {
-  selectedSubjects = [];
-  openOnly = false;
-  waitCountMax = null;
-  days = [];
-  timeStart = null;
-  timeEnd = null;
-  instructionalMethod = [];
-  campus = [];
-  partOfTerm = [];
-  attributes = [];
-  creditHourMin = null;
-  creditHourMax = null;
-  instructor = "";
-  courseNumberMin = null;
-  courseNumberMax = null;
+  filters.subject = filters.subject.filter((s) => s !== code);
 }
 
 // Scroll-based fade mask for chips container
@@ -757,82 +484,82 @@ $effect(() => {
                 style:mask-image={maskGradient}
                 style:-webkit-mask-image={maskGradient}
             >
-                {#if selectedSubjects.length > 0}
-                    <SegmentedChip segments={selectedSubjects} onRemoveSegment={removeSubject} />
+                {#if filters.subject.length > 0}
+                    <SegmentedChip segments={filters.subject} onRemoveSegment={removeSubject} />
                 {/if}
-                {#if openOnly}
-                    <FilterChip label="Open only" onRemove={() => (openOnly = false)} />
+                {#if filters.openOnly}
+                    <FilterChip label="Open only" onRemove={() => (filters.openOnly = false)} />
                 {/if}
-                {#if waitCountMax !== null}
-                    <FilterChip label="Waitlist ≤ {waitCountMax}" onRemove={() => (waitCountMax = null)} />
+                {#if filters.waitCountMax !== null}
+                    <FilterChip label="Waitlist ≤ {filters.waitCountMax}" onRemove={() => (filters.waitCountMax = null)} />
                 {/if}
-                {#if days.length > 0}
-                    <FilterChip label={formatDaysChip(days)} onRemove={() => (days = [])} />
+                {#if filters.days.length > 0}
+                    <FilterChip label={formatDaysChip(filters.days)} onRemove={() => (filters.days = [])} />
                 {/if}
-                {#if timeStart !== null || timeEnd !== null}
+                {#if filters.timeStart !== null || filters.timeEnd !== null}
                     <FilterChip
-                        label={formatTimeChip(timeStart, timeEnd)}
+                        label={formatTimeChip(filters.timeStart, filters.timeEnd)}
                         onRemove={() => {
-                            timeStart = null;
-                            timeEnd = null;
+                            filters.timeStart = null;
+                            filters.timeEnd = null;
                         }}
                     />
                 {/if}
                 {#each formatChipGroups as group (group.type)}
                     <FilterChip label={group.label} onRemove={() => removeFormatGroup(group)} />
                 {/each}
-                {#if campus.length > 0}
+                {#if filters.campus.length > 0}
                     <FilterChip
-                        label={formatMultiChip(campus, getCampusFilterLabel)}
-                        onRemove={() => (campus = [])}
+                        label={formatMultiChip(filters.campus, getCampusFilterLabel)}
+                        onRemove={() => (filters.campus = [])}
                     />
                 {/if}
-                {#if partOfTerm.length > 0}
+                {#if filters.partOfTerm.length > 0}
                     <FilterChip
-                        label={formatMultiChip(partOfTerm, getPartOfTermFilterLabel)}
-                        onRemove={() => (partOfTerm = [])}
+                        label={formatMultiChip(filters.partOfTerm, getPartOfTermFilterLabel)}
+                        onRemove={() => (filters.partOfTerm = [])}
                     />
                 {/if}
-                {#if attributes.length > 0}
+                {#if filters.attributes.length > 0}
                     <FilterChip
-                        label={formatMultiChip(attributes, getAttributeFilterLabel)}
-                        onRemove={() => (attributes = [])}
+                        label={formatMultiChip(filters.attributes, getAttributeFilterLabel)}
+                        onRemove={() => (filters.attributes = [])}
                     />
                 {/if}
-                {#if creditHourMin !== null || creditHourMax !== null}
+                {#if filters.creditHourMin !== null || filters.creditHourMax !== null}
                     <FilterChip
-                        label={creditHourMin !== null && creditHourMax !== null
-                            ? `${creditHourMin}–${creditHourMax} credits`
-                            : creditHourMin !== null
-                              ? `≥ ${creditHourMin} credits`
-                              : `≤ ${creditHourMax} credits`}
+                        label={filters.creditHourMin !== null && filters.creditHourMax !== null
+                            ? `${filters.creditHourMin}–${filters.creditHourMax} credits`
+                            : filters.creditHourMin !== null
+                              ? `≥ ${filters.creditHourMin} credits`
+                              : `≤ ${filters.creditHourMax} credits`}
                         onRemove={() => {
-                            creditHourMin = null;
-                            creditHourMax = null;
+                            filters.creditHourMin = null;
+                            filters.creditHourMax = null;
                         }}
                     />
                 {/if}
-                {#if instructor !== ""}
-                    <FilterChip label="Instructor: {instructor}" onRemove={() => (instructor = "")} />
+                {#if filters.instructor !== ""}
+                    <FilterChip label="Instructor: {filters.instructor}" onRemove={() => (filters.instructor = "")} />
                 {/if}
-                {#if courseNumberMin !== null || courseNumberMax !== null}
+                {#if filters.courseNumberLow !== null || filters.courseNumberHigh !== null}
                     <FilterChip
-                        label={courseNumberMin !== null && courseNumberMax !== null
-                            ? `Course ${courseNumberMin}–${courseNumberMax}`
-                            : courseNumberMin !== null
-                              ? `Course ≥ ${courseNumberMin}`
-                              : `Course ≤ ${courseNumberMax}`}
+                        label={filters.courseNumberLow !== null && filters.courseNumberHigh !== null
+                            ? `Course ${filters.courseNumberLow}–${filters.courseNumberHigh}`
+                            : filters.courseNumberLow !== null
+                              ? `Course ≥ ${filters.courseNumberLow}`
+                              : `Course ≤ ${filters.courseNumberHigh}`}
                         onRemove={() => {
-                            courseNumberMin = null;
-                            courseNumberMax = null;
+                            filters.courseNumberLow = null;
+                            filters.courseNumberHigh = null;
                         }}
                     />
                 {/if}
-                {#if activeFilterCount >= 2}
+                {#if filters.activeCount >= 2}
                     <button
                         type="button"
                         class="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none ml-1 shrink-0"
-                        onclick={clearAllFilters}
+                        onclick={() => filters.clear()}
                     >
                         Clear all
                     </button>
@@ -925,22 +652,6 @@ $effect(() => {
                 {terms}
                 {subjects}
                 bind:selectedTerm
-                bind:selectedSubjects
-                bind:query
-                bind:openOnly
-                bind:waitCountMax
-                bind:days
-                bind:timeStart
-                bind:timeEnd
-                bind:instructionalMethod
-                bind:campus
-                bind:partOfTerm
-                bind:attributes
-                bind:creditHourMin
-                bind:creditHourMax
-                bind:instructor
-                bind:courseNumberMin
-                bind:courseNumberMax
                 {referenceData}
                 ranges={{
                     courseNumber: { min: ranges.courseNumberMin, max: ranges.courseNumberMax },

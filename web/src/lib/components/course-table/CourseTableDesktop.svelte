@@ -209,7 +209,7 @@ const table = createSvelteTable({
             </tr>
           </tbody>
         {:else}
-          {#each table.getRowModel().rows as row, i (row.id)}
+          {#each table.getRowModel().rows as row (row.id)}
             {@const course = row.original}
             <tbody
               class="transition-opacity duration-200 animate-fade-in {loading ? 'opacity-45 pointer-events-none' : ''}"

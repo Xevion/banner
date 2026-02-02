@@ -1,19 +1,17 @@
 <script lang="ts">
 import type { CodeDescription } from "$lib/bindings";
-import {
-  DAY_OPTIONS,
-  toggleDay as _toggleDay,
-  parseTimeInput,
-  formatTime,
-  toggleValue,
-} from "$lib/filters";
-import { InstructionalMethodValues as IM, AttributeValues as AV } from "$lib/filterValues";
-import { getPartOfTermFilterLabel, getAttributeFilterLabel } from "$lib/labels";
+import { groupAttributes } from "$lib/filters";
+import { ATTRIBUTE_GROUPS, FORMAT_BUTTONS } from "$lib/labels";
+import { getFiltersContext } from "$lib/stores/search-filters.svelte";
 import { ChevronDown } from "@lucide/svelte";
 import BottomSheet from "./BottomSheet.svelte";
 import CompoundFilterButton from "./CompoundFilterButton.svelte";
 import AvailabilityFilter from "./AvailabilityFilter.svelte";
 import RangeSlider from "./RangeSlider.svelte";
+import DaysOfWeekPicker from "./DaysOfWeekPicker.svelte";
+import TimeRangeInput from "./TimeRangeInput.svelte";
+import PartOfTermPicker from "./PartOfTermPicker.svelte";
+import AttributeSection from "./AttributeSection.svelte";
 
 type AttributeReferenceData = Record<
   "instructionalMethods" | "campuses" | "partsOfTerm" | "attributes",
@@ -22,39 +20,10 @@ type AttributeReferenceData = Record<
 
 let {
   open = $bindable(false),
-  openOnly = $bindable(),
-  waitCountMax = $bindable(),
-  days = $bindable(),
-  timeStart = $bindable(),
-  timeEnd = $bindable(),
-  instructionalMethod = $bindable(),
-  campus = $bindable(),
-  partOfTerm = $bindable(),
-  attributes = $bindable(),
-  creditHourMin = $bindable(),
-  creditHourMax = $bindable(),
-  instructor = $bindable(),
-  courseNumberMin = $bindable(),
-  courseNumberMax = $bindable(),
-
   referenceData,
   ranges,
 }: {
   open: boolean;
-  openOnly: boolean;
-  waitCountMax: number | null;
-  days: string[];
-  timeStart: string | null;
-  timeEnd: string | null;
-  instructionalMethod: string[];
-  campus: string[];
-  partOfTerm: string[];
-  attributes: string[];
-  creditHourMin: number | null;
-  creditHourMax: number | null;
-  instructor: string;
-  courseNumberMin: number | null;
-  courseNumberMax: number | null;
   referenceData: AttributeReferenceData;
   ranges: {
     courseNumber: { min: number; max: number };
@@ -63,73 +32,15 @@ let {
   };
 } = $props();
 
+const filters = getFiltersContext();
+
 let expandedSection = $state<string | null>(null);
 
 function toggleSection(id: string) {
   expandedSection = expandedSection === id ? null : id;
 }
 
-function toggleDay(day: string) {
-  days = _toggleDay(days, day);
-}
-
-// Instructional method compound button config (same as FormatPopover)
-const imButtons = [
-  { label: "In Person", codes: [IM.InPerson] },
-  {
-    label: "Online",
-    codes: [IM.Online.Async, IM.Online.Sync, IM.Online.Mixed],
-    variants: [
-      { code: IM.Online.Async, label: "Async" },
-      { code: IM.Online.Sync, label: "Sync" },
-    ],
-  },
-  {
-    label: "Hybrid",
-    codes: [IM.Hybrid.Half, IM.Hybrid.OneThird, IM.Hybrid.TwoThirds],
-    variants: [
-      { code: IM.Hybrid.Half, label: "Half" },
-      { code: IM.Hybrid.OneThird, label: "One Third" },
-      { code: IM.Hybrid.TwoThirds, label: "Two Thirds" },
-    ],
-  },
-  { label: "Independent", codes: [IM.Independent] },
-];
-
-// Attribute grouping (same as CatalogPopover)
-const CORE_CODES = new Set<string>([
-  AV.CoreCommunication,
-  AV.CoreMathematics,
-  AV.CoreLifePhysicalSciences,
-  AV.CoreLanguagePhilosophy,
-  AV.CoreCreativeArts,
-  AV.CoreAmericanHistory,
-  AV.CoreGovernment,
-  AV.CoreSocialBehavioral,
-  AV.CoreComponentArea,
-]);
-const LEVEL_CODES = new Set<string>([
-  AV.Developmental,
-  AV.LowerDivision,
-  AV.UpperDivision,
-  AV.Graduate,
-]);
-
-const coreAttributes = $derived(
-  referenceData.attributes.filter((a) => CORE_CODES.has(a.filterValue))
-);
-const levelAttributes = $derived(
-  referenceData.attributes.filter((a) => LEVEL_CODES.has(a.filterValue))
-);
-const specialAttributes = $derived(
-  referenceData.attributes.filter(
-    (a) => !CORE_CODES.has(a.filterValue) && !LEVEL_CODES.has(a.filterValue)
-  )
-);
-
-function toggleAttr(code: string) {
-  attributes = toggleValue(attributes, code);
-}
+const grouped = $derived(groupAttributes(referenceData.attributes, ATTRIBUTE_GROUPS));
 
 // Format course number pips as "0", "1k", "2k", etc.
 function formatCourseNumberPip(v: number): string {
@@ -138,18 +49,21 @@ function formatCourseNumberPip(v: number): string {
 }
 
 // Active state for each filter section
-const statusActive = $derived(openOnly || waitCountMax !== null);
-const formatActive = $derived(instructionalMethod.length > 0);
+const statusActive = $derived(filters.openOnly || filters.waitCountMax !== null);
+const formatActive = $derived(filters.instructionalMethod.length > 0);
 const scheduleActive = $derived(
-  days.length > 0 || timeStart !== null || timeEnd !== null || partOfTerm.length > 0
+  filters.days.length > 0 ||
+    filters.timeStart !== null ||
+    filters.timeEnd !== null ||
+    filters.partOfTerm.length > 0
 );
-const catalogActive = $derived(campus.length > 0 || attributes.length > 0);
+const catalogActive = $derived(filters.campus.length > 0 || filters.attributes.length > 0);
 const moreActive = $derived(
-  creditHourMin !== null ||
-    creditHourMax !== null ||
-    instructor !== "" ||
-    courseNumberMin !== null ||
-    courseNumberMax !== null
+  filters.creditHourMin !== null ||
+    filters.creditHourMax !== null ||
+    filters.instructor !== "" ||
+    filters.courseNumberLow !== null ||
+    filters.courseNumberHigh !== null
 );
 
 // Show chevron when section is expanded OR when filter is not active
@@ -187,12 +101,12 @@ const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
           <span class="text-xs font-medium text-muted-foreground select-none">Availability</span>
           <button
             type="button"
-            aria-pressed={openOnly}
+            aria-pressed={filters.openOnly}
             class="inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-medium transition-colors cursor-pointer select-none
-                   {openOnly
+                   {filters.openOnly
               ? 'bg-primary text-primary-foreground'
               : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-            onclick={() => (openOnly = !openOnly)}
+            onclick={() => (filters.openOnly = !filters.openOnly)}
           >
             Open only
           </button>
@@ -205,7 +119,7 @@ const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
             min={0}
             max={ranges.waitCount.max}
             step={5}
-            bind:value={waitCountMax}
+            bind:value={filters.waitCountMax}
             label="Max waitlist"
             dual={false}
             pips
@@ -243,12 +157,12 @@ const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
     </button>
     {#if expandedSection === "format"}
       <div class="px-4 pb-3 flex flex-col gap-1.5">
-        {#each imButtons as btn (btn.label)}
+        {#each FORMAT_BUTTONS as btn (btn.label)}
           <CompoundFilterButton
             label={btn.label}
             codes={btn.codes}
             variants={btn.variants}
-            bind:selected={instructionalMethod}
+            bind:selected={filters.instructionalMethod}
           />
         {/each}
       </div>
@@ -276,81 +190,16 @@ const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
     </button>
     {#if expandedSection === "schedule"}
       <div class="px-4 pb-3 flex flex-col gap-3">
-        <div class="flex flex-col gap-1.5">
-          <span class="text-xs font-medium text-muted-foreground select-none">Days of week</span>
-          <div class="flex gap-1">
-            {#each DAY_OPTIONS as { label, value } (value)}
-              <button
-                type="button"
-                aria-label={value.charAt(0).toUpperCase() + value.slice(1)}
-                aria-pressed={days.includes(value)}
-                class="flex items-center justify-center rounded-md px-2 py-1 text-xs font-medium transition-colors cursor-pointer select-none min-w-[2rem]
-                       {days.includes(value)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                onclick={() => toggleDay(value)}
-              >
-                {label}
-              </button>
-            {/each}
-          </div>
-        </div>
+        <DaysOfWeekPicker bind:days={filters.days} mobile />
 
         <div class="h-px bg-border"></div>
 
-        <div class="flex flex-col gap-1.5">
-          <span class="text-xs font-medium text-muted-foreground select-none">Time range</span>
-          <div class="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="10:00 AM"
-              autocomplete="off"
-              value={formatTime(timeStart)}
-              onchange={(e) => {
-                timeStart = parseTimeInput(e.currentTarget.value);
-                e.currentTarget.value = formatTime(timeStart);
-              }}
-              class="h-8 w-24 border border-border bg-card text-foreground rounded-md px-2 text-sm
-                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            />
-            <span class="text-xs text-muted-foreground select-none">to</span>
-            <input
-              type="text"
-              placeholder="3:00 PM"
-              autocomplete="off"
-              value={formatTime(timeEnd)}
-              onchange={(e) => {
-                timeEnd = parseTimeInput(e.currentTarget.value);
-                e.currentTarget.value = formatTime(timeEnd);
-              }}
-              class="h-8 w-24 border border-border bg-card text-foreground rounded-md px-2 text-sm
-                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            />
-          </div>
-        </div>
+        <TimeRangeInput bind:timeStart={filters.timeStart} bind:timeEnd={filters.timeEnd} />
 
         {#if referenceData.partsOfTerm.length > 0}
           <div class="h-px bg-border"></div>
 
-          <div class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-muted-foreground select-none">Part of Term</span>
-            <div class="flex flex-wrap gap-1">
-              {#each referenceData.partsOfTerm as item (item.filterValue)}
-                <button
-                  type="button"
-                  aria-pressed={partOfTerm.includes(item.filterValue)}
-                  class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
-                         {partOfTerm.includes(item.filterValue)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                  onclick={() => (partOfTerm = toggleValue(partOfTerm, item.filterValue))}
-                  title={item.description}
-                >
-                  {getPartOfTermFilterLabel(item.filterValue)}
-                </button>
-              {/each}
-            </div>
-          </div>
+          <PartOfTermPicker bind:partOfTerm={filters.partOfTerm} partsOfTerm={referenceData.partsOfTerm} mobile />
         {/if}
       </div>
     {/if}
@@ -377,75 +226,21 @@ const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
     </button>
     {#if expandedSection === "catalog"}
       <div class="px-4 pb-3 flex flex-col gap-3">
-        <AvailabilityFilter bind:campus />
+        <AvailabilityFilter bind:campus={filters.campus} />
 
-        {#if levelAttributes.length > 0}
+        {#if grouped.level.length > 0}
           <div class="h-px bg-border"></div>
-          <div class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-muted-foreground select-none">Course Level</span>
-            <div class="flex flex-wrap gap-1">
-              {#each levelAttributes as item (item.filterValue)}
-                <button
-                  type="button"
-                  aria-pressed={attributes.includes(item.filterValue)}
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
-                         {attributes.includes(item.filterValue)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                  onclick={() => toggleAttr(item.filterValue)}
-                  title={item.description}
-                >
-                  {getAttributeFilterLabel(item.filterValue)}
-                </button>
-              {/each}
-            </div>
-          </div>
+          <AttributeSection title="Course Level" items={grouped.level} bind:selected={filters.attributes} />
         {/if}
 
-        {#if coreAttributes.length > 0}
+        {#if grouped.core.length > 0}
           <div class="h-px bg-border"></div>
-          <div class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-muted-foreground select-none">Core Curriculum</span>
-            <div class="flex flex-wrap gap-1">
-              {#each coreAttributes as item (item.filterValue)}
-                <button
-                  type="button"
-                  aria-pressed={attributes.includes(item.filterValue)}
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
-                         {attributes.includes(item.filterValue)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                  onclick={() => toggleAttr(item.filterValue)}
-                  title={item.description}
-                >
-                  {getAttributeFilterLabel(item.filterValue)}
-                </button>
-              {/each}
-            </div>
-          </div>
+          <AttributeSection title="Core Curriculum" items={grouped.core} bind:selected={filters.attributes} />
         {/if}
 
-        {#if specialAttributes.length > 0}
+        {#if grouped.special.length > 0}
           <div class="h-px bg-border"></div>
-          <div class="flex flex-col gap-1.5">
-            <span class="text-xs font-medium text-muted-foreground select-none">Designations</span>
-            <div class="flex flex-wrap gap-1">
-              {#each specialAttributes as item (item.filterValue)}
-                <button
-                  type="button"
-                  aria-pressed={attributes.includes(item.filterValue)}
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
-                         {attributes.includes(item.filterValue)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                  onclick={() => toggleAttr(item.filterValue)}
-                  title={item.description}
-                >
-                  {getAttributeFilterLabel(item.filterValue)}
-                </button>
-              {/each}
-            </div>
-          </div>
+          <AttributeSection title="Designations" items={grouped.special} bind:selected={filters.attributes} />
         {/if}
       </div>
     {/if}
@@ -476,8 +271,8 @@ const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
           min={ranges.creditHours.min}
           max={ranges.creditHours.max}
           step={1}
-          bind:valueLow={creditHourMin}
-          bind:valueHigh={creditHourMax}
+          bind:valueLow={filters.creditHourMin}
+          bind:valueHigh={filters.creditHourMax}
           label="Credit hours"
           pips
           all="label"
@@ -497,7 +292,7 @@ const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
             type="text"
             placeholder="Search by name..."
             autocomplete="off"
-            bind:value={instructor}
+            bind:value={filters.instructor}
             class="h-8 border border-border bg-card text-foreground rounded-md px-2 text-sm
                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
@@ -509,8 +304,8 @@ const showMoreChevron = $derived(expandedSection === "more" || !moreActive);
           min={ranges.courseNumber.min}
           max={ranges.courseNumber.max}
           step={100}
-          bind:valueLow={courseNumberMin}
-          bind:valueHigh={courseNumberMax}
+          bind:valueLow={filters.courseNumberLow}
+          bind:valueHigh={filters.courseNumberHigh}
           label="Course number"
           formatPip={formatCourseNumberPip}
           pips

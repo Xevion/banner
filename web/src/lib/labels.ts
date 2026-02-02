@@ -268,3 +268,58 @@ export function getFilterLabel(
       return getPartOfTermFilterLabel(filterValue);
   }
 }
+
+// --- Shared filter UI configuration ---
+
+/** Attribute filter value groupings for UI categorization */
+export const ATTRIBUTE_GROUPS = {
+  core: new Set([
+    "CoreCommunication",
+    "CoreMathematics",
+    "CoreLifePhysicalSciences",
+    "CoreLanguagePhilosophy",
+    "CoreCreativeArts",
+    "CoreAmericanHistory",
+    "CoreGovernment",
+    "CoreSocialBehavioral",
+    "CoreComponentArea",
+  ]),
+  level: new Set(["Developmental", "LowerDivision", "UpperDivision", "Graduate"]),
+} as const;
+
+/** Campus filter value groupings for availability UI */
+export const CAMPUS_GROUPS = {
+  /** Campuses accessible to traditional campus students */
+  campusStudents: ["Main", "Downtown", "Southwest", "Laredo", "Internet"] as string[],
+  /** Campuses restricted to online degree program students */
+  onlinePrograms: ["OnlinePrograms"] as string[],
+};
+
+/** Button configuration for instructional method filter UI */
+export interface FormatButtonConfig {
+  label: string;
+  codes: string[];
+  variants?: { code: string; label: string }[];
+}
+
+export const FORMAT_BUTTONS: FormatButtonConfig[] = [
+  { label: "In Person", codes: ["InPerson"] },
+  {
+    label: "Online",
+    codes: ["Online.Async", "Online.Sync", "Online.Mixed"],
+    variants: [
+      { code: "Online.Async", label: "Async" },
+      { code: "Online.Sync", label: "Sync" },
+    ],
+  },
+  {
+    label: "Hybrid",
+    codes: ["Hybrid.Half", "Hybrid.OneThird", "Hybrid.TwoThirds"],
+    variants: [
+      { code: "Hybrid.Half", label: "Half" },
+      { code: "Hybrid.OneThird", label: "One Third" },
+      { code: "Hybrid.TwoThirds", label: "Two Thirds" },
+    ],
+  },
+  { label: "Independent", codes: ["Independent"] },
+];

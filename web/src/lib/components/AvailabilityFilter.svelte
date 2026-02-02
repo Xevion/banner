@@ -1,5 +1,5 @@
 <script lang="ts">
-import { CampusValues } from "$lib/filterValues";
+import { CAMPUS_GROUPS } from "$lib/labels";
 
 let {
   campus = $bindable<string[]>([]),
@@ -7,23 +7,13 @@ let {
   campus: string[];
 } = $props();
 
-// Campus filter values by availability category
-const CAMPUS_STUDENTS: string[] = [
-  CampusValues.Main,
-  CampusValues.Downtown,
-  CampusValues.Southwest,
-  CampusValues.Laredo,
-  CampusValues.Internet,
-];
-const ONLINE_PROGRAMS: string[] = [CampusValues.OnlinePrograms];
-
 // Determine which availability option is effectively selected based on campus filter
 // This is a UI convenience - internally we still use campus codes
 const availabilitySelection = $derived.by(() => {
   if (campus.length === 0) return "all";
 
-  const hasCampusStudent = campus.some((c) => CAMPUS_STUDENTS.includes(c));
-  const hasOnlinePrograms = campus.some((c) => ONLINE_PROGRAMS.includes(c));
+  const hasCampusStudent = campus.some((c) => CAMPUS_GROUPS.campusStudents.includes(c));
+  const hasOnlinePrograms = campus.some((c) => CAMPUS_GROUPS.onlinePrograms.includes(c));
 
   if (hasCampusStudent && hasOnlinePrograms) return "all";
   if (hasCampusStudent) return "campus";
@@ -34,10 +24,10 @@ const availabilitySelection = $derived.by(() => {
 function selectAvailability(option: "campus" | "online" | "all") {
   if (option === "campus") {
     // Set campus filter to all campus-student-accessible campuses
-    campus = [...CAMPUS_STUDENTS];
+    campus = [...CAMPUS_GROUPS.campusStudents];
   } else if (option === "online") {
     // Set campus filter to online programs only
-    campus = [...ONLINE_PROGRAMS];
+    campus = [...CAMPUS_GROUPS.onlinePrograms];
   } else {
     // Clear campus filter to show all
     campus = [];

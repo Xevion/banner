@@ -1,29 +1,21 @@
 <script lang="ts">
+import { getFiltersContext } from "$lib/stores/search-filters.svelte";
 import FilterPopover from "./FilterPopover.svelte";
 import RangeSlider from "./RangeSlider.svelte";
 
 let {
-  creditHourMin = $bindable<number | null>(null),
-  creditHourMax = $bindable<number | null>(null),
-  instructor = $bindable(""),
-  courseNumberMin = $bindable<number | null>(null),
-  courseNumberMax = $bindable<number | null>(null),
   ranges,
 }: {
-  creditHourMin: number | null;
-  creditHourMax: number | null;
-  instructor: string;
-  courseNumberMin: number | null;
-  courseNumberMax: number | null;
   ranges: { courseNumber: { min: number; max: number }; creditHours: { min: number; max: number } };
 } = $props();
 
+const filters = getFiltersContext();
 const hasActiveFilters = $derived(
-  creditHourMin !== null ||
-    creditHourMax !== null ||
-    instructor !== "" ||
-    courseNumberMin !== null ||
-    courseNumberMax !== null
+  filters.creditHourMin !== null ||
+    filters.creditHourMax !== null ||
+    filters.instructor !== "" ||
+    filters.courseNumberLow !== null ||
+    filters.courseNumberHigh !== null
 );
 
 // Format course number pips as "0", "1k", "2k", etc.
@@ -39,8 +31,8 @@ function formatCourseNumberPip(v: number): string {
       min={ranges.creditHours.min}
       max={ranges.creditHours.max}
       step={1}
-      bind:valueLow={creditHourMin}
-      bind:valueHigh={creditHourMax}
+      bind:valueLow={filters.creditHourMin}
+      bind:valueHigh={filters.creditHourMax}
       label="Credit hours"
       pips
       all="label"
@@ -57,7 +49,7 @@ function formatCourseNumberPip(v: number): string {
         type="text"
         placeholder="Search by name..."
         autocomplete="off"
-        bind:value={instructor}
+        bind:value={filters.instructor}
         class="h-8 border border-border bg-card text-foreground rounded-md px-2 text-sm
                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       />
@@ -69,8 +61,8 @@ function formatCourseNumberPip(v: number): string {
       min={ranges.courseNumber.min}
       max={ranges.courseNumber.max}
       step={100}
-      bind:valueLow={courseNumberMin}
-      bind:valueHigh={courseNumberMax}
+      bind:valueLow={filters.courseNumberLow}
+      bind:valueHigh={filters.courseNumberHigh}
       label="Course number"
       formatPip={formatCourseNumberPip}
       pips

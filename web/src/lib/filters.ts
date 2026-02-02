@@ -1,3 +1,5 @@
+import type { CodeDescription } from "$lib/bindings";
+
 export const DAY_OPTIONS: { label: string; value: string }[] = [
   { label: "M", value: "monday" },
   { label: "T", value: "tuesday" },
@@ -47,4 +49,31 @@ export function formatTime(time: string | null): string {
 
 export function toggleValue(arr: string[], code: string): string[] {
   return arr.includes(code) ? arr.filter((v) => v !== code) : [...arr, code];
+}
+
+export interface GroupedAttributes {
+  core: CodeDescription[];
+  level: CodeDescription[];
+  special: CodeDescription[];
+}
+
+export function groupAttributes(
+  attributes: CodeDescription[],
+  groups: { core: Set<string>; level: Set<string> }
+): GroupedAttributes {
+  const core: CodeDescription[] = [];
+  const level: CodeDescription[] = [];
+  const special: CodeDescription[] = [];
+
+  for (const attr of attributes) {
+    if (groups.core.has(attr.filterValue)) {
+      core.push(attr);
+    } else if (groups.level.has(attr.filterValue)) {
+      level.push(attr);
+    } else {
+      special.push(attr);
+    }
+  }
+
+  return { core, level, special };
 }

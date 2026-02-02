@@ -446,8 +446,8 @@ pub struct SearchParams {
     pub term: String,
     #[serde(default)]
     pub subject: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub q: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "q")]
+    pub query: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "course_number_low")]
     pub course_number_low: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "course_number_high")]
@@ -831,7 +831,7 @@ async fn search_courses(
         } else {
             Some(&params.subject)
         },
-        params.q.as_deref(),
+        params.query.as_deref(),
         params.course_number_low,
         params.course_number_high,
         params.open_only,

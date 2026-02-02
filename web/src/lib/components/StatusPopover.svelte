@@ -1,18 +1,16 @@
 <script lang="ts">
+import { getFiltersContext } from "$lib/stores/search-filters.svelte";
 import FilterPopover from "./FilterPopover.svelte";
 import RangeSlider from "./RangeSlider.svelte";
 
 let {
-  openOnly = $bindable(false),
-  waitCountMax = $bindable<number | null>(null),
   waitCountMaxRange = 0,
 }: {
-  openOnly: boolean;
-  waitCountMax: number | null;
   waitCountMaxRange: number;
 } = $props();
 
-const hasActiveFilters = $derived(openOnly || waitCountMax !== null);
+const filters = getFiltersContext();
+const hasActiveFilters = $derived(filters.openOnly || filters.waitCountMax !== null);
 </script>
 
 <FilterPopover label="Status" active={hasActiveFilters} width="min-w-64">
@@ -21,12 +19,12 @@ const hasActiveFilters = $derived(openOnly || waitCountMax !== null);
       <span class="text-xs font-medium text-muted-foreground select-none">Availability</span>
       <button
         type="button"
-        aria-pressed={openOnly}
+        aria-pressed={filters.openOnly}
         class="inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-medium transition-colors cursor-pointer select-none
-               {openOnly
+               {filters.openOnly
           ? 'bg-primary text-primary-foreground'
           : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-        onclick={() => (openOnly = !openOnly)}
+        onclick={() => (filters.openOnly = !filters.openOnly)}
       >
         Open only
       </button>
@@ -39,7 +37,7 @@ const hasActiveFilters = $derived(openOnly || waitCountMax !== null);
         min={0}
         max={waitCountMaxRange}
         step={5}
-        bind:value={waitCountMax}
+        bind:value={filters.waitCountMax}
         label="Max waitlist"
         dual={false}
         pips
