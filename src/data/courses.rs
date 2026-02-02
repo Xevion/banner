@@ -65,11 +65,11 @@ const SEARCH_WHERE: &str = r#"
       ))
       AND ($11::text IS NULL OR EXISTS (
           SELECT 1 FROM jsonb_array_elements(meeting_times) AS mt
-          WHERE (mt->>'begin_time') >= $11
+          WHERE (mt->'timeRange'->>'start') >= $11
       ))
       AND ($12::text IS NULL OR EXISTS (
           SELECT 1 FROM jsonb_array_elements(meeting_times) AS mt
-          WHERE (mt->>'end_time') <= $12
+          WHERE (mt->'timeRange'->>'end') <= $12
       ))
       AND ($13::text[] IS NULL OR part_of_term = ANY($13))
       AND ($14::text[] IS NULL OR EXISTS (
@@ -109,7 +109,7 @@ fn sort_clause(column: Option<SortColumn>, direction: Option<SortDirection>) -> 
             )
         }
         Some(SortColumn::Time) => {
-            format!("(meeting_times->0->>'begin_time') {dir} NULLS LAST")
+            format!("(meeting_times->0->'timeRange'->>'start') {dir} NULLS LAST")
         }
         Some(SortColumn::Seats) => {
             format!("(max_enrollment - enrollment) {dir}")
