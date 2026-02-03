@@ -1,12 +1,18 @@
 import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { storybookTest } from "@storybook/addon-vitest/vitest-plugin";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
+
+const dirname =
+  typeof __dirname !== "undefined" ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
 function getVersion() {
   const filename = "Cargo.toml";
-  const paths = [resolve(__dirname, filename), resolve(__dirname, "..", filename)];
+  const paths = [resolve(dirname, filename), resolve(dirname, "..", filename)];
 
   for (const path of paths) {
     try {
@@ -26,16 +32,45 @@ const version = getVersion();
 
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
-  // Tell Vitest to use the `browser` entry points in `package.json` files, even though it's running in Node
   resolve: process.env.VITEST
     ? {
         conditions: ["browser"],
       }
     : undefined,
   test: {
-    globals: true,
-    environment: "jsdom",
-    include: ["src/**/*.test.ts"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          globals: true,
+          environment: "jsdom",
+          include: ["src/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        plugins: [
+          storybookTest({
+            configDir: path.join(dirname, ".storybook"),
+            storybookScript: "bun run storybook --ci",
+          }),
+        ],
+        resolve: {
+          conditions: ["svelte", "browser"],
+        },
+        test: {
+          name: "storybook",
+          browser: {
+            enabled: true,
+            provider: "playwright",
+            headless: true,
+            instances: [{ browser: "chromium" }],
+          },
+          setupFiles: ["./.storybook/vitest.setup.ts"],
+        },
+      },
+    ],
   },
   clearScreen: false,
   server: {

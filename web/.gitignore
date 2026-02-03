@@ -7,3 +7,6 @@ count.txt
 .env
 .svelte-kit
 .eslintcache
+
+*storybook.log
+storybook-static

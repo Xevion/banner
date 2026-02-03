@@ -52,5 +52,12 @@ db cmd="start":
 bun *ARGS:
 	cd web && bun {{ ARGS }}
 
+# Run Storybook development server on port 6006
+storybook: (bun "storybook")
+# Build Storybook static site
+storybook-build: (bun "storybook:build")
+# Run Storybook tests
+storybook-test: (bun "storybook:test")
+
 sql *ARGS:
 	lazysql ${DATABASE_URL}

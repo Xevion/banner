@@ -1,3 +1,6 @@
+// For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
+import storybook from "eslint-plugin-storybook";
+
 import path from "node:path";
 import { includeIgnoreFile } from "@eslint/compat";
 import js from "@eslint/js";
@@ -12,19 +15,11 @@ export default tseslint.config(
   includeIgnoreFile(gitignorePath),
   {
     ignores: ["dist/", ".svelte-kit/", "build/", "src/lib/bindings/", "scripts/"],
-  },
-
-  // Base JS rules
-  js.configs.recommended,
-
-  // TypeScript: recommended type-checked + stylistic type-checked
+  }, // Base JS rules
+  js.configs.recommended, // TypeScript: recommended type-checked + stylistic type-checked
   ...tseslint.configs.recommendedTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
-
-  // Svelte recommended
-  ...svelte.configs.recommended,
-
-  // Global settings: environments + type-aware parser
+  ...tseslint.configs.stylisticTypeChecked, // Svelte recommended
+  ...svelte.configs.recommended, // Global settings: environments + type-aware parser
   {
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
@@ -43,9 +38,7 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
     },
-  },
-
-  // Svelte files: parser config + rule overrides
+  }, // Svelte files: parser config + rule overrides
   {
     files: ["**/*.svelte", "**/*.svelte.ts", "**/*.svelte.js"],
     languageOptions: {
@@ -57,11 +50,20 @@ export default tseslint.config(
     rules: {
       "svelte/no-navigation-without-resolve": "off",
     },
-  },
-
-  // Disable type-checked rules for plain JS config files
+  }, // Disable type-checked rules for plain JS config files
   {
     files: ["**/*.js"],
     ...tseslint.configs.disableTypeChecked,
-  }
+  }, // Relax type-checking for Storybook story files
+  {
+    files: ["**/*.stories.svelte"],
+    rules: {
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+    },
+  },
+  storybook.configs["flat/recommended"]
 );
