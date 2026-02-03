@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.3](https://github.com/Xevion/Banner/compare/v0.6.2...v0.6.3) (2026-02-03)
+
+
+### Features
+
+* **web:** Add related sections API and refactor course view ([bec81f7](https://github.com/Xevion/Banner/commit/bec81f74ba3e8ab80a1a00675cc10a916c02f4aa))
+* **web:** Add storybook with component stories and vitest integration ([5cb3155](https://github.com/Xevion/Banner/commit/5cb3155c8847f29fba346f25692039c19a271645))
+* **web:** Enable ESLint with TypeScript and Svelte support ([87f0808](https://github.com/Xevion/Banner/commit/87f0808eadb518ccd068132e2565c999b1a2ff7a))
+
+
+### Bug Fixes
+
+* Outdated course data queries ([bd9a8d3](https://github.com/Xevion/Banner/commit/bd9a8d32aa1d4b4f9ad08159b9cfd708a4d5fe2f))
+* Switch weekdays jsonb query to modern array format ([348492f](https://github.com/Xevion/Banner/commit/348492f1911d85ad15b9b958970b05cffb8c18f9))
+* **web:** Resolve animation rendering issues with fill modes ([a71e648](https://github.com/Xevion/Banner/commit/a71e64821d1117a6b8b228904afce87af3daf798))
+
+
+### Code Refactoring
+
+* **api:** Migrate to typed reference data enums ([56fabc2](https://github.com/Xevion/Banner/commit/56fabc22214d62e77d423cbdcdd3083be834afd2))
+* Consolidate course data models into structured types ([2157035](https://github.com/Xevion/Banner/commit/215703593b6e6696f2dc478bd29644374fa1e787))
+* **web:** Centralize filter state with context-based store ([f4a3c55](https://github.com/Xevion/Banner/commit/f4a3c5521a518b4226065652712f71b772e605f8))
+* **web:** Fix ESLint violations and enhance types ([89f3a23](https://github.com/Xevion/Banner/commit/89f3a23fa792d0ce5df8439b3efb038cd7c75301))
+
+
+### Miscellaneous
+
+* **web:** Disable clearScreen for vite dev server ([c5fef57](https://github.com/Xevion/Banner/commit/c5fef573b4b3dacc87514afc4908eee2cd86d4a0))
+
 ## [0.6.2](https://github.com/Xevion/Banner/compare/v0.6.1...v0.6.2) (2026-02-01)
 
 
