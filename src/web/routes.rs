@@ -32,6 +32,7 @@ fn code_to_filter_value(category: &str, code: &str, description: Option<&str>) -
     }
 }
 use crate::web::admin_scraper;
+use crate::web::admin_terms;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::calendar;
 use crate::web::error::{ApiError, ApiErrorCode, db_error};
@@ -133,6 +134,13 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
         .route(
             "/admin/scraper/subjects/{subject}",
             get(admin_scraper::scraper_subject_detail),
+        )
+        .route("/admin/terms", get(admin_terms::list_terms))
+        .route("/admin/terms/sync", post(admin_terms::sync_terms))
+        .route("/admin/terms/{code}/enable", post(admin_terms::enable_term))
+        .route(
+            "/admin/terms/{code}/disable",
+            post(admin_terms::disable_term),
         )
         .with_state(app_state);
 

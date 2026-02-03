@@ -83,6 +83,8 @@ fn default_bucket_for_period(period: &str) -> &'static str {
 pub struct StatsParams {
     #[serde(default = "default_period")]
     pub period: String,
+    /// Optional term code to filter stats (e.g., "202510"). If omitted, includes all terms.
+    pub term: Option<String>,
 }
 
 fn default_period() -> String {
@@ -94,6 +96,8 @@ fn default_period() -> String {
 #[serde(rename_all = "camelCase")]
 pub struct ScraperStatsResponse {
     period: String,
+    /// The term filter applied, or null if showing all terms.
+    term: Option<String>,
     #[ts(type = "number")]
     total_scrapes: i64,
     #[ts(type = "number")]
@@ -122,21 +126,49 @@ pub async fn scraper_stats(
     let _duration = parse_period(&params.period)?;
     let interval_str = period_to_interval_str(&params.period);
 
-    let row = sqlx::query(
-        "SELECT \
-            COUNT(*) AS total_scrapes, \
-            COUNT(*) FILTER (WHERE success) AS successful_scrapes, \
-            COUNT(*) FILTER (WHERE NOT success) AS failed_scrapes, \
-            (AVG(duration_ms) FILTER (WHERE success))::FLOAT8 AS avg_duration_ms, \
-            COALESCE(SUM(courses_changed) FILTER (WHERE success), 0) AS total_courses_changed, \
-            COALESCE(SUM(courses_fetched) FILTER (WHERE success), 0) AS total_courses_fetched, \
-            COALESCE(SUM(audits_generated) FILTER (WHERE success), 0) AS total_audits_generated \
-         FROM scrape_job_results \
-         WHERE completed_at > NOW() - $1::interval",
-    )
-    .bind(interval_str)
-    .fetch_one(&state.db_pool)
-    .await
+    // Build query with optional term filter
+    let (query_str, term_filter) = if let Some(ref term) = params.term {
+        (
+            "SELECT \
+                COUNT(*) AS total_scrapes, \
+                COUNT(*) FILTER (WHERE success) AS successful_scrapes, \
+                COUNT(*) FILTER (WHERE NOT success) AS failed_scrapes, \
+                (AVG(duration_ms) FILTER (WHERE success))::FLOAT8 AS avg_duration_ms, \
+                COALESCE(SUM(courses_changed) FILTER (WHERE success), 0) AS total_courses_changed, \
+                COALESCE(SUM(courses_fetched) FILTER (WHERE success), 0) AS total_courses_fetched, \
+                COALESCE(SUM(audits_generated) FILTER (WHERE success), 0) AS total_audits_generated \
+             FROM scrape_job_results \
+             WHERE completed_at > NOW() - $1::interval AND payload->>'term' = $2",
+            Some(term.clone()),
+        )
+    } else {
+        (
+            "SELECT \
+                COUNT(*) AS total_scrapes, \
+                COUNT(*) FILTER (WHERE success) AS successful_scrapes, \
+                COUNT(*) FILTER (WHERE NOT success) AS failed_scrapes, \
+                (AVG(duration_ms) FILTER (WHERE success))::FLOAT8 AS avg_duration_ms, \
+                COALESCE(SUM(courses_changed) FILTER (WHERE success), 0) AS total_courses_changed, \
+                COALESCE(SUM(courses_fetched) FILTER (WHERE success), 0) AS total_courses_fetched, \
+                COALESCE(SUM(audits_generated) FILTER (WHERE success), 0) AS total_audits_generated \
+             FROM scrape_job_results \
+             WHERE completed_at > NOW() - $1::interval",
+            None,
+        )
+    };
+
+    let row = if let Some(term) = &term_filter {
+        sqlx::query(query_str)
+            .bind(interval_str)
+            .bind(term)
+            .fetch_one(&state.db_pool)
+            .await
+    } else {
+        sqlx::query(query_str)
+            .bind(interval_str)
+            .fetch_one(&state.db_pool)
+            .await
+    }
     .map_err(|e| {
         tracing::error!(error = %e, "Failed to fetch scraper stats");
         (
@@ -180,6 +212,7 @@ pub async fn scraper_stats(
 
     Ok(Json(ScraperStatsResponse {
         period: params.period,
+        term: params.term,
         total_scrapes,
         successful_scrapes,
         failed_scrapes,
@@ -205,6 +238,8 @@ pub struct TimeseriesParams {
     pub period: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bucket: Option<String>,
+    /// Optional term code to filter timeseries (e.g., "202510"). If omitted, includes all terms.
+    pub term: Option<String>,
 }
 
 #[derive(Serialize, TS)]
@@ -252,39 +287,77 @@ pub async fn scraper_timeseries(
     };
     let bucket_interval = parse_bucket(bucket_code)?;
 
-    let rows = sqlx::query(
-        "WITH buckets AS ( \
-            SELECT generate_series( \
-                date_bin($1::interval, NOW() - $2::interval, '2020-01-01'::timestamptz), \
-                date_bin($1::interval, NOW(), '2020-01-01'::timestamptz), \
-                $1::interval \
-            ) AS bucket_start \
-         ), \
-         raw AS ( \
-            SELECT date_bin($1::interval, completed_at, '2020-01-01'::timestamptz) AS bucket_start, \
-                   COUNT(*)::BIGINT AS scrape_count, \
-                   COUNT(*) FILTER (WHERE success)::BIGINT AS success_count, \
-                   COUNT(*) FILTER (WHERE NOT success)::BIGINT AS error_count, \
-                   COALESCE(SUM(courses_changed) FILTER (WHERE success), 0)::BIGINT AS courses_changed, \
-                   COALESCE(AVG(duration_ms) FILTER (WHERE success), 0)::FLOAT8 AS avg_duration_ms \
-            FROM scrape_job_results \
-            WHERE completed_at > NOW() - $2::interval \
-            GROUP BY 1 \
-         ) \
-         SELECT b.bucket_start, \
-                COALESCE(r.scrape_count, 0) AS scrape_count, \
-                COALESCE(r.success_count, 0) AS success_count, \
-                COALESCE(r.error_count, 0) AS error_count, \
-                COALESCE(r.courses_changed, 0) AS courses_changed, \
-                COALESCE(r.avg_duration_ms, 0) AS avg_duration_ms \
-         FROM buckets b \
-         LEFT JOIN raw r ON b.bucket_start = r.bucket_start \
-         ORDER BY b.bucket_start",
-    )
-    .bind(bucket_interval)
-    .bind(period_interval)
-    .fetch_all(&state.db_pool)
-    .await
+    // Build query with optional term filter
+    let rows = if let Some(ref term) = params.term {
+        sqlx::query(
+            "WITH buckets AS ( \
+                SELECT generate_series( \
+                    date_bin($1::interval, NOW() - $2::interval, '2020-01-01'::timestamptz), \
+                    date_bin($1::interval, NOW(), '2020-01-01'::timestamptz), \
+                    $1::interval \
+                ) AS bucket_start \
+             ), \
+             raw AS ( \
+                SELECT date_bin($1::interval, completed_at, '2020-01-01'::timestamptz) AS bucket_start, \
+                       COUNT(*)::BIGINT AS scrape_count, \
+                       COUNT(*) FILTER (WHERE success)::BIGINT AS success_count, \
+                       COUNT(*) FILTER (WHERE NOT success)::BIGINT AS error_count, \
+                       COALESCE(SUM(courses_changed) FILTER (WHERE success), 0)::BIGINT AS courses_changed, \
+                       COALESCE(AVG(duration_ms) FILTER (WHERE success), 0)::FLOAT8 AS avg_duration_ms \
+                FROM scrape_job_results \
+                WHERE completed_at > NOW() - $2::interval AND payload->>'term' = $3 \
+                GROUP BY 1 \
+             ) \
+             SELECT b.bucket_start, \
+                    COALESCE(r.scrape_count, 0) AS scrape_count, \
+                    COALESCE(r.success_count, 0) AS success_count, \
+                    COALESCE(r.error_count, 0) AS error_count, \
+                    COALESCE(r.courses_changed, 0) AS courses_changed, \
+                    COALESCE(r.avg_duration_ms, 0) AS avg_duration_ms \
+             FROM buckets b \
+             LEFT JOIN raw r ON b.bucket_start = r.bucket_start \
+             ORDER BY b.bucket_start",
+        )
+        .bind(bucket_interval)
+        .bind(period_interval)
+        .bind(term)
+        .fetch_all(&state.db_pool)
+        .await
+    } else {
+        sqlx::query(
+            "WITH buckets AS ( \
+                SELECT generate_series( \
+                    date_bin($1::interval, NOW() - $2::interval, '2020-01-01'::timestamptz), \
+                    date_bin($1::interval, NOW(), '2020-01-01'::timestamptz), \
+                    $1::interval \
+                ) AS bucket_start \
+             ), \
+             raw AS ( \
+                SELECT date_bin($1::interval, completed_at, '2020-01-01'::timestamptz) AS bucket_start, \
+                       COUNT(*)::BIGINT AS scrape_count, \
+                       COUNT(*) FILTER (WHERE success)::BIGINT AS success_count, \
+                       COUNT(*) FILTER (WHERE NOT success)::BIGINT AS error_count, \
+                       COALESCE(SUM(courses_changed) FILTER (WHERE success), 0)::BIGINT AS courses_changed, \
+                       COALESCE(AVG(duration_ms) FILTER (WHERE success), 0)::FLOAT8 AS avg_duration_ms \
+                FROM scrape_job_results \
+                WHERE completed_at > NOW() - $2::interval \
+                GROUP BY 1 \
+             ) \
+             SELECT b.bucket_start, \
+                    COALESCE(r.scrape_count, 0) AS scrape_count, \
+                    COALESCE(r.success_count, 0) AS success_count, \
+                    COALESCE(r.error_count, 0) AS error_count, \
+                    COALESCE(r.courses_changed, 0) AS courses_changed, \
+                    COALESCE(r.avg_duration_ms, 0) AS avg_duration_ms \
+             FROM buckets b \
+             LEFT JOIN raw r ON b.bucket_start = r.bucket_start \
+             ORDER BY b.bucket_start",
+        )
+        .bind(bucket_interval)
+        .bind(period_interval)
+        .fetch_all(&state.db_pool)
+        .await
+    }
     .map_err(|e| {
         tracing::error!(error = %e, "Failed to fetch scraper timeseries");
         (

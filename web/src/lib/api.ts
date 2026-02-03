@@ -12,6 +12,7 @@ import type {
   CourseResponse,
   DayOfWeek,
   DbMeetingTime,
+  DbTerm,
   FilterRanges,
   HybridVariant,
   InstructionalMethod,
@@ -49,6 +50,7 @@ import type {
   SubjectSummary,
   SubjectsResponse,
   TermResponse,
+  TermsListResponse,
   TimeRange,
   TimelineRequest,
   TimelineResponse,
@@ -75,6 +77,7 @@ export type {
   CourseResponse,
   DayOfWeek,
   DbMeetingTime,
+  DbTerm,
   FilterRanges,
   HybridVariant,
   InstructionalMethod,
@@ -106,6 +109,7 @@ export type {
   SubjectSummary,
   SubjectsResponse,
   TermResponse,
+  TermsListResponse,
   TimelineRequest,
   TimelineResponse,
   TimelineSlot,
@@ -443,15 +447,23 @@ export class BannerApiClient {
 
   // Scraper analytics endpoints
 
-  async getScraperStats(period?: ScraperPeriod): Promise<ScraperStatsResponse> {
-    const qs = period ? `?period=${period}` : "";
-    return this.request<ScraperStatsResponse>(`/admin/scraper/stats${qs}`);
+  async getScraperStats(period?: ScraperPeriod, term?: string): Promise<ScraperStatsResponse> {
+    const query = new URLSearchParams();
+    if (period) query.set("period", period);
+    if (term) query.set("term", term);
+    const qs = query.toString();
+    return this.request<ScraperStatsResponse>(`/admin/scraper/stats${qs ? `?${qs}` : ""}`);
   }
 
-  async getScraperTimeseries(period?: ScraperPeriod, bucket?: string): Promise<TimeseriesResponse> {
+  async getScraperTimeseries(
+    period?: ScraperPeriod,
+    bucket?: string,
+    term?: string
+  ): Promise<TimeseriesResponse> {
     const query = new URLSearchParams();
     if (period) query.set("period", period);
     if (bucket) query.set("bucket", bucket);
+    if (term) query.set("term", term);
     const qs = query.toString();
     return this.request<TimeseriesResponse>(`/admin/scraper/timeseries${qs ? `?${qs}` : ""}`);
   }
@@ -465,6 +477,10 @@ export class BannerApiClient {
     return this.request<SubjectDetailResponse>(
       `/admin/scraper/subjects/${encodeURIComponent(subject)}${qs}`
     );
+  }
+
+  async getAdminTerms(): Promise<TermsListResponse> {
+    return this.request<TermsListResponse>("/admin/terms");
   }
 }
 

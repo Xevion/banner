@@ -5,18 +5,18 @@ import type {
   SubjectSummary,
   TimeseriesResponse,
 } from "$lib/bindings";
+import type { DbTerm } from "$lib/api";
 
-// Persisted across navigation so returning to the page shows cached data.
-let stats = $state<ScraperStatsResponse | null>(null);
-let timeseries = $state<TimeseriesResponse | null>(null);
-let subjects = $state<SubjectSummary[]>([]);
-let error = $state<string | null>(null);
-let refreshError = $state(false);
-let refreshInterval = 5_000;
+// Module-level cache persisted across navigation
+let statsCache = $state<ScraperStatsResponse | null>(null);
+let timeseriesCache = $state<TimeseriesResponse | null>(null);
+let subjectsCache = $state<SubjectSummary[]>([]);
+let termsCache = $state<DbTerm[]>([]);
 </script>
 
 <script lang="ts">
 import { client, type ScraperPeriod } from "$lib/api";
+import { useAutoRefresh } from "$lib/composables/useAutoRefresh.svelte";
 import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import { FlexRender, createSvelteTable } from "$lib/components/ui/data-table/index.js";
 import { formatAbsoluteDate } from "$lib/date";
@@ -31,6 +31,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Info,
   LoaderCircle,
   ArrowUp,
@@ -44,84 +45,72 @@ import {
   getCoreRowModel,
   getSortedRowModel,
 } from "@tanstack/table-core";
-import { onDestroy, onMount } from "svelte";
+import { Select } from "bits-ui";
+import { onDestroy } from "svelte";
 import { fade, slide } from "svelte/transition";
 
 const PERIODS: ScraperPeriod[] = ["1h", "6h", "24h", "7d", "30d"];
+const REFRESH_INTERVAL = 5_000;
+const MIN_SPIN_MS = 700;
 
 let selectedPeriod = $state<ScraperPeriod>("24h");
+let selectedTerm = $state<string | undefined>(undefined);
 
-// Expanded subject detail
+// --- Auto-refresh hooks ---
+
+const stats = useAutoRefresh({
+  fetcher: () => client.getScraperStats(selectedPeriod, selectedTerm),
+  deps: () => [selectedPeriod, selectedTerm],
+  interval: REFRESH_INTERVAL,
+  minLoadingMs: MIN_SPIN_MS,
+});
+
+const timeseries = useAutoRefresh({
+  fetcher: () => client.getScraperTimeseries(selectedPeriod, undefined, selectedTerm),
+  deps: () => [selectedPeriod, selectedTerm],
+  interval: REFRESH_INTERVAL,
+});
+
+const subjects = useAutoRefresh({
+  fetcher: () => client.getScraperSubjects().then((r) => r.subjects),
+  interval: REFRESH_INTERVAL,
+});
+
+const terms = useAutoRefresh({
+  fetcher: () => client.getAdminTerms().then((r) => r.terms),
+  interval: 0, // Fetch once, no auto-refresh
+  paused: termsCache.length > 0, // Skip if already cached
+});
+
+// Sync fetched data to module-level cache for navigation persistence
+$effect(() => {
+  if (stats.data) statsCache = stats.data;
+});
+$effect(() => {
+  if (timeseries.data) timeseriesCache = timeseries.data;
+});
+$effect(() => {
+  if (subjects.data && subjects.data.length > 0) subjectsCache = subjects.data;
+});
+$effect(() => {
+  if (terms.data && terms.data.length > 0) termsCache = terms.data;
+});
+
+// Use cached data as fallback, fresh data when available
+let currentStats = $derived(stats.data ?? statsCache);
+let currentTimeseries = $derived(timeseries.data ?? timeseriesCache);
+let currentSubjects = $derived(subjects.data ?? subjectsCache);
+let currentTerms = $derived(terms.data ?? termsCache);
+
+// Combined loading state (show spinner if main stats are loading)
+let isLoading = $derived(stats.isLoading);
+let hasError = $derived(stats.hasError || timeseries.hasError || subjects.hasError);
+let errorMessage = $derived(stats.error ?? timeseries.error ?? subjects.error);
+
+// --- Expanded subject detail ---
 let expandedSubject = $state<string | null>(null);
 let subjectDetail = $state<SubjectDetailResponse | null>(null);
 let detailLoading = $state(false);
-
-// Live-updating clock for relative timestamps
-let now = $state(new Date());
-let tickTimer: ReturnType<typeof setTimeout> | undefined;
-
-function scheduleTick() {
-  tickTimer = setTimeout(() => {
-    now = new Date();
-    scheduleTick();
-  }, 1000);
-}
-
-// --- Auto-refresh with backoff (ported from audit log) ---
-const MIN_INTERVAL = 5_000;
-const MAX_INTERVAL = 60_000;
-let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-let destroyed = false;
-
-const MIN_SPIN_MS = 700;
-let spinnerVisible = $state(false);
-let spinHoldTimer: ReturnType<typeof setTimeout> | undefined;
-
-async function fetchAll() {
-  if (destroyed) return;
-  refreshError = false;
-  spinnerVisible = true;
-  clearTimeout(spinHoldTimer);
-  const startedAt = performance.now();
-
-  try {
-    const [statsRes, timeseriesRes, subjectsRes] = await Promise.all([
-      client.getScraperStats(selectedPeriod),
-      client.getScraperTimeseries(selectedPeriod),
-      client.getScraperSubjects(),
-    ]);
-    if (destroyed) return;
-    stats = statsRes;
-    timeseries = timeseriesRes;
-    subjects = subjectsRes.subjects;
-    error = null;
-    refreshInterval = MIN_INTERVAL;
-  } catch (e) {
-    if (destroyed) return;
-    error = e instanceof Error ? e.message : "Failed to load scraper data";
-    refreshError = true;
-    refreshInterval = Math.min(refreshInterval * 2, MAX_INTERVAL);
-  } finally {
-    if (!destroyed) {
-      const elapsed = performance.now() - startedAt;
-      const remaining = MIN_SPIN_MS - elapsed;
-      if (remaining > 0) {
-        spinHoldTimer = setTimeout(() => {
-          spinnerVisible = false;
-        }, remaining);
-      } else {
-        spinnerVisible = false;
-      }
-      scheduleRefresh();
-    }
-  }
-}
-
-function scheduleRefresh() {
-  if (destroyed) return;
-  clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(() => void fetchAll(), refreshInterval);
-}
 
 async function toggleSubjectDetail(subject: string) {
   if (expandedSubject === subject) {
@@ -140,12 +129,35 @@ async function toggleSubjectDetail(subject: string) {
   }
 }
 
+// --- Live-updating clock for relative timestamps ---
+let now = $state(new Date());
+let tickTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleTick() {
+  tickTimer = setTimeout(() => {
+    now = new Date();
+    scheduleTick();
+  }, 1000);
+}
+
+// Start the clock
+scheduleTick();
+
+onDestroy(() => {
+  clearTimeout(tickTimer);
+});
+
 // --- Chart data ---
 
-interface ChartPoint { date: Date; success: number; errors: number; coursesChanged: number }
+interface ChartPoint {
+  date: Date;
+  success: number;
+  errors: number;
+  coursesChanged: number;
+}
 
 let chartData = $derived(
-  (timeseries?.points ?? []).map((p) => ({
+  (currentTimeseries?.points ?? []).map((p) => ({
     date: new Date(p.timestamp),
     success: p.successCount,
     errors: p.errorCount,
@@ -153,12 +165,11 @@ let chartData = $derived(
   })),
 );
 
-// Tween the data array so stacked areas stay aligned (both read the same interpolated values each frame)
+// Tween the data array so stacked areas stay aligned
 const tweenedChart = new Tween<ChartPoint[]>([], {
   duration: 600,
   easing: cubicOut,
   interpolate(from, to) {
-    // Different lengths: snap immediately (period change reshapes the array)
     if (from.length !== to.length) return () => to;
     return (t) =>
       to.map((dest, i) => ({
@@ -177,6 +188,14 @@ $effect(() => {
 let scrapeYMax = $derived(Math.max(1, ...chartData.map((d) => d.success + d.errors)));
 let changesYMax = $derived(Math.max(1, ...chartData.map((d) => d.coursesChanged)));
 
+// --- Term Select Items ---
+let termItems = $derived([
+  { value: "", label: "All Terms" },
+  ...currentTerms.map((t) => ({ value: t.code, label: t.description })),
+]);
+
+let termSelectValue = $derived(selectedTerm ?? "");
+
 // --- Helpers ---
 
 function formatInterval(secs: number): string {
@@ -191,7 +210,6 @@ function successRateColor(rate: number): string {
   return "text-red-600 dark:text-red-400";
 }
 
-/** Muted class for zero/default values, foreground for interesting ones. */
 function emphasisClass(value: number): string {
   return value === 0 ? "text-muted-foreground" : "text-foreground";
 }
@@ -277,7 +295,7 @@ const columns: ColumnDef<SubjectSummary, unknown>[] = [
 
 const table = createSvelteTable({
   get data() {
-    return subjects;
+    return currentSubjects;
   },
   getRowId: (row) => row.subject,
   columns,
@@ -305,32 +323,6 @@ const skeletonWidths: Record<string, string> = {
 
 const columnCount = columns.length;
 const detailGridCols = "grid-cols-[7fr_5fr_3fr_4fr_4fr_3fr_4fr_minmax(6rem,1fr)]";
-
-// --- Lifecycle ---
-
-onMount(() => {
-  destroyed = false;
-  mounted = true;
-  void fetchAll();
-  scheduleTick();
-});
-
-onDestroy(() => {
-  destroyed = true;
-  mounted = false;
-  clearTimeout(tickTimer);
-  clearTimeout(refreshTimer);
-  clearTimeout(spinHoldTimer);
-});
-
-// Refetch when period changes (skip initial run since onMount handles it)
-let mounted = false;
-$effect(() => {
-  void selectedPeriod;
-  if (mounted && !destroyed) {
-    void fetchAll();
-  }
-});
 </script>
 
 <div class="flex flex-col gap-y-6">
@@ -338,47 +330,109 @@ $effect(() => {
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2">
       <h1 class="text-base font-semibold text-foreground">Scraper</h1>
-      {#if spinnerVisible}
+      {#if isLoading}
         <span in:fade={{ duration: 150 }} out:fade={{ duration: 200 }}>
           <LoaderCircle class="size-4 animate-spin text-muted-foreground" />
         </span>
-      {:else if refreshError}
+      {:else if hasError}
         <span in:fade={{ duration: 150 }} out:fade={{ duration: 200 }}>
-          <SimpleTooltip text={error ?? "Refresh failed"} side="right" passthrough>
+          <SimpleTooltip text={errorMessage ?? "Refresh failed"} side="right" passthrough>
             <AlertCircle class="size-4 text-destructive" />
           </SimpleTooltip>
         </span>
       {/if}
     </div>
-    <div class="bg-muted flex rounded-md p-0.5">
-      {#each PERIODS as period (period)}
-        <button
-          class="rounded px-2.5 py-1 text-xs font-medium transition-colors
-            {selectedPeriod === period
-            ? 'bg-background text-foreground shadow-sm'
-            : 'text-muted-foreground hover:text-foreground'}"
-          onclick={() => (selectedPeriod = period)}
+    <div class="flex items-center gap-2">
+      <!-- Term Dropdown -->
+      <Select.Root
+        type="single"
+        value={termSelectValue}
+        onValueChange={(v: string) => {
+          selectedTerm = v === "" ? undefined : v;
+        }}
+        items={termItems}
+      >
+        <Select.Trigger
+          class="inline-flex items-center justify-between gap-1.5 h-[30px] px-2.5
+                 rounded-md text-xs font-medium
+                 bg-muted text-muted-foreground
+                 hover:text-foreground transition-colors
+                 cursor-pointer select-none outline-none
+                 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          {period}
-        </button>
-      {/each}
+          <span class="truncate max-w-[120px]">
+            {termItems.find((t) => t.value === termSelectValue)?.label ?? "All Terms"}
+          </span>
+          <ChevronDown class="size-3.5 shrink-0 opacity-60" />
+        </Select.Trigger>
+        <Select.Portal>
+          <Select.Content
+            class="border border-border bg-card shadow-md outline-hidden z-50
+                   max-h-72 min-w-[140px] w-auto
+                   select-none rounded-md p-1
+                   data-[state=open]:animate-in data-[state=closed]:animate-out
+                   data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0
+                   data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95
+                   data-[side=top]:slide-in-from-bottom-2
+                   data-[side=bottom]:slide-in-from-top-2"
+            side="bottom"
+            sideOffset={4}
+          >
+            <Select.ScrollUpButton class="flex w-full items-center justify-center py-0.5">
+              <ChevronUp class="size-3.5 text-muted-foreground" />
+            </Select.ScrollUpButton>
+            <Select.Viewport class="p-0.5">
+              {#each termItems as item (item.value)}
+                <Select.Item
+                  class="rounded-sm outline-hidden flex h-8 w-full select-none items-center
+                         px-2.5 text-xs
+                         data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground
+                         data-[selected]:font-semibold"
+                  value={item.value}
+                  label={item.label}
+                >
+                  {item.label}
+                </Select.Item>
+              {/each}
+            </Select.Viewport>
+            <Select.ScrollDownButton class="flex w-full items-center justify-center py-0.5">
+              <ChevronDown class="size-3.5 text-muted-foreground" />
+            </Select.ScrollDownButton>
+          </Select.Content>
+        </Select.Portal>
+      </Select.Root>
+
+      <!-- Period Selector -->
+      <div class="bg-muted flex rounded-md p-0.5">
+        {#each PERIODS as period (period)}
+          <button
+            class="rounded px-2.5 py-1 text-xs font-medium transition-colors
+              {selectedPeriod === period
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'}"
+            onclick={() => (selectedPeriod = period)}
+          >
+            {period}
+          </button>
+        {/each}
+      </div>
     </div>
   </div>
 
-  {#if error && !stats}
-    <p class="text-destructive">{error}</p>
-  {:else if stats}
+  {#if errorMessage && !currentStats}
+    <p class="text-destructive">{errorMessage}</p>
+  {:else if currentStats}
     <!-- Stats Cards -->
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div class="bg-card border-border rounded-lg border p-3">
         <p class="text-muted-foreground text-xs">Total Scrapes</p>
-        <p class="text-2xl font-bold">{formatNumber(stats.totalScrapes)}</p>
+        <p class="text-2xl font-bold">{formatNumber(currentStats.totalScrapes)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
         <p class="text-muted-foreground text-xs">Success Rate</p>
-        {#if stats.successRate != null}
-          <p class="text-2xl font-bold {successRateColor(stats.successRate)}">
-            {(stats.successRate * 100).toFixed(1)}%
+        {#if currentStats.successRate != null}
+          <p class="text-2xl font-bold {successRateColor(currentStats.successRate)}">
+            {(currentStats.successRate * 100).toFixed(1)}%
           </p>
         {:else}
           <p class="text-2xl font-bold text-muted-foreground">N/A</p>
@@ -391,8 +445,8 @@ $effect(() => {
             <Info class="size-3 text-muted-foreground/60" />
           </SimpleTooltip>
         </div>
-        {#if stats.avgDurationMs != null}
-          <p class="text-2xl font-bold">{formatDurationMs(stats.avgDurationMs)}</p>
+        {#if currentStats.avgDurationMs != null}
+          <p class="text-2xl font-bold">{formatDurationMs(currentStats.avgDurationMs)}</p>
         {:else}
           <p class="text-2xl font-bold text-muted-foreground">N/A</p>
         {/if}
@@ -404,7 +458,7 @@ $effect(() => {
             <Info class="size-3 text-muted-foreground/60" />
           </SimpleTooltip>
         </div>
-        <p class="text-2xl font-bold">{formatNumber(stats.totalCoursesChanged)}</p>
+        <p class="text-2xl font-bold">{formatNumber(currentStats.totalCoursesChanged)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
         <div class="flex items-center gap-1">
@@ -413,7 +467,7 @@ $effect(() => {
             <Info class="size-3 text-muted-foreground/60" />
           </SimpleTooltip>
         </div>
-        <p class="text-2xl font-bold">{formatNumber(stats.pendingJobs)}</p>
+        <p class="text-2xl font-bold">{formatNumber(currentStats.pendingJobs)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
         <div class="flex items-center gap-1">
@@ -422,7 +476,7 @@ $effect(() => {
             <Info class="size-3 text-muted-foreground/60" />
           </SimpleTooltip>
         </div>
-        <p class="text-2xl font-bold">{formatNumber(stats.lockedJobs)}</p>
+        <p class="text-2xl font-bold">{formatNumber(currentStats.lockedJobs)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
         <div class="flex items-center gap-1">
@@ -431,7 +485,7 @@ $effect(() => {
             <Info class="size-3 text-muted-foreground/60" />
           </SimpleTooltip>
         </div>
-        <p class="text-2xl font-bold">{formatNumber(stats.totalCoursesFetched)}</p>
+        <p class="text-2xl font-bold">{formatNumber(currentStats.totalCoursesFetched)}</p>
       </div>
       <div class="bg-card border-border rounded-lg border p-3">
         <div class="flex items-center gap-1">
@@ -440,7 +494,7 @@ $effect(() => {
             <Info class="size-3 text-muted-foreground/60" />
           </SimpleTooltip>
         </div>
-        <p class="text-2xl font-bold">{formatNumber(stats.totalAuditsGenerated)}</p>
+        <p class="text-2xl font-bold">{formatNumber(currentStats.totalAuditsGenerated)}</p>
       </div>
     </div>
 
@@ -566,7 +620,7 @@ $effect(() => {
     <!-- Subjects Table -->
     <div class="bg-card border-border rounded-lg border">
       <h2 class="border-border border-b px-3 py-2.5 text-xs font-semibold text-foreground">
-        Subjects ({subjects.length})
+        Subjects ({currentSubjects.length})
       </h2>
       <div class="overflow-x-auto">
         <table class="w-full min-w-160 border-collapse text-xs">
@@ -612,7 +666,7 @@ $effect(() => {
             {/each}
           </thead>
           <tbody>
-            {#if !subjects.length && !error}
+            {#if !currentSubjects.length && !errorMessage}
               <!-- Skeleton loading -->
               {#each Array(12) as _, i (i)}
                 <tr class="border-border border-b">

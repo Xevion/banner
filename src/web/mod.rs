@@ -3,6 +3,7 @@
 pub mod admin;
 pub mod admin_rmp;
 pub mod admin_scraper;
+pub mod admin_terms;
 #[cfg(feature = "embed-assets")]
 pub mod assets;
 pub mod auth;

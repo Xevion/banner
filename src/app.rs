@@ -77,19 +77,35 @@ impl App {
             .context("Failed to run database migrations")?;
         info!("Database migrations completed successfully");
 
-        // Backfill structured name columns for existing instructors
-        if let Err(e) = crate::data::names::backfill_instructor_names(&db_pool).await {
-            warn!(error = ?e, "Failed to backfill instructor names (non-fatal)");
-        }
-
-        // Create BannerApi and AppState
+        // Create BannerApi early so we can use it for term sync
         let banner_api = BannerApi::new_with_config(
             config.banner_base_url.clone(),
             config.rate_limiting.clone(),
         )
         .context("Failed to create BannerApi")?;
-
         let banner_api_arc = Arc::new(banner_api);
+
+        // Sync terms from Banner API (non-fatal if fails)
+        match Self::sync_terms_on_startup(&db_pool, &banner_api_arc).await {
+            Ok(result) => {
+                info!(
+                    inserted = result.inserted,
+                    updated = result.updated,
+                    "Term sync completed"
+                );
+            }
+            Err(e) => {
+                // Non-fatal: app can start without terms, scheduler will retry
+                warn!(error = ?e, "Failed to sync terms on startup (non-fatal)");
+            }
+        }
+
+        // Backfill structured name columns for existing instructors
+        if let Err(e) = crate::data::names::backfill_instructor_names(&db_pool).await {
+            warn!(error = ?e, "Failed to backfill instructor names (non-fatal)");
+        }
+
+        // Create AppState (BannerApi already created above for term sync)
         let app_state = AppState::new(banner_api_arc.clone(), db_pool.clone());
 
         // Load reference data cache from DB (may be empty on first run)
@@ -202,5 +218,23 @@ impl App {
     /// Get a reference to the configuration
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// Sync terms from Banner API on startup.
+    ///
+    /// This is non-fatal - if it fails, the scheduler will retry periodically.
+    async fn sync_terms_on_startup(
+        db_pool: &sqlx::PgPool,
+        banner_api: &Arc<BannerApi>,
+    ) -> Result<crate::data::terms::SyncResult, anyhow::Error> {
+        let banner_terms = banner_api
+            .sessions
+            .get_terms("", 1, 500)
+            .await
+            .context("Failed to fetch terms from Banner API")?;
+
+        crate::data::terms::sync_terms_from_banner(db_pool, banner_terms)
+            .await
+            .context("Failed to sync terms to database")
     }
 }

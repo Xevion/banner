@@ -1,6 +1,7 @@
 use crate::banner::{BannerApi, Term};
 use crate::data::models::{ReferenceData, ScrapePriority, TargetType};
 use crate::data::scrape_jobs;
+use crate::data::terms;
 use crate::error::Result;
 use crate::rmp::RmpClient;
 use crate::scraper::adaptive::{SubjectSchedule, SubjectStats, evaluate_subject};
@@ -23,6 +24,9 @@ const REFERENCE_DATA_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 /// How often RMP data is synced (24 hours).
 const RMP_SYNC_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// How often terms are synced from Banner API (8 hours).
+const TERM_SYNC_INTERVAL: Duration = Duration::from_secs(8 * 60 * 60);
 
 /// Periodically analyzes data and enqueues prioritized scrape jobs.
 pub struct Scheduler {
@@ -66,6 +70,8 @@ impl Scheduler {
         let mut last_ref_scrape = Instant::now() - REFERENCE_DATA_INTERVAL;
         // Sync RMP data immediately on first cycle
         let mut last_rmp_sync = Instant::now() - RMP_SYNC_INTERVAL;
+        // Sync terms immediately on first cycle (also done at startup, but scheduler handles periodic)
+        let mut last_term_sync = Instant::now() - TERM_SYNC_INTERVAL;
 
         loop {
             tokio::select! {
@@ -74,6 +80,7 @@ impl Scheduler {
 
                     let should_scrape_ref = last_ref_scrape.elapsed() >= REFERENCE_DATA_INTERVAL;
                     let should_sync_rmp = last_rmp_sync.elapsed() >= RMP_SYNC_INTERVAL;
+                    let should_sync_terms = last_term_sync.elapsed() >= TERM_SYNC_INTERVAL;
 
                     // Spawn work in separate task to allow graceful cancellation during shutdown.
                     let work_handle = tokio::spawn({
@@ -86,9 +93,16 @@ impl Scheduler {
                                 async move {
                                     tokio::select! {
                                         _ = async {
-                                            // RMP sync is independent of Banner API — run it
-                                            // concurrently with reference data scraping so it
-                                            // doesn't wait behind rate-limited Banner calls.
+                                            // Term sync, RMP sync, and reference data are independent —
+                                            // run them concurrently so they don't wait behind each other.
+                                            let term_fut = async {
+                                                if should_sync_terms
+                                                    && let Err(e) = Self::sync_terms(&db_pool, &banner_api).await
+                                                {
+                                                    error!(error = ?e, "Failed to sync terms");
+                                                }
+                                            };
+
                                             let rmp_fut = async {
                                                 if should_sync_rmp
                                                     && let Err(e) = Self::sync_rmp_data(&db_pool).await
@@ -105,7 +119,7 @@ impl Scheduler {
                                                 }
                                             };
 
-                                            tokio::join!(rmp_fut, ref_fut);
+                                            tokio::join!(term_fut, rmp_fut, ref_fut);
 
                                             if let Err(e) = Self::schedule_jobs_impl(&db_pool, &banner_api, Some(&job_events_tx)).await {
                                                 error!(error = ?e, "Failed to schedule jobs");
@@ -123,6 +137,9 @@ impl Scheduler {
                     }
                     if should_sync_rmp {
                         last_rmp_sync = Instant::now();
+                    }
+                    if should_sync_terms {
+                        last_term_sync = Instant::now();
                     }
 
                     current_work = Some((work_handle, cancel_token));
@@ -151,29 +168,59 @@ impl Scheduler {
 
     /// Core scheduling logic that analyzes data and creates scrape jobs.
     ///
+    /// Queries all enabled terms from the `terms` table and schedules jobs for each.
     /// Uses adaptive scheduling to determine per-subject scrape intervals based
-    /// on recent change rates, failure patterns, and time of day. Only subjects
-    /// that are eligible (i.e. their cooldown has elapsed) are enqueued.
+    /// on recent change rates, failure patterns, and time of day.
     ///
     /// This is a static method (not &self) to allow it to be called from spawned tasks.
-    #[tracing::instrument(skip_all, fields(term))]
+    #[tracing::instrument(skip_all)]
     async fn schedule_jobs_impl(
         db_pool: &PgPool,
         banner_api: &BannerApi,
         job_events_tx: Option<&broadcast::Sender<ScrapeJobEvent>>,
     ) -> Result<()> {
-        let term = Term::get_current().inner().to_string();
+        // Query enabled terms from database
+        let enabled_terms = terms::get_enabled_term_codes(db_pool).await?;
 
-        tracing::Span::current().record("term", term.as_str());
-        debug!(term = term, "Enqueuing subject jobs");
+        if enabled_terms.is_empty() {
+            debug!("No enabled terms to schedule");
+            return Ok(());
+        }
 
-        let subjects = banner_api.get_subjects("", &term, 1, 500).await?;
+        info!(terms = ?enabled_terms, "Scheduling jobs for enabled terms");
+
+        for term_code in enabled_terms {
+            if let Err(e) =
+                Self::schedule_term_jobs(db_pool, banner_api, job_events_tx, &term_code).await
+            {
+                error!(term = %term_code, error = ?e, "Failed to schedule jobs for term");
+                // Continue with other terms
+            }
+        }
+
+        debug!("Job scheduling complete");
+        Ok(())
+    }
+
+    /// Schedule jobs for a single term.
+    #[tracing::instrument(skip_all, fields(term = %term_code))]
+    async fn schedule_term_jobs(
+        db_pool: &PgPool,
+        banner_api: &BannerApi,
+        job_events_tx: Option<&broadcast::Sender<ScrapeJobEvent>>,
+        term_code: &str,
+    ) -> Result<()> {
+        debug!("Enqueuing subject jobs for term");
+
+        let subjects = banner_api.get_subjects("", term_code, 1, 500).await?;
         debug!(
             subject_count = subjects.len(),
             "Retrieved subjects from API"
         );
 
         // Fetch per-subject stats and build a lookup map
+        // Note: Currently stats are not term-aware, so we use global stats.
+        // A future enhancement could add term-specific stats.
         let stats_rows = scrape_jobs::fetch_subject_stats(db_pool).await?;
         let stats_map: HashMap<String, SubjectStats> = stats_rows
             .into_iter()
@@ -183,9 +230,12 @@ impl Scheduler {
             })
             .collect();
 
+        // Determine if this is a past term (for ReadOnly mode)
+        let current_term_code = Term::get_current().inner().to_string();
+        let is_past_term = term_code < current_term_code.as_str();
+
         // Evaluate each subject using adaptive scheduling
         let now = Utc::now();
-        let is_past_term = false; // Scheduler currently only fetches current term subjects
         let mut eligible_subjects: Vec<String> = Vec::new();
         let mut cooldown_count: usize = 0;
         let mut paused_count: usize = 0;
@@ -217,23 +267,25 @@ impl Scheduler {
         }
 
         info!(
+            term = %term_code,
             total = subjects.len(),
             eligible = eligible_subjects.len(),
             cooldown = cooldown_count,
             paused = paused_count,
             read_only = read_only_count,
+            is_past_term,
             "Adaptive scheduling decisions"
         );
 
         if eligible_subjects.is_empty() {
-            debug!("No eligible subjects to schedule");
+            debug!(term = %term_code, "No eligible subjects to schedule");
             return Ok(());
         }
 
-        // Create payloads only for eligible subjects
+        // Create payloads with term field for eligible subjects
         let subject_payloads: Vec<_> = eligible_subjects
             .iter()
-            .map(|code| json!({ "subject": code }))
+            .map(|code| json!({ "subject": code, "term": term_code }))
             .collect();
 
         // Query existing jobs for eligible subjects only
@@ -249,7 +301,7 @@ impl Scheduler {
         let new_jobs: Vec<_> = eligible_subjects
             .into_iter()
             .filter_map(|subject_code| {
-                let job = SubjectJob::new(subject_code.clone());
+                let job = SubjectJob::new(subject_code.clone(), term_code.to_string());
                 let payload = serde_json::to_value(&job).unwrap();
                 let payload_str = payload.to_string();
 
@@ -263,13 +315,13 @@ impl Scheduler {
             .collect();
 
         if skipped_count > 0 {
-            debug!(count = skipped_count, "Skipped subjects with existing jobs");
+            debug!(count = skipped_count, term = %term_code, "Skipped subjects with existing jobs");
         }
 
         // Insert all new jobs in a single batch
         if !new_jobs.is_empty() {
             for (_, subject_code) in &new_jobs {
-                debug!(subject = subject_code, "New job enqueued for subject");
+                debug!(subject = subject_code, term = %term_code, "New job enqueued for subject");
             }
 
             let jobs: Vec<_> = new_jobs
@@ -289,7 +341,23 @@ impl Scheduler {
             }
         }
 
-        debug!("Job scheduling complete");
+        Ok(())
+    }
+
+    /// Sync terms from Banner API to database (periodic background job).
+    #[tracing::instrument(skip_all)]
+    async fn sync_terms(db_pool: &PgPool, banner_api: &BannerApi) -> Result<()> {
+        info!("Starting term sync from Banner API");
+
+        let banner_terms = banner_api.sessions.get_terms("", 1, 500).await?;
+        let result = terms::sync_terms_from_banner(db_pool, banner_terms).await?;
+
+        info!(
+            inserted = result.inserted,
+            updated = result.updated,
+            "Term sync completed"
+        );
+
         Ok(())
     }
 
