@@ -33,6 +33,7 @@ pub trait Job: Send + Sync {
     async fn process(&self, banner_api: &BannerApi, db: &DbContext) -> Result<UpsertCounts>;
 
     /// Get a human-readable description of the job
+    #[allow(dead_code)]
     fn description(&self) -> String;
 }
 

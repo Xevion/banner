@@ -1,3 +1,4 @@
+use crate::utils::fmt_duration;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
@@ -61,12 +62,12 @@ pub async fn run_service(
             match service.shutdown().await {
                 Ok(()) => {
                     let elapsed = start_time.elapsed();
-                    info!(service = name, "shutdown completed in {elapsed:.2?}");
+                    info!(service = name, elapsed = fmt_duration(elapsed), "shutdown completed");
                     ServiceResult::GracefulShutdown
                 }
                 Err(e) => {
                     let elapsed = start_time.elapsed();
-                    error!(service = name, "shutdown failed after {elapsed:.2?}: {e}");
+                    error!(service = name, elapsed = fmt_duration(elapsed), error = ?e, "shutdown failed");
                     ServiceResult::Error(e)
                 }
             }

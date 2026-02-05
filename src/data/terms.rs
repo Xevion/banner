@@ -207,7 +207,7 @@ pub async fn sync_terms_from_banner(
 
         // Skip terms with unrecognized format (e.g., legacy terms with non-standard season codes)
         let Some((year, season)) = parse_term_code(&term.code) else {
-            tracing::warn!(
+            tracing::debug!(
                 code = %term.code,
                 description = %term.description,
                 is_archived,
@@ -268,6 +268,14 @@ pub async fn sync_terms_from_banner(
                 );
             }
         }
+    }
+
+    // Log summary of skipped terms if any
+    if result.skipped > 0 {
+        tracing::warn!(
+            skipped = result.skipped,
+            "Skipped terms with unrecognized format codes"
+        );
     }
 
     Ok(result)

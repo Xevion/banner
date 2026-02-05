@@ -8,6 +8,7 @@ use axum::response::{IntoResponse, Json, Response};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tracing::{debug, error, info, instrument};
 use ts_rs::TS;
 
 use crate::data::models::User;
@@ -48,6 +49,7 @@ pub struct AdminStatusResponse {
 }
 
 /// `GET /api/admin/status` — Enhanced system status for admins.
+#[instrument(skip_all)]
 pub async fn admin_status(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
@@ -56,7 +58,7 @@ pub async fn admin_status(
         .fetch_one(&state.db_pool)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "failed to count users");
+            error!(error = %e, "Failed to count users");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "failed to count users"})),
@@ -68,7 +70,7 @@ pub async fn admin_status(
             .fetch_one(&state.db_pool)
             .await
             .map_err(|e| {
-                tracing::error!(error = %e, "failed to count sessions");
+                error!(error = %e, "Failed to count sessions");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({"error": "failed to count sessions"})),
@@ -76,7 +78,7 @@ pub async fn admin_status(
             })?;
 
     let course_count = state.get_course_count().await.map_err(|e| {
-        tracing::error!(error = %e, "failed to count courses");
+        error!(error = %e, "Failed to count courses");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "failed to count courses"})),
@@ -87,7 +89,7 @@ pub async fn admin_status(
         .fetch_one(&state.db_pool)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "failed to count scrape jobs");
+            error!(error = %e, "Failed to count scrape jobs");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "failed to count scrape jobs"})),
@@ -101,6 +103,15 @@ pub async fn admin_status(
         .map(|(name, status)| AdminServiceInfo { name, status })
         .collect();
 
+    debug!(
+        user_count,
+        session_count,
+        course_count,
+        scrape_job_count,
+        service_count = services.len(),
+        "Fetched admin status"
+    );
+
     Ok(Json(AdminStatusResponse {
         user_count,
         session_count,
@@ -111,6 +122,7 @@ pub async fn admin_status(
 }
 
 /// `GET /api/admin/users` — List all users.
+#[instrument(skip_all)]
 pub async fn list_users(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
@@ -118,12 +130,14 @@ pub async fn list_users(
     let users = crate::data::users::list_users(&state.db_pool)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "failed to list users");
+            error!(error = %e, "Failed to list users");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "failed to list users"})),
             )
         })?;
+
+    debug!(count = users.len(), "Listed users");
 
     Ok(Json(users))
 }
@@ -134,6 +148,7 @@ pub struct SetAdminBody {
 }
 
 /// `PUT /api/admin/users/{discord_id}/admin` — Set admin status for a user.
+#[instrument(skip_all, fields(discord_id))]
 pub async fn set_user_admin(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
@@ -143,7 +158,7 @@ pub async fn set_user_admin(
     let user = crate::data::users::set_admin(&state.db_pool, discord_id, body.is_admin)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "failed to set admin status");
+            error!(error = %e, "Failed to set admin status");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "failed to set admin status"})),
@@ -158,10 +173,17 @@ pub async fn set_user_admin(
 
     state.session_cache.evict_user(discord_id);
 
+    info!(
+        discord_id,
+        is_admin = body.is_admin,
+        "Updated user admin status"
+    );
+
     Ok(Json(user))
 }
 
 /// `GET /api/admin/scrape-jobs` — List scrape jobs.
+#[instrument(skip_all)]
 pub async fn list_scrape_jobs(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
@@ -172,7 +194,7 @@ pub async fn list_scrape_jobs(
     .fetch_all(&state.db_pool)
     .await
     .map_err(|e| {
-        tracing::error!(error = %e, "failed to list scrape jobs");
+        error!(error = %e, "Failed to list scrape jobs");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "failed to list scrape jobs"})),
@@ -180,6 +202,8 @@ pub async fn list_scrape_jobs(
     })?;
 
     let jobs: Vec<ScrapeJobDto> = rows.iter().map(ScrapeJobDto::from).collect();
+
+    debug!(count = jobs.len(), "Listed scrape jobs");
 
     Ok(Json(ScrapeJobsResponse { jobs }))
 }
@@ -217,6 +241,7 @@ fn parse_if_modified_since(headers: &HeaderMap) -> Option<DateTime<Utc>> {
 /// `GET /api/admin/audit-log` — List recent audit entries.
 ///
 /// Supports `If-Modified-Since`: returns 304 when the newest entry hasn't changed.
+#[instrument(skip_all)]
 pub async fn list_audit_log(
     AdminUser(_user): AdminUser,
     headers: HeaderMap,
@@ -232,7 +257,7 @@ pub async fn list_audit_log(
     .fetch_all(&state.db_pool)
     .await
     .map_err(|e| {
-        tracing::error!(error = %e, "failed to list audit log");
+        error!(error = %e, "Failed to list audit log");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "failed to list audit log"})),
@@ -246,6 +271,7 @@ pub async fn list_audit_log(
     if let (Some(since), Some(latest_ts)) = (parse_if_modified_since(&headers), latest) {
         // Truncate to seconds for comparison (HTTP dates have second precision)
         if latest_ts.timestamp() <= since.timestamp() {
+            debug!("Audit log not modified, returning 304");
             let mut resp = StatusCode::NOT_MODIFIED.into_response();
             if let Ok(val) = to_http_date(&latest_ts).parse() {
                 resp.headers_mut().insert(header::LAST_MODIFIED, val);
@@ -270,6 +296,8 @@ pub async fn list_audit_log(
             term_code: a.term_code.clone(),
         })
         .collect();
+
+    debug!(count = entries.len(), "Listed audit log entries");
 
     let mut resp = Json(AuditLogResponse { entries }).into_response();
     if let Some(latest_ts) = latest

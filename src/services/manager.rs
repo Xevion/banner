@@ -1,7 +1,8 @@
+use crate::utils::fmt_duration;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 
 use crate::services::{Service, ServiceResult, run_service};
 
@@ -64,7 +65,6 @@ impl ServiceManager {
             // Store abort handle for shutdown control
             self.service_handles
                 .insert(name.clone(), handle.abort_handle());
-            debug!(service = name, id = ?handle.id(), "service spawned");
         }
 
         info!(
@@ -125,7 +125,7 @@ impl ServiceManager {
         info!(
             service_count,
             services = ?service_names,
-            timeout = format!("{:.2?}", timeout),
+            timeout = fmt_duration(timeout),
             "shutting down {} services in parallel with {:?} timeout each",
             service_count,
             timeout
@@ -164,7 +164,7 @@ impl ServiceManager {
             Err(_) => {
                 // Timeout exceeded - abort all remaining services
                 warn!(
-                    timeout = format!("{:.2?}", timeout),
+                    timeout = fmt_duration(timeout),
                     "shutdown timeout exceeded - aborting all remaining services"
                 );
 
@@ -200,7 +200,7 @@ impl ServiceManager {
         if failed_services.is_empty() {
             info!(
                 service_count,
-                elapsed = format!("{:.2?}", elapsed),
+                elapsed = fmt_duration(elapsed),
                 "all services shutdown successfully: {}",
                 service_names.join(", ")
             );
@@ -209,7 +209,7 @@ impl ServiceManager {
             warn!(
                 failed_count = failed_services.len(),
                 failed_services = ?failed_services,
-                elapsed = format!("{:.2?}", elapsed),
+                elapsed = fmt_duration(elapsed),
                 "{} service(s) failed to shutdown gracefully: {}",
                 failed_services.len(),
                 failed_services.join(", ")

@@ -1,14 +1,16 @@
 //! HTTP middleware for the Banner API client.
 
+use crate::utils::fmt_duration;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
+use std::time::Duration;
 use tracing::{debug, trace, warn};
 
 pub struct LoggingMiddleware;
 
 /// Threshold for logging slow requests at DEBUG level (in milliseconds)
-const SLOW_REQUEST_THRESHOLD_MS: u128 = 1000;
+const SLOW_REQUEST_THRESHOLD: Duration = Duration::from_secs(1);
 
 #[async_trait::async_trait]
 impl Middleware for LoggingMiddleware {
@@ -29,17 +31,34 @@ impl Middleware for LoggingMiddleware {
         match response_result {
             Ok(response) => {
                 let status = response.status().as_u16();
-                let duration_ms = duration.as_millis();
 
                 if response.status().is_success() {
-                    if duration_ms >= SLOW_REQUEST_THRESHOLD_MS {
-                        debug!(method, url, status, duration_ms, "Request completed (slow)");
+                    if duration >= SLOW_REQUEST_THRESHOLD {
+                        debug!(
+                            method,
+                            url,
+                            status,
+                            duration = fmt_duration(duration),
+                            "Request completed (slow)"
+                        );
                     } else {
-                        trace!(method, url, status, duration_ms, "Request completed");
+                        trace!(
+                            method,
+                            url,
+                            status,
+                            duration = fmt_duration(duration),
+                            "Request completed"
+                        );
                     }
                     Ok(response)
                 } else {
-                    warn!(method, url, status, duration_ms, "Request failed");
+                    warn!(
+                        method,
+                        url,
+                        status,
+                        duration = fmt_duration(duration),
+                        "Request failed"
+                    );
                     Ok(response)
                 }
             }
@@ -47,7 +66,7 @@ impl Middleware for LoggingMiddleware {
                 warn!(
                     method,
                     url,
-                    duration_ms = duration.as_millis(),
+                    duration = fmt_duration(duration),
                     "Request failed"
                 );
                 Err(error)

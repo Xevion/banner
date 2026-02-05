@@ -6,13 +6,14 @@ use crate::data::course_types::{DateRange, MeetingLocation};
 use crate::data::models::{DayOfWeek, DbMeetingTime, UpsertCounts};
 use crate::data::names::{decode_html_entities, parse_banner_name};
 use crate::error::Result;
+use crate::utils::fmt_duration;
 use crate::web::audit::AuditLogEntry;
 use chrono::NaiveDate;
 use sqlx::PgConnection;
 use sqlx::PgPool;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::time::Instant;
-use tracing::info;
+use std::time::{Duration, Instant};
+use tracing::{debug, info, warn};
 
 /// Parse a date string in MM/DD/YYYY format to `NaiveDate`.
 fn parse_mm_dd_yyyy(s: &str) -> Option<NaiveDate> {
@@ -56,10 +57,10 @@ fn to_db_meeting_times(course: &Course) -> serde_json::Value {
                 (Some(begin), Some(end)) => {
                     let result = TimeRange::from_hhmm(begin, end);
                     if result.is_none() {
-                        tracing::warn!(
+                        warn!(
                             crn = %mt.course_reference_number,
                             begin, end,
-                            "failed to parse meeting time range"
+                            "Failed to parse meeting time range"
                         );
                     }
                     result
@@ -73,12 +74,12 @@ fn to_db_meeting_times(course: &Course) -> serde_json::Value {
                 parse_mm_dd_yyyy(&mt.end_date),
             ) {
                 (Some(start), Some(end)) => DateRange::new(start, end).unwrap_or_else(|err| {
-                    tracing::warn!(
+                    warn!(
                         crn = %mt.course_reference_number,
                         start_date = %mt.start_date,
                         end_date = %mt.end_date,
-                        %err,
-                        "invalid date range, swapping start/end"
+                        ?err,
+                        "Invalid date range, swapping start/end"
                     );
                     // Swap so the invariant holds
                     DateRange {
@@ -87,11 +88,11 @@ fn to_db_meeting_times(course: &Course) -> serde_json::Value {
                     }
                 }),
                 _ => {
-                    tracing::warn!(
+                    warn!(
                         crn = %mt.course_reference_number,
                         start_date = %mt.start_date,
                         end_date = %mt.end_date,
-                        "failed to parse meeting date range, using epoch fallback"
+                        "Failed to parse meeting date range, using epoch fallback"
                     );
                     let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
                     DateRange {
@@ -527,15 +528,48 @@ pub async fn batch_upsert_courses(
     };
 
     let duration = start.elapsed();
-    info!(
-        courses_count = course_count,
-        courses_changed = counts.courses_changed,
-        courses_unchanged = counts.courses_unchanged,
-        audit_entries = counts.audits_generated,
-        metric_entries = counts.metrics_generated,
-        duration_ms = duration.as_millis(),
-        "Batch upserted courses with instructors, audits, and metrics"
-    );
+
+    if counts.courses_changed > 0 {
+        if counts.audits_generated > 0 {
+            info!(
+                courses_count = course_count,
+                courses_changed = counts.courses_changed,
+                duration = fmt_duration(duration),
+                audit_entries = counts.audits_generated,
+                "Batch upserted courses"
+            );
+        } else {
+            info!(
+                courses_count = course_count,
+                courses_changed = counts.courses_changed,
+                duration = fmt_duration(duration),
+                "Batch upserted courses"
+            );
+        }
+    } else if counts.audits_generated > 0 {
+        debug!(
+            courses_count = course_count,
+            courses_changed = counts.courses_changed,
+            duration = fmt_duration(duration),
+            audit_entries = counts.audits_generated,
+            "Batch upserted courses"
+        );
+    } else {
+        debug!(
+            courses_count = course_count,
+            courses_changed = counts.courses_changed,
+            duration = fmt_duration(duration),
+            "Batch upserted courses"
+        );
+    }
+
+    if duration > Duration::from_millis(500) {
+        warn!(
+            courses_count = course_count,
+            duration = fmt_duration(duration),
+            "Slow batch upsert query"
+        );
+    }
 
     Ok((counts, audit_entries))
 }
@@ -808,7 +842,7 @@ async fn upsert_instructors(
     }
 
     if skipped_no_email > 0 {
-        tracing::warn!(
+        warn!(
             count = skipped_no_email,
             "Skipped instructors with no email address"
         );
@@ -863,7 +897,7 @@ async fn upsert_course_instructors(
             course.term.as_str(),
         );
         let Some(&course_id) = crn_term_to_id.get(&key) else {
-            tracing::warn!(
+            warn!(
                 crn = %course.course_reference_number,
                 term = %course.term,
                 "No course_id found for CRN/term pair during instructor linking"

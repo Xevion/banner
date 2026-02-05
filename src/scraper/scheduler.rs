@@ -7,6 +7,7 @@ use crate::rmp::RmpClient;
 use crate::scraper::adaptive::{SubjectSchedule, SubjectStats, evaluate_subject};
 use crate::scraper::jobs::subject::SubjectJob;
 use crate::state::ReferenceCache;
+use crate::utils::fmt_duration;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
@@ -26,6 +27,8 @@ const RMP_SYNC_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// How often terms are synced from Banner API (8 hours).
 const TERM_SYNC_INTERVAL: Duration = Duration::from_secs(8 * 60 * 60);
+
+const SLOW_QUERY_THRESHOLD: Duration = Duration::from_millis(500);
 
 /// Periodically analyzes data and enqueues prioritized scrape jobs.
 pub struct Scheduler {
@@ -168,10 +171,17 @@ impl Scheduler {
     /// on recent change rates, failure patterns, and time of day.
     ///
     /// This is a static method (not &self) to allow it to be called from spawned tasks.
-    #[tracing::instrument(skip_all)]
     async fn schedule_jobs_impl(db: &DbContext, banner_api: &BannerApi) -> Result<()> {
         // Query enabled terms from database
+        let start = Instant::now();
         let enabled_terms = terms::get_enabled_term_codes(db.pool()).await?;
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_QUERY_THRESHOLD {
+            warn!(
+                duration = fmt_duration(elapsed),
+                "Slow query: get_enabled_term_codes"
+            );
+        }
 
         if enabled_terms.is_empty() {
             debug!("No enabled terms to schedule");
@@ -208,7 +218,15 @@ impl Scheduler {
 
         // Fetch per-subject stats and build a lookup map
         // Note: Currently stats are not term-aware, so we use global stats.
+        let start = Instant::now();
         let stats_rows = db.scrape_jobs().fetch_subject_stats().await?;
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_QUERY_THRESHOLD {
+            warn!(
+                duration = fmt_duration(elapsed),
+                "Slow query: fetch_subject_stats"
+            );
+        }
         let stats_map: HashMap<String, SubjectStats> = stats_rows
             .into_iter()
             .map(|row| {
@@ -254,7 +272,6 @@ impl Scheduler {
         }
 
         info!(
-            term = %term_code,
             total = subjects.len(),
             eligible = eligible_subjects.len(),
             cooldown = cooldown_count,
@@ -265,7 +282,7 @@ impl Scheduler {
         );
 
         if eligible_subjects.is_empty() {
-            debug!(term = %term_code, "No eligible subjects to schedule");
+            debug!("No eligible subjects to schedule");
             return Ok(());
         }
 
@@ -276,10 +293,18 @@ impl Scheduler {
             .collect();
 
         // Query existing jobs for eligible subjects only
+        let start = Instant::now();
         let existing_payloads = db
             .scrape_jobs()
             .find_existing_payloads(TargetType::Subject, &subject_payloads)
             .await?;
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_QUERY_THRESHOLD {
+            warn!(
+                duration = fmt_duration(elapsed),
+                "Slow query: find_existing_payloads"
+            );
+        }
 
         // Filter out subjects that already have pending jobs
         let mut skipped_count = 0;
@@ -300,13 +325,13 @@ impl Scheduler {
             .collect();
 
         if skipped_count > 0 {
-            debug!(count = skipped_count, term = %term_code, "Skipped subjects with existing jobs");
+            debug!(count = skipped_count, "Skipped subjects with existing jobs");
         }
 
         // Insert all new jobs in a single batch (events emitted automatically)
         if !new_jobs.is_empty() {
             for (_, subject_code) in &new_jobs {
-                debug!(subject = subject_code, term = %term_code, "New job enqueued for subject");
+                debug!(subject = %subject_code, "New job enqueued for subject");
             }
 
             let jobs: Vec<_> = new_jobs
@@ -314,7 +339,16 @@ impl Scheduler {
                 .map(|(payload, _)| (payload, TargetType::Subject, ScrapePriority::Low))
                 .collect();
 
+            let start = Instant::now();
             db.scrape_jobs().batch_insert(&jobs).await?;
+            let elapsed = start.elapsed();
+            if elapsed > SLOW_QUERY_THRESHOLD {
+                warn!(
+                    duration = fmt_duration(elapsed),
+                    count = jobs.len(),
+                    "Slow query: batch_insert"
+                );
+            }
         }
 
         Ok(())
@@ -326,7 +360,15 @@ impl Scheduler {
         info!("Starting term sync from Banner API");
 
         let banner_terms = banner_api.sessions.get_terms("", 1, 500).await?;
+        let start = Instant::now();
         let result = terms::sync_terms_from_banner(db_pool, banner_terms).await?;
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_QUERY_THRESHOLD {
+            warn!(
+                duration = fmt_duration(elapsed),
+                "Slow query: sync_terms_from_banner"
+            );
+        }
 
         info!(
             inserted = result.inserted,
@@ -346,10 +388,27 @@ impl Scheduler {
         let professors = client.fetch_all_professors().await?;
         let total = professors.len();
 
+        let start = Instant::now();
         crate::data::rmp::batch_upsert_rmp_professors(&professors, db_pool).await?;
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_QUERY_THRESHOLD {
+            warn!(
+                duration = fmt_duration(elapsed),
+                count = total,
+                "Slow query: batch_upsert_rmp_professors"
+            );
+        }
         info!(total, "RMP professors upserted");
 
+        let start = Instant::now();
         let stats = crate::data::rmp_matching::generate_candidates(db_pool).await?;
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_QUERY_THRESHOLD {
+            warn!(
+                duration = fmt_duration(elapsed),
+                "Slow query: generate_candidates"
+            );
+        }
         info!(
             total,
             stats.total_unmatched,
@@ -456,11 +515,28 @@ impl Scheduler {
 
         // Batch upsert all entries
         let total = all_entries.len();
+        let start = Instant::now();
         crate::data::reference::batch_upsert(&all_entries, db_pool).await?;
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_QUERY_THRESHOLD {
+            warn!(
+                duration = fmt_duration(elapsed),
+                count = total,
+                "Slow query: reference::batch_upsert"
+            );
+        }
         info!(total_entries = total, "Reference data upserted to DB");
 
         // Refresh in-memory cache
+        let start = Instant::now();
         let all = crate::data::reference::get_all(db_pool).await?;
+        let elapsed = start.elapsed();
+        if elapsed > SLOW_QUERY_THRESHOLD {
+            warn!(
+                duration = fmt_duration(elapsed),
+                "Slow query: reference::get_all"
+            );
+        }
         let count = all.len();
         *reference_cache.write().await = ReferenceCache::from_entries(all);
         info!(entries = count, "Reference cache refreshed");

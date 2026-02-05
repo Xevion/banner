@@ -52,13 +52,14 @@ use ts_rs::TS;
 
 use crate::state::AppState;
 use crate::status::ServiceStatus;
+use crate::utils::fmt_duration;
 #[cfg(not(feature = "embed-assets"))]
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::{
     classify::ServerErrorsFailureClass, compression::CompressionLayer, timeout::TimeoutLayer,
     trace::TraceLayer,
 };
-use tracing::{Span, debug, trace, warn};
+use tracing::{Span, debug, error, trace, warn};
 
 #[cfg(feature = "embed-assets")]
 use crate::web::assets::try_serve_asset_with_encoding;
@@ -190,19 +191,16 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
                         Duration::from_millis(1000)
                     };
 
-                    let (latency_str, status) = (
-                        format!("{latency:.2?}"),
-                        format!(
-                            "{} {}",
-                            response.status().as_u16(),
-                            response.status().canonical_reason().unwrap_or("??")
-                        ),
+                    let status = format!(
+                        "{} {}",
+                        response.status().as_u16(),
+                        response.status().canonical_reason().unwrap_or("??")
                     );
 
                     if latency > latency_threshold {
-                        warn!(latency = latency_str, status = status, "Response");
+                        warn!(latency = fmt_duration(latency), status = status, "Response");
                     } else {
-                        debug!(latency = latency_str, status = status, "Response");
+                        debug!(latency = fmt_duration(latency), status = status, "Response");
                     }
                 },
             )
@@ -210,7 +208,7 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
                 |error: ServerErrorsFailureClass, latency: Duration, _span: &Span| {
                     warn!(
                         error = ?error,
-                        latency = format!("{latency:.2?}"),
+                        latency = fmt_duration(latency),
                         "Request failed"
                     );
                 },
@@ -650,11 +648,11 @@ fn build_course_response(
     let meeting_times: Vec<models::DbMeetingTime> =
         serde_json::from_value(course.meeting_times.clone())
             .map_err(|e| {
-                tracing::error!(
+                error!(
                     course_id = course.id,
                     crn = %course.crn,
                     term = %course.term_code,
-                    error = %e,
+                    %e,
                     "Failed to deserialize meeting_times JSONB"
                 );
                 e
@@ -664,11 +662,11 @@ fn build_course_response(
     let attributes: Vec<Attribute> =
         serde_json::from_value::<Vec<String>>(course.attributes.clone())
             .map_err(|e| {
-                tracing::error!(
+                error!(
                     course_id = course.id,
                     crn = %course.crn,
                     term = %course.term_code,
-                    error = %e,
+                    %e,
                     "Failed to deserialize attributes JSONB"
                 );
                 e
@@ -682,10 +680,10 @@ fn build_course_response(
         Some(code) => match InstructionalMethod::from_code(code) {
             Ok(method) => (Some(method), None),
             Err(_) => {
-                tracing::warn!(
+                warn!(
                     crn = %course.crn,
                     term = %course.term_code,
-                    code = %code,
+                    %code,
                     "Unknown instructional method code"
                 );
                 (None, Some(code.clone()))

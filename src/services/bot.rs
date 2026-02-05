@@ -80,10 +80,20 @@ impl BotService {
                 },
                 ..Default::default()
             })
-            .setup(move |ctx, _ready, framework| {
+            .setup(move |ctx, ready, framework| {
                 let app_state = app_state.clone();
                 let status_task_handle = status_task_handle.clone();
                 Box::pin(async move {
+                    let command_count = framework.options().commands.len();
+                    info!(
+                        username = %ready.user.name,
+                        user_id = %ready.user.id,
+                        guilds = ready.guilds.len(),
+                        shard_count = ready.shard.map(|s| s.total).unwrap_or(1),
+                        commands = command_count,
+                        "Discord bot connected and ready"
+                    );
+
                     poise::builtins::register_in_guild(
                         ctx,
                         &framework.options().commands,
@@ -91,6 +101,13 @@ impl BotService {
                     )
                     .await?;
                     poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+
+                    info!(
+                        guild_commands = command_count,
+                        global_commands = command_count,
+                        target_guild = %bot_target_guild,
+                        "Discord commands registered"
+                    );
 
                     // Start status update task with shutdown support
                     let handle = Self::start_status_update_task(

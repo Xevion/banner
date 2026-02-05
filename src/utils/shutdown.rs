@@ -5,6 +5,7 @@ use tracing::warn;
 ///
 /// This function waits for all tasks to complete and reports any that panicked.
 /// Returns an error if any task panicked, otherwise returns Ok.
+#[allow(dead_code)]
 pub async fn join_tasks(handles: Vec<JoinHandle<()>>) -> Result<(), anyhow::Error> {
     let results = futures::future::join_all(handles).await;
 

@@ -1,5 +1,6 @@
 use crate::services::ServiceResult;
 use crate::services::manager::ServiceManager;
+use crate::utils::fmt_duration;
 use std::process::ExitCode;
 use std::time::Duration;
 use tokio::signal;
@@ -82,7 +83,7 @@ async fn handle_graceful_shutdown(
     match service_manager.shutdown(shutdown_timeout).await {
         Ok(elapsed) => {
             info!(
-                remaining = format!("{:.2?}", shutdown_timeout - elapsed),
+                remaining = fmt_duration(shutdown_timeout - elapsed),
                 "graceful shutdown complete"
             );
             current_exit_code

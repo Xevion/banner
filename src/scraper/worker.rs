@@ -3,6 +3,7 @@ use crate::data::models::{ScrapeJob, UpsertCounts};
 use crate::db::DbContext;
 use crate::error::Result;
 use crate::scraper::jobs::{JobError, JobType};
+use crate::utils::fmt_duration;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::time::Duration;
@@ -124,19 +125,10 @@ impl Worker {
         let job_impl = job_type.boxed();
 
         // Create span with job context
-        let span = tracing::info_span!(
-            "process_job",
-            job_id = job.id,
-            job_type = job_impl.description()
-        );
+        let span = tracing::info_span!("process_job", job_id = job.id);
 
         async move {
-            debug!(
-                worker_id = self.id,
-                job_id = job.id,
-                description = job_impl.description(),
-                "Processing job"
-            );
+            debug!(worker_id = self.id, "Processing job");
 
             // Process the job - API errors are recoverable
             job_impl
@@ -188,19 +180,43 @@ impl Worker {
         queued_at: DateTime<Utc>,
         started_at: DateTime<Utc>,
     ) {
-        let duration_ms = duration.as_millis() as i32;
+        let duration_ms_i32 = duration.as_millis() as i32;
+
+        const SLOW_THRESHOLD: Duration = Duration::from_secs(30);
+        if duration > SLOW_THRESHOLD {
+            warn!(
+                worker_id = self.id,
+                job_id,
+                duration = fmt_duration(duration),
+                "Slow job processing detected (likely rate limiting or network delays)"
+            );
+        }
 
         match result {
             Ok(counts) => {
-                debug!(
-                    worker_id = self.id,
-                    job_id,
-                    duration_ms = duration.as_millis(),
-                    courses_fetched = counts.courses_fetched,
-                    courses_changed = counts.courses_changed,
-                    courses_unchanged = counts.courses_unchanged,
-                    "Job completed successfully"
-                );
+                // Log at INFO if data changed, DEBUG if no changes
+                let has_changes = counts.courses_changed > 0;
+                if has_changes {
+                    info!(
+                        worker_id = self.id,
+                        job_id,
+                        duration = fmt_duration(duration),
+                        courses_fetched = counts.courses_fetched,
+                        courses_changed = counts.courses_changed,
+                        courses_unchanged = counts.courses_unchanged,
+                        "Job completed with changes"
+                    );
+                } else {
+                    debug!(
+                        worker_id = self.id,
+                        job_id,
+                        duration = fmt_duration(duration),
+                        courses_fetched = counts.courses_fetched,
+                        courses_changed = counts.courses_changed,
+                        courses_unchanged = counts.courses_unchanged,
+                        "Job completed (no changes)"
+                    );
+                }
 
                 // Log the result
                 if let Err(e) = self
@@ -212,7 +228,7 @@ impl Worker {
                         priority,
                         queued_at,
                         started_at,
-                        duration_ms,
+                        duration_ms_i32,
                         true,
                         None,
                         retry_count,
@@ -255,7 +271,7 @@ impl Worker {
                         priority,
                         queued_at,
                         started_at,
-                        duration_ms,
+                        duration_ms_i32,
                         false,
                         Some(&err_msg),
                         retry_count,
@@ -269,7 +285,7 @@ impl Worker {
                 error!(
                     worker_id = self.id,
                     job_id,
-                    duration_ms = duration.as_millis(),
+                    duration = fmt_duration(duration),
                     error = ?e,
                     "Job corrupted, deleting"
                 );
@@ -304,7 +320,7 @@ impl Worker {
             warn!(
                 worker_id = self.id,
                 job_id,
-                duration_ms = duration.as_millis(),
+                duration = fmt_duration(duration),
                 retry_attempt = next_attempt,
                 max_retries = max_retries,
                 remaining_retries = remaining_retries,
@@ -314,7 +330,7 @@ impl Worker {
             error!(
                 worker_id = self.id,
                 job_id,
-                duration_ms = duration.as_millis(),
+                duration = fmt_duration(duration),
                 retry_attempt = next_attempt,
                 max_retries = max_retries,
                 remaining_retries = remaining_retries,
@@ -350,7 +366,7 @@ impl Worker {
             }
         } else {
             // Max retries exceeded — log final failure result
-            let duration_ms = duration.as_millis() as i32;
+            let duration_ms_i32 = duration.as_millis() as i32;
             let err_msg = format!("{e:#}");
             if let Err(log_err) = self
                 .db
@@ -361,7 +377,7 @@ impl Worker {
                     priority,
                     queued_at,
                     started_at,
-                    duration_ms,
+                    duration_ms_i32,
                     false,
                     Some(&err_msg),
                     next_attempt,
@@ -375,7 +391,7 @@ impl Worker {
             error!(
                 worker_id = self.id,
                 job_id,
-                duration_ms = duration.as_millis(),
+                duration = fmt_duration(duration),
                 retry_count = next_attempt,
                 max_retries = max_retries,
                 error = ?e,

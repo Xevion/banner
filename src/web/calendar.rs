@@ -5,6 +5,7 @@ use axum::{
     http::{StatusCode, header},
     response::{IntoResponse, Redirect, Response},
 };
+use tracing::{error, instrument};
 
 use crate::calendar::{CalendarCourse, generate_gcal_url, generate_ics};
 use crate::data::models::DbMeetingTime;
@@ -19,7 +20,7 @@ async fn load_calendar_course(
     let course = crate::data::courses::get_course_by_crn(&state.db_pool, crn, term)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "Calendar: course lookup failed");
+            error!(%e, "Course lookup failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Lookup failed".to_string(),
@@ -55,6 +56,7 @@ async fn load_calendar_course(
 /// `GET /api/courses/{term}/{crn}/calendar.ics`
 ///
 /// Returns an ICS file download for the course.
+#[instrument(skip_all, fields(crn))]
 pub async fn course_ics(
     State(state): State<AppState>,
     Path((term, crn)): Path<(String, String)>,
@@ -69,7 +71,7 @@ pub async fn course_ics(
     }
 
     let result = generate_ics(&cal_course, &meeting_times).map_err(|e| {
-        tracing::error!(error = %e, "ICS generation failed");
+        error!(%e, "ICS generation failed");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to generate ICS file".to_string(),
@@ -96,6 +98,7 @@ pub async fn course_ics(
 ///
 /// Redirects to Google Calendar with a pre-filled event for the first meeting time.
 /// If multiple meeting times exist, uses the first one with scheduled days/times.
+#[instrument(skip_all, fields(crn))]
 pub async fn course_gcal(
     State(state): State<AppState>,
     Path((term, crn)): Path<(String, String)>,
@@ -116,7 +119,7 @@ pub async fn course_gcal(
         .unwrap_or(&meeting_times[0]);
 
     let url = generate_gcal_url(&cal_course, mt).map_err(|e| {
-        tracing::error!(error = %e, "Google Calendar URL generation failed");
+        error!(%e, "Google Calendar URL generation failed");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to generate Google Calendar URL".to_string(),

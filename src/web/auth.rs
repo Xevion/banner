@@ -9,7 +9,7 @@ use axum::response::{IntoResponse, Json, Redirect, Response};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{error, info, instrument, warn};
 
 use crate::state::AppState;
 
@@ -101,6 +101,7 @@ fn session_cookie(token: &str, max_age: i64, secure: bool) -> String {
 }
 
 /// `GET /api/auth/login` — Redirect to Discord OAuth2 authorization page.
+#[instrument(skip_all)]
 pub async fn auth_login(
     State(state): State<AppState>,
     Extension(auth_config): Extension<AuthConfig>,
@@ -125,6 +126,7 @@ pub async fn auth_login(
 }
 
 /// `GET /api/auth/callback` — Handle Discord OAuth2 callback.
+#[instrument(skip_all)]
 pub async fn auth_callback(
     State(state): State<AppState>,
     Extension(auth_config): Extension<AuthConfig>,
@@ -264,6 +266,7 @@ pub async fn auth_callback(
 }
 
 /// `POST /api/auth/logout` — Destroy the current session.
+#[instrument(skip_all)]
 pub async fn auth_logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if let Some(token) = extract_session_token(&headers) {
         if let Err(e) = crate::data::sessions::delete_session(&state.db_pool, &token).await {
@@ -283,6 +286,7 @@ pub async fn auth_logout(State(state): State<AppState>, headers: HeaderMap) -> R
 }
 
 /// `GET /api/auth/me` — Return the current authenticated user's info.
+#[instrument(skip_all)]
 pub async fn auth_me(
     State(state): State<AppState>,
     headers: HeaderMap,

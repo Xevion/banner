@@ -1,10 +1,14 @@
 //! Admin API handlers for RMP instructor matching management.
 
+use std::time::{Duration, Instant};
+
+use crate::utils::fmt_duration;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tracing::{debug, error, info, instrument, warn};
 use ts_rs::TS;
 
 use crate::state::AppState;
@@ -200,12 +204,14 @@ pub struct RescoreResponse {
 // ---------------------------------------------------------------------------
 
 fn db_error(context: &str, e: sqlx::Error) -> (StatusCode, Json<Value>) {
-    tracing::error!(error = %e, "{context}");
+    error!(error = %e, "{context}");
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(json!({"error": context})),
     )
 }
+
+const SLOW_OP_THRESHOLD: Duration = Duration::from_secs(1);
 
 // ---------------------------------------------------------------------------
 // Row types for SQL queries
@@ -270,11 +276,13 @@ struct LinkedRmpProfileRow {
 // ---------------------------------------------------------------------------
 
 /// `GET /api/admin/instructors` — List instructors with filtering and pagination.
+#[instrument(skip_all)]
 pub async fn list_instructors(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
     Query(params): Query<ListInstructorsParams>,
 ) -> Result<Json<ListInstructorsResponse>, (StatusCode, Json<Value>)> {
+    let start = Instant::now();
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(50).clamp(1, 100);
     let offset = (page - 1) * per_page;
@@ -427,6 +435,16 @@ pub async fn list_instructors(
         })
         .collect();
 
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: list_instructors"
+        );
+    }
+
+    debug!(count = instructors.len(), total, "listed instructors");
+
     Ok(Json(ListInstructorsResponse {
         instructors,
         total,
@@ -441,12 +459,28 @@ pub async fn list_instructors(
 // ---------------------------------------------------------------------------
 
 /// `GET /api/admin/instructors/{id}` — Full instructor detail with candidates.
+#[instrument(skip_all, fields(instructor_id = id))]
 pub async fn get_instructor(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<InstructorDetailResponse>, (StatusCode, Json<Value>)> {
-    build_instructor_detail(&state, id).await
+    let start = Instant::now();
+    let result = build_instructor_detail(&state, id).await;
+
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: get_instructor"
+        );
+    }
+
+    if result.is_ok() {
+        debug!(instructor_id = id, "fetched instructor detail");
+    }
+
+    result
 }
 
 /// Shared helper that builds the full instructor detail response.
@@ -574,12 +608,14 @@ async fn build_instructor_detail(
 // ---------------------------------------------------------------------------
 
 /// `POST /api/admin/instructors/{id}/match` — Accept a candidate match.
+#[instrument(skip_all, fields(instructor_id = id))]
 pub async fn match_instructor(
     AdminUser(user): AdminUser,
     State(state): State<AppState>,
     Path(id): Path<i32>,
     Json(body): Json<MatchBody>,
 ) -> Result<Json<InstructorDetailResponse>, (StatusCode, Json<Value>)> {
+    let start = Instant::now();
     // Verify the candidate exists and is pending
     let candidate: Option<(i32,)> = sqlx::query_as(
         "SELECT id FROM rmp_match_candidates WHERE instructor_id = $1 AND rmp_legacy_id = $2 AND status = 'pending'",
@@ -656,6 +692,20 @@ pub async fn match_instructor(
         .await
         .map_err(|e| db_error("failed to commit transaction", e))?;
 
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: match_instructor"
+        );
+    }
+
+    info!(
+        instructor_id = id,
+        rmp_legacy_id = body.rmp_legacy_id,
+        "instructor matched to RMP profile"
+    );
+
     build_instructor_detail(&state, id).await
 }
 
@@ -664,12 +714,14 @@ pub async fn match_instructor(
 // ---------------------------------------------------------------------------
 
 /// `POST /api/admin/instructors/{id}/reject-candidate` — Reject a single candidate.
+#[instrument(skip_all, fields(instructor_id = id))]
 pub async fn reject_candidate(
     AdminUser(user): AdminUser,
     State(state): State<AppState>,
     Path(id): Path<i32>,
     Json(body): Json<RejectCandidateBody>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<Value>)> {
+    let start = Instant::now();
     let result = sqlx::query(
         "UPDATE rmp_match_candidates SET status = 'rejected', resolved_at = NOW(), resolved_by = $1 WHERE instructor_id = $2 AND rmp_legacy_id = $3 AND status = 'pending'",
     )
@@ -687,6 +739,20 @@ pub async fn reject_candidate(
         ));
     }
 
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: reject_candidate"
+        );
+    }
+
+    info!(
+        instructor_id = id,
+        rmp_legacy_id = body.rmp_legacy_id,
+        "RMP candidate rejected"
+    );
+
     Ok(Json(OkResponse { ok: true }))
 }
 
@@ -695,11 +761,13 @@ pub async fn reject_candidate(
 // ---------------------------------------------------------------------------
 
 /// `POST /api/admin/instructors/{id}/reject-all` — Mark instructor as having no valid RMP match.
+#[instrument(skip_all, fields(instructor_id = id))]
 pub async fn reject_all(
     AdminUser(user): AdminUser,
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<Value>)> {
+    let start = Instant::now();
     let mut tx = state
         .db_pool
         .begin()
@@ -751,6 +819,16 @@ pub async fn reject_all(
         .await
         .map_err(|e| db_error("failed to commit transaction", e))?;
 
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: reject_all"
+        );
+    }
+
+    info!(instructor_id = id, "all RMP candidates rejected");
+
     Ok(Json(OkResponse { ok: true }))
 }
 
@@ -770,12 +848,14 @@ pub struct UnmatchBody {
 ///
 /// Send `{ "rmpLegacyId": N }` to remove a specific link, or an empty body / `{}`
 /// to remove all links for the instructor.
+#[instrument(skip_all, fields(instructor_id = id))]
 pub async fn unmatch_instructor(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
     Path(id): Path<i32>,
     body: Option<Json<UnmatchBody>>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<Value>)> {
+    let start = Instant::now();
     let rmp_legacy_id = body.and_then(|b| b.rmp_legacy_id);
 
     // Verify instructor exists
@@ -796,12 +876,26 @@ pub async fn unmatch_instructor(
     crate::data::rmp::unmatch_instructor(&state.db_pool, id, rmp_legacy_id)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "failed to unmatch instructor");
+            error!(error = %e, "failed to unmatch instructor");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "failed to unmatch instructor"})),
             )
         })?;
+
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: unmatch_instructor"
+        );
+    }
+
+    info!(
+        instructor_id = id,
+        ?rmp_legacy_id,
+        "instructor unmatched from RMP"
+    );
 
     Ok(Json(OkResponse { ok: true }))
 }
@@ -811,19 +905,33 @@ pub async fn unmatch_instructor(
 // ---------------------------------------------------------------------------
 
 /// `POST /api/admin/rmp/rescore` — Re-run RMP candidate generation.
+#[instrument(skip_all)]
 pub async fn rescore(
     AdminUser(_user): AdminUser,
     State(state): State<AppState>,
 ) -> Result<Json<RescoreResponse>, (StatusCode, Json<Value>)> {
+    let start = Instant::now();
     let stats = crate::data::rmp_matching::generate_candidates(&state.db_pool)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "failed to run candidate generation");
+            error!(error = %e, "failed to run candidate generation");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "candidate generation failed"})),
             )
         })?;
+
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(duration = fmt_duration(elapsed), "slow operation: rescore");
+    }
+
+    info!(
+        total_unmatched = stats.total_unmatched,
+        candidates_created = stats.candidates_created,
+        auto_matched = stats.auto_matched,
+        "RMP candidates rescored"
+    );
 
     Ok(Json(RescoreResponse {
         total_unmatched: stats.total_unmatched,

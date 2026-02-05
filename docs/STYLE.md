@@ -60,7 +60,7 @@ Use consistent field names across all stacks for values that may be aggregated o
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `duration_ms` | number | Operation timing |
+| `duration` | string | Operation timing (via `fmt_duration`) |
 | `count` | number | Item counts |
 | `bytes` | number | Data sizes |
 | `term` | string | Term code (e.g. `"202430"`) |
@@ -69,6 +69,34 @@ Use consistent field names across all stacks for values that may be aggregated o
 | `job_id` | number | Scrape job identifier |
 | `instructor_id` | number | Instructor identifier |
 | `error` | string | Error with chain |
+
+### Duration Formatting
+
+Use `crate::utils::fmt_duration` for all duration fields in tracing calls. It produces
+human-readable output like `1.94ms`, `2.34s`, `150.00µs` with automatic unit scaling.
+
+```rust
+use crate::utils::fmt_duration;
+
+// Good
+debug!(duration = fmt_duration(elapsed), "query completed");
+warn!(wait = fmt_duration(wait_duration), "rate limit delay");
+
+// Bad
+debug!(duration_ms = elapsed.as_millis(), "query completed");
+```
+
+Field naming: Use `duration` for general timing. Use contextual names (`elapsed`, `wait`,
+`latency`, `remaining`) when clearer. Never suffix with `_ms` or `_us`.
+
+Slow-operation thresholds use `Duration` constants:
+
+```rust
+const SLOW_THRESHOLD: Duration = Duration::from_secs(1);
+if elapsed > SLOW_THRESHOLD {
+    warn!(duration = fmt_duration(elapsed), "slow operation");
+}
+```
 
 ## Error Handling
 

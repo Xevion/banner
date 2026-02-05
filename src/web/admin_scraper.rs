@@ -2,6 +2,9 @@
 //!
 //! All endpoints require the `AdminUser` extractor, returning 401/403 as needed.
 
+use std::time::{Duration, Instant};
+
+use crate::utils::fmt_duration;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Json;
@@ -9,6 +12,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
+use tracing::{debug, error, instrument, warn};
 use ts_rs::TS;
 
 use crate::banner::models::terms::Term;
@@ -18,6 +22,8 @@ use crate::state::AppState;
 use crate::web::extractors::AdminUser;
 
 type ApiError = (StatusCode, Json<serde_json::Value>);
+
+const SLOW_OP_THRESHOLD: Duration = Duration::from_secs(1);
 
 fn parse_period(period: &str) -> Result<chrono::Duration, ApiError> {
     match period {
@@ -118,11 +124,13 @@ pub struct ScraperStatsResponse {
     locked_jobs: i64,
 }
 
+#[instrument(skip_all, fields(period = %params.period))]
 pub async fn scraper_stats(
     _admin: AdminUser,
     State(state): State<AppState>,
     Query(params): Query<StatsParams>,
 ) -> Result<Json<ScraperStatsResponse>, ApiError> {
+    let start = Instant::now();
     let _duration = parse_period(&params.period)?;
     let interval_str = period_to_interval_str(&params.period);
 
@@ -170,7 +178,7 @@ pub async fn scraper_stats(
             .await
     }
     .map_err(|e| {
-        tracing::error!(error = %e, "Failed to fetch scraper stats");
+        error!(error = %e, "failed to fetch scraper stats");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Failed to fetch scraper stats"})),
@@ -194,7 +202,7 @@ pub async fn scraper_stats(
     .fetch_one(&state.db_pool)
     .await
     .map_err(|e| {
-        tracing::error!(error = %e, "Failed to fetch queue stats");
+        error!(error = %e, "failed to fetch queue stats");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Failed to fetch queue stats"})),
@@ -209,6 +217,16 @@ pub async fn scraper_stats(
     } else {
         None
     };
+
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: scraper_stats"
+        );
+    }
+
+    debug!(total_scrapes, "fetched scraper stats");
 
     Ok(Json(ScraperStatsResponse {
         period: params.period,
@@ -269,11 +287,13 @@ pub struct TimeseriesPoint {
     avg_duration_ms: f64,
 }
 
+#[instrument(skip_all, fields(period = %params.period))]
 pub async fn scraper_timeseries(
     _admin: AdminUser,
     State(state): State<AppState>,
     Query(params): Query<TimeseriesParams>,
 ) -> Result<Json<TimeseriesResponse>, ApiError> {
+    let start = Instant::now();
     let _duration = parse_period(&params.period)?;
     let period_interval = period_to_interval_str(&params.period);
 
@@ -359,14 +379,22 @@ pub async fn scraper_timeseries(
         .await
     }
     .map_err(|e| {
-        tracing::error!(error = %e, "Failed to fetch scraper timeseries");
+        error!(error = %e, "failed to fetch scraper timeseries");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Failed to fetch scraper timeseries"})),
         )
     })?;
 
-    let points = rows
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: scraper_timeseries"
+        );
+    }
+
+    let points: Vec<TimeseriesPoint> = rows
         .iter()
         .map(|row| TimeseriesPoint {
             timestamp: row.get("bucket_start"),
@@ -377,6 +405,8 @@ pub async fn scraper_timeseries(
             avg_duration_ms: row.get("avg_duration_ms"),
         })
         .collect();
+
+    debug!(point_count = points.len(), "fetched scraper timeseries");
 
     Ok(Json(TimeseriesResponse {
         period: params.period,
@@ -425,13 +455,15 @@ pub struct SubjectSummary {
     recent_failures: i64,
 }
 
+#[instrument(skip_all)]
 pub async fn scraper_subjects(
     _admin: AdminUser,
     State(state): State<AppState>,
 ) -> Result<Json<SubjectsResponse>, ApiError> {
+    let start = Instant::now();
     let db = DbContext::new(state.db_pool.clone(), state.events.clone());
     let raw_stats = db.scrape_jobs().fetch_subject_stats().await.map_err(|e| {
-        tracing::error!(error = %e, "Failed to fetch subject stats");
+        error!(error = %e, "failed to fetch subject stats");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Failed to fetch subject stats"})),
@@ -453,7 +485,7 @@ pub async fn scraper_subjects(
     .fetch_all(&state.db_pool)
     .await
     .map_err(|e| {
-        tracing::error!(error = %e, "Failed to fetch course counts");
+        error!(error = %e, "failed to fetch course counts");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Failed to fetch course counts"})),
@@ -463,7 +495,7 @@ pub async fn scraper_subjects(
     .map(|(subject, cnt): (String, i64)| (subject, cnt))
     .collect();
 
-    let subjects = raw_stats
+    let subjects: Vec<SubjectSummary> = raw_stats
         .into_iter()
         .map(|row| {
             let stats: SubjectStats = row.into();
@@ -515,6 +547,16 @@ pub async fn scraper_subjects(
         })
         .collect();
 
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: scraper_subjects"
+        );
+    }
+
+    debug!(count = subjects.len(), "fetched scraper subjects");
+
     Ok(Json(SubjectsResponse { subjects }))
 }
 
@@ -561,12 +603,14 @@ pub struct SubjectResultEntry {
     metrics_generated: Option<i32>,
 }
 
+#[instrument(skip_all, fields(%subject))]
 pub async fn scraper_subject_detail(
     _admin: AdminUser,
     State(state): State<AppState>,
     Path(subject): Path<String>,
     Query(params): Query<SubjectDetailParams>,
 ) -> Result<Json<SubjectDetailResponse>, ApiError> {
+    let start = Instant::now();
     let limit = params.limit.clamp(1, 200);
 
     let rows = sqlx::query(
@@ -583,14 +627,22 @@ pub async fn scraper_subject_detail(
     .fetch_all(&state.db_pool)
     .await
     .map_err(|e| {
-        tracing::error!(error = %e, subject = %subject, "Failed to fetch subject detail");
+        error!(error = %e, "failed to fetch subject detail");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Failed to fetch subject detail"})),
         )
     })?;
 
-    let results = rows
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_OP_THRESHOLD {
+        warn!(
+            duration = fmt_duration(elapsed),
+            "slow operation: scraper_subject_detail"
+        );
+    }
+
+    let results: Vec<SubjectResultEntry> = rows
         .iter()
         .map(|row| SubjectResultEntry {
             id: row.get("id"),
@@ -605,6 +657,8 @@ pub async fn scraper_subject_detail(
             metrics_generated: row.get("metrics_generated"),
         })
         .collect();
+
+    debug!(count = results.len(), "fetched subject detail");
 
     Ok(Json(SubjectDetailResponse { subject, results }))
 }

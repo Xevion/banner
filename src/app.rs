@@ -6,6 +6,7 @@ use crate::services::bot::BotService;
 use crate::services::manager::ServiceManager;
 use crate::services::web::WebService;
 use crate::state::AppState;
+use crate::utils::fmt_duration;
 use crate::web::auth::AuthConfig;
 use anyhow::Context;
 use figment::value::UncasedStr;
@@ -65,7 +66,12 @@ impl App {
 
         info!(
             is_private = is_private,
-            slow_threshold = format!("{:.2?}", slow_threshold),
+            min_connections = 0,
+            max_connections = 4,
+            acquire_timeout = "4s",
+            idle_timeout = "2m",
+            max_lifetime = "30m",
+            acquire_slow_threshold = fmt_duration(slow_threshold),
             "database pool established"
         );
 

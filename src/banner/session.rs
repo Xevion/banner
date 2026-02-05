@@ -11,13 +11,14 @@ use rand::distr::{Alphanumeric, SampleString};
 use reqwest_middleware::ClientWithMiddleware;
 use std::collections::{HashMap, VecDeque};
 
+use crate::utils::fmt_duration;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify};
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 use url::Url;
 
 const SESSION_EXPIRY: Duration = Duration::from_secs(25 * 60); // 25 minutes
@@ -370,6 +371,15 @@ impl SessionPool {
                 let mut queue = term_pool.sessions.lock().await;
                 if let Some(session) = queue.pop_front() {
                     if !session.is_expired() {
+                        let age = session
+                            .last_activity
+                            .unwrap_or(session.created_at)
+                            .elapsed();
+                        trace!(
+                            id = session.unique_session_id,
+                            age_secs = age.as_secs(),
+                            "Reused existing session from pool"
+                        );
                         return Ok(PooledSession {
                             session: ManuallyDrop::new(session),
                             pool: Arc::clone(&term_pool),
@@ -402,7 +412,7 @@ impl SessionPool {
             // Guard resets is_creating on drop (including cancellation).
             let creating_guard = CreatingGuard(Arc::clone(&term_pool));
 
-            trace!("Pool empty, creating new session");
+            debug!(term = %term, "Creating new session (pool empty)");
             tokio::select! {
                 _ = term_pool.notifier.notified() => {
                     // A session was returned — release creator role and race for it.
@@ -418,7 +428,7 @@ impl SessionPool {
                             let elapsed = start.elapsed();
                             debug!(
                                 id = new_session.unique_session_id,
-                                elapsed_ms = elapsed.as_millis(),
+                                elapsed = fmt_duration(elapsed),
                                 "Created new session"
                             );
                             return Ok(PooledSession {
@@ -437,7 +447,7 @@ impl SessionPool {
 
     /// Sets up initial session cookies by making required Banner API requests.
     async fn create_session(&self, term: &Term) -> Result<BannerSession> {
-        info!(term = %term, "setting up banner session");
+        debug!(term = %term, "Setting up new Banner session with cookies");
 
         // The 'register' or 'search' registration page
         let initial_registration = self

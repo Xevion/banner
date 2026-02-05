@@ -6,6 +6,7 @@
 //! stale-while-revalidate pattern with singleflight deduplication — readers
 //! always get the current cached value instantly, never blocking on a refresh.
 
+use crate::utils::fmt_duration;
 use chrono::NaiveDate;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -151,7 +152,7 @@ async fn load_snapshot(pool: &PgPool) -> anyhow::Result<ScheduleSnapshot> {
 
     debug!(
         courses = courses.len(),
-        elapsed_ms = start.elapsed().as_millis(),
+        elapsed = fmt_duration(start.elapsed()),
         "Schedule snapshot built"
     );
 

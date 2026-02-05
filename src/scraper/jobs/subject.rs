@@ -4,7 +4,7 @@ use crate::data::models::UpsertCounts;
 use crate::db::DbContext;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Job implementation for scraping subject data.
 ///
@@ -51,18 +51,11 @@ impl Job for SubjectJob {
             .await?;
 
         let counts = if let Some(courses_from_api) = search_result.data {
-            info!(
-                subject = %subject_code,
-                term = %term,
-                count = courses_from_api.len(),
-                "Found courses"
-            );
+            debug!(count = courses_from_api.len(), "Found courses");
             db.courses().batch_upsert(&courses_from_api).await?
         } else {
             UpsertCounts::default()
         };
-
-        debug!(subject = %subject_code, term = %term, "Subject job completed");
         Ok(counts)
     }
 

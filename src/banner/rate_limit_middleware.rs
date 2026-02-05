@@ -1,9 +1,11 @@
 //! HTTP middleware that enforces rate limiting for Banner API requests.
 
 use crate::banner::rate_limiter::{RequestType, SharedRateLimiter};
+use crate::utils::fmt_duration;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
+use std::time::Duration;
 use tracing::debug;
 use url::Url;
 
@@ -68,11 +70,11 @@ impl Middleware for RateLimitMiddleware {
         let wait_duration = start.elapsed();
 
         // Only log if rate limiting caused significant delay (>= 500ms)
-        if wait_duration.as_millis() >= 500 {
+        if wait_duration >= Duration::from_millis(500) {
             let limit_desc = Self::get_rate_limit_description(request_type);
             debug!(
                 request_type = ?request_type,
-                wait_ms = wait_duration.as_millis(),
+                wait = fmt_duration(wait_duration),
                 rate_limit = limit_desc,
                 "Rate limit caused delay"
             );

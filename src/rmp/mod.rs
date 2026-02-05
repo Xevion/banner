@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::info;
 
 /// UTSA's school ID on RateMyProfessors (base64 of "School-1516").
 const UTSA_SCHOOL_ID: &str = "U2Nob29sLTE1MTY=";
@@ -147,7 +147,7 @@ impl RmpClient {
 
             cursor = page_info["endCursor"].as_str().map(|s| s.to_string());
 
-            debug!(fetched = all.len(), "RMP pagination: fetching next page");
+            tracing::trace!(fetched = all.len(), "RMP pagination: fetching next page");
         }
 
         info!(total = all.len(), "Fetched all RMP professors");

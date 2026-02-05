@@ -23,6 +23,7 @@ mod services;
 mod signals;
 mod state;
 mod status;
+mod utils;
 mod web;
 
 #[tokio::main]
