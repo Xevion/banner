@@ -2,7 +2,13 @@
 
 This folder contains detailed documentation for the Banner project. This file acts as the index.
 
-## Files
+## Style Guides
+
+- [`STYLE.md`](STYLE.md) - Cross-cutting style guide (naming, logging, errors, API design)
+- [`RUST.md`](RUST.md) - Rust backend style guide
+- [`SVELTE.md`](SVELTE.md) - Svelte frontend style guide
+
+## Reference
 
 - [`CHANGELOG.md`](CHANGELOG.md) - Notable changes by version
 - [`ROADMAP.md`](ROADMAP.md) - Planned features and priorities
