@@ -111,6 +111,8 @@ const checks: Check[] = [
   { name: "web-format", cmd: ["bun", "run", "--cwd", "web", "format:check"] },
   { name: "web-test", cmd: ["bun", "run", "--cwd", "web", "test"] },
   { name: "actionlint", cmd: ["actionlint"] },
+  { name: "rust-audit", cmd: ["cargo", "audit"] },
+  { name: "web-audit", cmd: ["bun", "audit", "--cwd", "web", "--audit-level", "moderate"] },
 ];
 
 // ---------------------------------------------------------------------------
