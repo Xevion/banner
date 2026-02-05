@@ -1,13 +1,12 @@
 use crate::banner::{BannerApi, Term};
 use crate::data::models::{ReferenceData, ScrapePriority, TargetType};
-use crate::data::scrape_jobs;
 use crate::data::terms;
+use crate::db::DbContext;
 use crate::error::Result;
 use crate::rmp::RmpClient;
 use crate::scraper::adaptive::{SubjectSchedule, SubjectStats, evaluate_subject};
 use crate::scraper::jobs::subject::SubjectJob;
 use crate::state::ReferenceCache;
-use crate::web::ws::{ScrapeJobDto, ScrapeJobEvent};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
@@ -30,24 +29,21 @@ const TERM_SYNC_INTERVAL: Duration = Duration::from_secs(8 * 60 * 60);
 
 /// Periodically analyzes data and enqueues prioritized scrape jobs.
 pub struct Scheduler {
-    db_pool: PgPool,
+    db: DbContext,
     banner_api: Arc<BannerApi>,
     reference_cache: Arc<RwLock<ReferenceCache>>,
-    job_events_tx: broadcast::Sender<ScrapeJobEvent>,
 }
 
 impl Scheduler {
     pub fn new(
-        db_pool: PgPool,
+        db: DbContext,
         banner_api: Arc<BannerApi>,
         reference_cache: Arc<RwLock<ReferenceCache>>,
-        job_events_tx: broadcast::Sender<ScrapeJobEvent>,
     ) -> Self {
         Self {
-            db_pool,
+            db,
             banner_api,
             reference_cache,
-            job_events_tx,
         }
     }
 
@@ -84,11 +80,10 @@ impl Scheduler {
 
                     // Spawn work in separate task to allow graceful cancellation during shutdown.
                     let work_handle = tokio::spawn({
-                        let db_pool = self.db_pool.clone();
+                        let db = self.db.clone();
                         let banner_api = self.banner_api.clone();
                         let cancel_token = cancel_token.clone();
                         let reference_cache = self.reference_cache.clone();
-                        let job_events_tx = self.job_events_tx.clone();
 
                                 async move {
                                     tokio::select! {
@@ -97,7 +92,7 @@ impl Scheduler {
                                             // run them concurrently so they don't wait behind each other.
                                             let term_fut = async {
                                                 if should_sync_terms
-                                                    && let Err(e) = Self::sync_terms(&db_pool, &banner_api).await
+                                                    && let Err(e) = Self::sync_terms(db.pool(), &banner_api).await
                                                 {
                                                     error!(error = ?e, "Failed to sync terms");
                                                 }
@@ -105,7 +100,7 @@ impl Scheduler {
 
                                             let rmp_fut = async {
                                                 if should_sync_rmp
-                                                    && let Err(e) = Self::sync_rmp_data(&db_pool).await
+                                                    && let Err(e) = Self::sync_rmp_data(db.pool()).await
                                                 {
                                                     error!(error = ?e, "Failed to sync RMP data");
                                                 }
@@ -113,7 +108,7 @@ impl Scheduler {
 
                                             let ref_fut = async {
                                                 if should_scrape_ref
-                                                    && let Err(e) = Self::scrape_reference_data(&db_pool, &banner_api, &reference_cache).await
+                                                    && let Err(e) = Self::scrape_reference_data(db.pool(), &banner_api, &reference_cache).await
                                                 {
                                                     error!(error = ?e, "Failed to scrape reference data");
                                                 }
@@ -121,7 +116,7 @@ impl Scheduler {
 
                                             tokio::join!(term_fut, rmp_fut, ref_fut);
 
-                                            if let Err(e) = Self::schedule_jobs_impl(&db_pool, &banner_api, Some(&job_events_tx)).await {
+                                            if let Err(e) = Self::schedule_jobs_impl(&db, &banner_api).await {
                                                 error!(error = ?e, "Failed to schedule jobs");
                                             }
                                         } => {}
@@ -174,13 +169,9 @@ impl Scheduler {
     ///
     /// This is a static method (not &self) to allow it to be called from spawned tasks.
     #[tracing::instrument(skip_all)]
-    async fn schedule_jobs_impl(
-        db_pool: &PgPool,
-        banner_api: &BannerApi,
-        job_events_tx: Option<&broadcast::Sender<ScrapeJobEvent>>,
-    ) -> Result<()> {
+    async fn schedule_jobs_impl(db: &DbContext, banner_api: &BannerApi) -> Result<()> {
         // Query enabled terms from database
-        let enabled_terms = terms::get_enabled_term_codes(db_pool).await?;
+        let enabled_terms = terms::get_enabled_term_codes(db.pool()).await?;
 
         if enabled_terms.is_empty() {
             debug!("No enabled terms to schedule");
@@ -190,9 +181,7 @@ impl Scheduler {
         info!(terms = ?enabled_terms, "Scheduling jobs for enabled terms");
 
         for term_code in enabled_terms {
-            if let Err(e) =
-                Self::schedule_term_jobs(db_pool, banner_api, job_events_tx, &term_code).await
-            {
+            if let Err(e) = Self::schedule_term_jobs(db, banner_api, &term_code).await {
                 error!(term = %term_code, error = ?e, "Failed to schedule jobs for term");
                 // Continue with other terms
             }
@@ -205,9 +194,8 @@ impl Scheduler {
     /// Schedule jobs for a single term.
     #[tracing::instrument(skip_all, fields(term = %term_code))]
     async fn schedule_term_jobs(
-        db_pool: &PgPool,
+        db: &DbContext,
         banner_api: &BannerApi,
-        job_events_tx: Option<&broadcast::Sender<ScrapeJobEvent>>,
         term_code: &str,
     ) -> Result<()> {
         debug!("Enqueuing subject jobs for term");
@@ -220,8 +208,7 @@ impl Scheduler {
 
         // Fetch per-subject stats and build a lookup map
         // Note: Currently stats are not term-aware, so we use global stats.
-        // A future enhancement could add term-specific stats.
-        let stats_rows = scrape_jobs::fetch_subject_stats(db_pool).await?;
+        let stats_rows = db.scrape_jobs().fetch_subject_stats().await?;
         let stats_map: HashMap<String, SubjectStats> = stats_rows
             .into_iter()
             .map(|row| {
@@ -289,12 +276,10 @@ impl Scheduler {
             .collect();
 
         // Query existing jobs for eligible subjects only
-        let existing_payloads = scrape_jobs::find_existing_job_payloads(
-            TargetType::Subject,
-            &subject_payloads,
-            db_pool,
-        )
-        .await?;
+        let existing_payloads = db
+            .scrape_jobs()
+            .find_existing_payloads(TargetType::Subject, &subject_payloads)
+            .await?;
 
         // Filter out subjects that already have pending jobs
         let mut skipped_count = 0;
@@ -318,7 +303,7 @@ impl Scheduler {
             debug!(count = skipped_count, term = %term_code, "Skipped subjects with existing jobs");
         }
 
-        // Insert all new jobs in a single batch
+        // Insert all new jobs in a single batch (events emitted automatically)
         if !new_jobs.is_empty() {
             for (_, subject_code) in &new_jobs {
                 debug!(subject = subject_code, term = %term_code, "New job enqueued for subject");
@@ -329,16 +314,7 @@ impl Scheduler {
                 .map(|(payload, _)| (payload, TargetType::Subject, ScrapePriority::Low))
                 .collect();
 
-            let inserted = scrape_jobs::batch_insert_jobs(&jobs, db_pool).await?;
-
-            if let Some(tx) = job_events_tx {
-                inserted.iter().for_each(|job| {
-                    debug!(job_id = job.id, "Emitting JobCreated event");
-                    let _ = tx.send(ScrapeJobEvent::JobCreated {
-                        job: ScrapeJobDto::from(job),
-                    });
-                });
-            }
+            db.scrape_jobs().batch_insert(&jobs).await?;
         }
 
         Ok(())

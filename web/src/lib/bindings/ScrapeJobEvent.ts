@@ -5,4 +5,4 @@ import type { ScrapeJobStatus } from "./ScrapeJobStatus";
 /**
  * Events broadcast when scrape job state changes.
  */
-export type ScrapeJobEvent = { "type": "init", jobs: Array<ScrapeJobDto>, } | { "type": "jobCreated", job: ScrapeJobDto, } | { "type": "jobLocked", id: number, lockedAt: string, status: ScrapeJobStatus, } | { "type": "jobCompleted", id: number, } | { "type": "jobRetried", id: number, retryCount: number, queuedAt: string, status: ScrapeJobStatus, } | { "type": "jobExhausted", id: number, } | { "type": "jobDeleted", id: number, };
+export type ScrapeJobEvent = { "type": "created", job: ScrapeJobDto, } | { "type": "locked", id: number, lockedAt: string, status: ScrapeJobStatus, } | { "type": "completed", id: number, } | { "type": "retried", id: number, retryCount: number, queuedAt: string, status: ScrapeJobStatus, } | { "type": "exhausted", id: number, } | { "type": "deleted", id: number, };

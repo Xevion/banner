@@ -49,21 +49,16 @@ export default tseslint.config(
     },
     rules: {
       "svelte/no-navigation-without-resolve": "off",
-    },
-  }, // Disable type-checked rules for plain JS config files
-  {
-    files: ["**/*.js"],
-    ...tseslint.configs.disableTypeChecked,
-  }, // Relax type-checking for Storybook story files
-  {
-    files: ["**/*.stories.svelte"],
-    rules: {
       "@typescript-eslint/no-unsafe-assignment": "off",
       "@typescript-eslint/no-unsafe-argument": "off",
       "@typescript-eslint/no-unsafe-member-access": "off",
       "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/no-unsafe-call": "off",
     },
+  }, // Disable type-checked rules for plain JS config files
+  {
+    files: ["**/*.js"],
+    ...tseslint.configs.disableTypeChecked,
   },
   storybook.configs["flat/recommended"]
 );

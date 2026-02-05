@@ -13,6 +13,7 @@ use ts_rs::TS;
 use crate::data::models::User;
 use crate::state::AppState;
 use crate::status::ServiceStatus;
+use crate::web::audit::{AuditLogEntry, AuditLogResponse};
 use crate::web::extractors::AdminUser;
 use crate::web::ws::ScrapeJobDto;
 
@@ -197,29 +198,7 @@ struct AuditRow {
     course_number: Option<String>,
     crn: Option<String>,
     title: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export)]
-pub struct AuditLogEntry {
-    pub id: i32,
-    pub course_id: i32,
-    pub timestamp: String,
-    pub field_changed: String,
-    pub old_value: String,
-    pub new_value: String,
-    pub subject: Option<String>,
-    pub course_number: Option<String>,
-    pub crn: Option<String>,
-    pub course_title: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export)]
-pub struct AuditLogResponse {
-    pub entries: Vec<AuditLogEntry>,
+    term_code: Option<String>,
 }
 
 /// Format a `DateTime<Utc>` as an HTTP-date (RFC 2822) for Last-Modified headers.
@@ -245,7 +224,7 @@ pub async fn list_audit_log(
 ) -> Result<Response, (StatusCode, Json<Value>)> {
     let rows = sqlx::query_as::<_, AuditRow>(
         "SELECT a.id, a.course_id, a.timestamp, a.field_changed, a.old_value, a.new_value, \
-                c.subject, c.course_number, c.crn, c.title \
+                c.subject, c.course_number, c.crn, c.title, c.term_code \
          FROM course_audits a \
          LEFT JOIN courses c ON c.id = a.course_id \
          ORDER BY a.timestamp DESC LIMIT 200",
@@ -288,6 +267,7 @@ pub async fn list_audit_log(
             course_number: a.course_number.clone(),
             crn: a.crn.clone(),
             course_title: a.title.clone(),
+            term_code: a.term_code.clone(),
         })
         .collect();
 

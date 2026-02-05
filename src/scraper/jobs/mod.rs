@@ -2,9 +2,9 @@ pub mod subject;
 
 use crate::banner::BannerApi;
 use crate::data::models::{TargetType, UpsertCounts};
+use crate::db::DbContext;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use thiserror::Error;
 
 /// Errors that can occur during job parsing
@@ -28,13 +28,9 @@ pub enum JobError {
 /// Common trait interface for all job types
 #[async_trait::async_trait]
 pub trait Job: Send + Sync {
-    /// The target type this job handles
-    #[allow(dead_code)]
-    fn target_type(&self) -> TargetType;
-
-    /// Process the job with the given API client and database pool.
+    /// Process the job with the given API client and database context.
     /// Returns upsert effectiveness counts on success.
-    async fn process(&self, banner_api: &BannerApi, db_pool: &PgPool) -> Result<UpsertCounts>;
+    async fn process(&self, banner_api: &BannerApi, db: &DbContext) -> Result<UpsertCounts>;
 
     /// Get a human-readable description of the job
     fn description(&self) -> String;

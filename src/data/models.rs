@@ -380,8 +380,10 @@ pub struct UpsertCounts {
 }
 
 /// The priority level of a scrape job.
-#[derive(sqlx::Type, Copy, Debug, Clone)]
+#[derive(sqlx::Type, Copy, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[sqlx(type_name = "scrape_priority", rename_all = "PascalCase")]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum ScrapePriority {
     Low,
     Medium,
@@ -390,8 +392,10 @@ pub enum ScrapePriority {
 }
 
 /// The type of target for a scrape job, determining how the payload is interpreted.
-#[derive(sqlx::Type, Copy, Debug, Clone)]
+#[derive(sqlx::Type, Copy, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[sqlx(type_name = "target_type", rename_all = "PascalCase")]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum TargetType {
     Subject,
     CourseRange,
@@ -400,7 +404,7 @@ pub enum TargetType {
 }
 
 /// Computed status for a scrape job, derived from existing fields.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum ScrapeJobStatus {
@@ -479,4 +483,20 @@ pub struct UserSession {
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub last_active_at: DateTime<Utc>,
+}
+
+/// Per-subject aggregated stats from recent scrape results.
+///
+/// Populated by `ScrapeJobOps::fetch_subject_stats` and converted into
+/// `crate::scraper::adaptive::SubjectStats` for interval computation.
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct SubjectResultStats {
+    pub subject: String,
+    pub recent_runs: i64,
+    pub avg_change_ratio: f64,
+    pub consecutive_zero_changes: i64,
+    pub consecutive_empty_fetches: i64,
+    pub recent_failure_count: i64,
+    pub recent_success_count: i64,
+    pub last_completed: DateTime<Utc>,
 }

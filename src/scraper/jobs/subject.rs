@@ -1,10 +1,9 @@
 use super::Job;
 use crate::banner::{BannerApi, SearchQuery, Term};
-use crate::data::batch::batch_upsert_courses;
-use crate::data::models::{TargetType, UpsertCounts};
+use crate::data::models::UpsertCounts;
+use crate::db::DbContext;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use tracing::{debug, info};
 
 /// Job implementation for scraping subject data.
@@ -38,12 +37,8 @@ impl SubjectJob {
 
 #[async_trait::async_trait]
 impl Job for SubjectJob {
-    fn target_type(&self) -> TargetType {
-        TargetType::Subject
-    }
-
-    #[tracing::instrument(skip(self, banner_api, db_pool), fields(subject = %self.subject, term))]
-    async fn process(&self, banner_api: &BannerApi, db_pool: &PgPool) -> Result<UpsertCounts> {
+    #[tracing::instrument(skip(self, banner_api, db), fields(subject = %self.subject, term))]
+    async fn process(&self, banner_api: &BannerApi, db: &DbContext) -> Result<UpsertCounts> {
         let subject_code = &self.subject;
         let term = self.effective_term();
 
@@ -62,7 +57,7 @@ impl Job for SubjectJob {
                 count = courses_from_api.len(),
                 "Found courses"
             );
-            batch_upsert_courses(&courses_from_api, db_pool).await?
+            db.courses().batch_upsert(&courses_from_api).await?
         } else {
             UpsertCounts::default()
         };

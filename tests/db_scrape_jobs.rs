@@ -2,18 +2,26 @@
 mod helpers;
 
 use banner::data::models::{ScrapePriority, TargetType};
-use banner::data::scrape_jobs;
+use banner::db::DbContext;
+use banner::events::EventBuffer;
 use serde_json::json;
 use sqlx::PgPool;
+use std::sync::Arc;
+
+fn make_ctx(pool: PgPool) -> DbContext {
+    let events = Arc::new(EventBuffer::new(100));
+    DbContext::new(pool, events)
+}
 
 #[sqlx::test]
-async fn fetch_and_lock_empty_queue(pool: PgPool) {
-    let result = scrape_jobs::fetch_and_lock_job(&pool).await.unwrap();
+async fn lock_next_empty_queue(pool: PgPool) {
+    let ctx = make_ctx(pool);
+    let result = ctx.scrape_jobs().lock_next().await.unwrap();
     assert!(result.is_none());
 }
 
 #[sqlx::test]
-async fn fetch_and_lock_returns_job_and_sets_locked_at(pool: PgPool) {
+async fn lock_next_returns_job_and_sets_locked_at(pool: PgPool) {
     let id = helpers::insert_scrape_job(
         &pool,
         TargetType::Subject,
@@ -25,7 +33,10 @@ async fn fetch_and_lock_returns_job_and_sets_locked_at(pool: PgPool) {
     )
     .await;
 
-    let job = scrape_jobs::fetch_and_lock_job(&pool)
+    let ctx = make_ctx(pool.clone());
+    let job = ctx
+        .scrape_jobs()
+        .lock_next()
         .await
         .unwrap()
         .expect("should return a job");
@@ -45,7 +56,7 @@ async fn fetch_and_lock_returns_job_and_sets_locked_at(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn fetch_and_lock_skips_locked_jobs(pool: PgPool) {
+async fn lock_next_skips_locked_jobs(pool: PgPool) {
     helpers::insert_scrape_job(
         &pool,
         TargetType::Subject,
@@ -57,12 +68,13 @@ async fn fetch_and_lock_skips_locked_jobs(pool: PgPool) {
     )
     .await;
 
-    let result = scrape_jobs::fetch_and_lock_job(&pool).await.unwrap();
+    let ctx = make_ctx(pool);
+    let result = ctx.scrape_jobs().lock_next().await.unwrap();
     assert!(result.is_none(), "locked jobs should be skipped");
 }
 
 #[sqlx::test]
-async fn fetch_and_lock_skips_future_execute_at(pool: PgPool) {
+async fn lock_next_skips_future_execute_at(pool: PgPool) {
     // Insert a job with execute_at in the future via raw SQL
     sqlx::query(
         "INSERT INTO scrape_jobs (target_type, target_payload, priority, execute_at)
@@ -72,12 +84,13 @@ async fn fetch_and_lock_skips_future_execute_at(pool: PgPool) {
     .await
     .unwrap();
 
-    let result = scrape_jobs::fetch_and_lock_job(&pool).await.unwrap();
+    let ctx = make_ctx(pool);
+    let result = ctx.scrape_jobs().lock_next().await.unwrap();
     assert!(result.is_none(), "future execute_at jobs should be skipped");
 }
 
 #[sqlx::test]
-async fn fetch_and_lock_priority_desc_ordering(pool: PgPool) {
+async fn lock_next_priority_desc_ordering(pool: PgPool) {
     // Insert low priority first, then critical
     helpers::insert_scrape_job(
         &pool,
@@ -101,7 +114,10 @@ async fn fetch_and_lock_priority_desc_ordering(pool: PgPool) {
     )
     .await;
 
-    let job = scrape_jobs::fetch_and_lock_job(&pool)
+    let ctx = make_ctx(pool);
+    let job = ctx
+        .scrape_jobs()
+        .lock_next()
         .await
         .unwrap()
         .expect("should return a job");
@@ -114,7 +130,7 @@ async fn fetch_and_lock_priority_desc_ordering(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn fetch_and_lock_execute_at_asc_ordering(pool: PgPool) {
+async fn lock_next_execute_at_asc_ordering(pool: PgPool) {
     // Insert an older job and a newer job, both same priority
     sqlx::query(
         "INSERT INTO scrape_jobs (target_type, target_payload, priority, execute_at)
@@ -132,7 +148,10 @@ async fn fetch_and_lock_execute_at_asc_ordering(pool: PgPool) {
     .await
     .unwrap();
 
-    let job = scrape_jobs::fetch_and_lock_job(&pool)
+    let ctx = make_ctx(pool);
+    let job = ctx
+        .scrape_jobs()
+        .lock_next()
         .await
         .unwrap()
         .expect("should return a job");
@@ -145,7 +164,7 @@ async fn fetch_and_lock_execute_at_asc_ordering(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn delete_job_removes_row(pool: PgPool) {
+async fn delete_removes_row(pool: PgPool) {
     let id = helpers::insert_scrape_job(
         &pool,
         TargetType::SingleCrn,
@@ -157,7 +176,8 @@ async fn delete_job_removes_row(pool: PgPool) {
     )
     .await;
 
-    scrape_jobs::delete_job(id, &pool).await.unwrap();
+    let ctx = make_ctx(pool.clone());
+    ctx.scrape_jobs().delete(id).await.unwrap();
 
     let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scrape_jobs WHERE id = $1")
         .bind(id)
@@ -168,13 +188,13 @@ async fn delete_job_removes_row(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn delete_job_nonexistent_id_no_error(pool: PgPool) {
-    // Deleting a non-existent ID should not error
-    scrape_jobs::delete_job(999_999, &pool).await.unwrap();
+async fn delete_nonexistent_id_no_error(pool: PgPool) {
+    let ctx = make_ctx(pool);
+    ctx.scrape_jobs().delete(999_999).await.unwrap();
 }
 
 #[sqlx::test]
-async fn unlock_job_clears_locked_at(pool: PgPool) {
+async fn unlock_clears_locked_at(pool: PgPool) {
     let id = helpers::insert_scrape_job(
         &pool,
         TargetType::CrnList,
@@ -186,7 +206,8 @@ async fn unlock_job_clears_locked_at(pool: PgPool) {
     )
     .await;
 
-    scrape_jobs::unlock_job(id, &pool).await.unwrap();
+    let ctx = make_ctx(pool.clone());
+    ctx.scrape_jobs().unlock(id).await.unwrap();
 
     let (locked_at,): (Option<chrono::DateTime<chrono::Utc>>,) =
         sqlx::query_as("SELECT locked_at FROM scrape_jobs WHERE id = $1")
@@ -195,98 +216,6 @@ async fn unlock_job_clears_locked_at(pool: PgPool) {
             .await
             .unwrap();
     assert!(locked_at.is_none(), "locked_at should be cleared");
-}
-
-#[sqlx::test]
-async fn unlock_and_increment_retry_has_retries_remaining(pool: PgPool) {
-    let id = helpers::insert_scrape_job(
-        &pool,
-        TargetType::Subject,
-        json!({"subject": "CS"}),
-        ScrapePriority::Medium,
-        true,
-        0, // retry_count
-        3, // max_retries
-    )
-    .await;
-
-    let result = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
-        .await
-        .unwrap();
-    assert!(
-        result.is_some(),
-        "should have retries remaining (0→1, max=3)"
-    );
-
-    // Verify state in DB
-    let (retry_count, locked_at): (i32, Option<chrono::DateTime<chrono::Utc>>) =
-        sqlx::query_as("SELECT retry_count, locked_at FROM scrape_jobs WHERE id = $1")
-            .bind(id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(retry_count, 1);
-    assert!(locked_at.is_none(), "should be unlocked");
-}
-
-#[sqlx::test]
-async fn unlock_and_increment_retry_exhausted(pool: PgPool) {
-    let id = helpers::insert_scrape_job(
-        &pool,
-        TargetType::Subject,
-        json!({"subject": "CS"}),
-        ScrapePriority::Medium,
-        true,
-        3, // retry_count (already used all 3 retries)
-        3, // max_retries
-    )
-    .await;
-
-    let result = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
-        .await
-        .unwrap();
-    assert!(
-        result.is_none(),
-        "should NOT have retries remaining (3→4, max=3)"
-    );
-
-    let (retry_count,): (i32,) =
-        sqlx::query_as("SELECT retry_count FROM scrape_jobs WHERE id = $1")
-            .bind(id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(retry_count, 4);
-}
-
-#[sqlx::test]
-async fn unlock_and_increment_retry_already_exceeded(pool: PgPool) {
-    let id = helpers::insert_scrape_job(
-        &pool,
-        TargetType::Subject,
-        json!({"subject": "CS"}),
-        ScrapePriority::Medium,
-        true,
-        5, // retry_count already past max
-        3, // max_retries
-    )
-    .await;
-
-    let result = scrape_jobs::unlock_and_increment_retry(id, 3, &pool)
-        .await
-        .unwrap();
-    assert!(
-        result.is_none(),
-        "should NOT have retries remaining (5→6, max=3)"
-    );
-
-    let (retry_count,): (i32,) =
-        sqlx::query_as("SELECT retry_count FROM scrape_jobs WHERE id = $1")
-            .bind(id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(retry_count, 6);
 }
 
 #[sqlx::test]
@@ -329,7 +258,10 @@ async fn find_existing_payloads_returns_matching(pool: PgPool) {
     .await;
 
     let candidates = vec![payload_a.clone(), payload_b.clone(), payload_c.clone()];
-    let existing = scrape_jobs::find_existing_job_payloads(TargetType::Subject, &candidates, &pool)
+    let ctx = make_ctx(pool);
+    let existing = ctx
+        .scrape_jobs()
+        .find_existing_payloads(TargetType::Subject, &candidates)
         .await
         .unwrap();
 
@@ -355,7 +287,10 @@ async fn find_existing_payloads_includes_locked(pool: PgPool) {
     .await;
 
     let candidates = vec![payload.clone()];
-    let existing = scrape_jobs::find_existing_job_payloads(TargetType::Subject, &candidates, &pool)
+    let ctx = make_ctx(pool);
+    let existing = ctx
+        .scrape_jobs()
+        .find_existing_payloads(TargetType::Subject, &candidates)
         .await
         .unwrap();
 
@@ -379,7 +314,10 @@ async fn find_existing_payloads_empty_candidates(pool: PgPool) {
     )
     .await;
 
-    let existing = scrape_jobs::find_existing_job_payloads(TargetType::Subject, &[], &pool)
+    let ctx = make_ctx(pool);
+    let existing = ctx
+        .scrape_jobs()
+        .find_existing_payloads(TargetType::Subject, &[])
         .await
         .unwrap();
 
@@ -390,7 +328,7 @@ async fn find_existing_payloads_empty_candidates(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn batch_insert_jobs_inserts_multiple(pool: PgPool) {
+async fn batch_insert_inserts_multiple(pool: PgPool) {
     let jobs = vec![
         (
             json!({"subject": "CS"}),
@@ -409,7 +347,8 @@ async fn batch_insert_jobs_inserts_multiple(pool: PgPool) {
         ),
     ];
 
-    scrape_jobs::batch_insert_jobs(&jobs, &pool).await.unwrap();
+    let ctx = make_ctx(pool.clone());
+    ctx.scrape_jobs().batch_insert(&jobs).await.unwrap();
 
     let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scrape_jobs")
         .fetch_one(&pool)
@@ -419,8 +358,9 @@ async fn batch_insert_jobs_inserts_multiple(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn batch_insert_jobs_empty_slice(pool: PgPool) {
-    scrape_jobs::batch_insert_jobs(&[], &pool).await.unwrap();
+async fn batch_insert_empty_slice(pool: PgPool) {
+    let ctx = make_ctx(pool.clone());
+    ctx.scrape_jobs().batch_insert(&[]).await.unwrap();
 
     let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scrape_jobs")
         .fetch_one(&pool)

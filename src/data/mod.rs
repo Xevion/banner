@@ -9,7 +9,6 @@ pub mod reference;
 pub mod reference_types;
 pub mod rmp;
 pub mod rmp_matching;
-pub mod scrape_jobs;
 pub mod sessions;
 pub mod terms;
 pub mod users;

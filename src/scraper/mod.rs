@@ -4,11 +4,11 @@ pub mod scheduler;
 pub mod worker;
 
 use crate::banner::BannerApi;
-use crate::data::scrape_jobs;
+use crate::db::DbContext;
+use crate::events::EventBuffer;
 use crate::services::Service;
 use crate::state::ReferenceCache;
 use crate::status::{ServiceStatus, ServiceStatusRegistry};
-use crate::web::ws::ScrapeJobEvent;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
@@ -27,7 +27,7 @@ pub struct ScraperService {
     banner_api: Arc<BannerApi>,
     reference_cache: Arc<RwLock<ReferenceCache>>,
     service_statuses: ServiceStatusRegistry,
-    job_events_tx: broadcast::Sender<ScrapeJobEvent>,
+    events: Arc<EventBuffer>,
     scheduler_handle: Option<JoinHandle<()>>,
     worker_handles: Vec<JoinHandle<()>>,
     shutdown_tx: Option<broadcast::Sender<()>>,
@@ -40,14 +40,14 @@ impl ScraperService {
         banner_api: Arc<BannerApi>,
         reference_cache: Arc<RwLock<ReferenceCache>>,
         service_statuses: ServiceStatusRegistry,
-        job_events_tx: broadcast::Sender<ScrapeJobEvent>,
+        events: Arc<EventBuffer>,
     ) -> Self {
         Self {
             db_pool,
             banner_api,
             reference_cache,
             service_statuses,
-            job_events_tx,
+            events,
             scheduler_handle: None,
             worker_handles: Vec::new(),
             shutdown_tx: None,
@@ -59,8 +59,10 @@ impl ScraperService {
     /// Force-unlocks any jobs left locked by a previous unclean shutdown before
     /// spawning workers, so those jobs re-enter the queue immediately.
     pub async fn start(&mut self) {
+        let db = DbContext::new(self.db_pool.clone(), self.events.clone());
+
         // Recover jobs left locked by a previous crash/unclean shutdown
-        match scrape_jobs::force_unlock_all(&self.db_pool).await {
+        match db.scrape_jobs().force_unlock_all().await {
             Ok(0) => {}
             Ok(count) => warn!(count, "Force-unlocked stale jobs from previous run"),
             Err(e) => warn!(error = ?e, "Failed to force-unlock stale jobs"),
@@ -73,10 +75,9 @@ impl ScraperService {
         self.shutdown_tx = Some(shutdown_tx.clone());
 
         let scheduler = Scheduler::new(
-            self.db_pool.clone(),
+            db.clone(),
             self.banner_api.clone(),
             self.reference_cache.clone(),
-            self.job_events_tx.clone(),
         );
         let shutdown_rx = shutdown_tx.subscribe();
         let scheduler_handle = tokio::spawn(async move {
@@ -87,12 +88,8 @@ impl ScraperService {
 
         let worker_count = 4; // This could be configurable
         for i in 0..worker_count {
-            let worker = Worker::new(
-                i,
-                self.db_pool.clone(),
-                self.banner_api.clone(),
-                self.job_events_tx.clone(),
-            );
+            let worker_db = DbContext::new(self.db_pool.clone(), self.events.clone());
+            let worker = Worker::new(i, worker_db, self.banner_api.clone());
             let shutdown_rx = shutdown_tx.subscribe();
             let worker_handle = tokio::spawn(async move {
                 worker.run(shutdown_rx).await;

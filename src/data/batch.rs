@@ -6,6 +6,7 @@ use crate::data::course_types::{DateRange, MeetingLocation};
 use crate::data::models::{DayOfWeek, DbMeetingTime, UpsertCounts};
 use crate::data::names::{decode_html_entities, parse_banner_name};
 use crate::error::Result;
+use crate::web::audit::AuditLogEntry;
 use chrono::NaiveDate;
 use sqlx::PgConnection;
 use sqlx::PgPool;
@@ -391,9 +392,9 @@ fn compute_diffs(rows: &[UpsertDiffRow]) -> (Vec<AuditEntry>, Vec<MetricEntry>) 
 // Task 4: Batch insert functions for audits and metrics
 // ---------------------------------------------------------------------------
 
-async fn insert_audits(audits: &[AuditEntry], conn: &mut PgConnection) -> Result<()> {
+async fn insert_audits(audits: &[AuditEntry], conn: &mut PgConnection) -> Result<Vec<i32>> {
     if audits.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     let course_ids: Vec<i32> = audits.iter().map(|a| a.course_id).collect();
@@ -401,23 +402,24 @@ async fn insert_audits(audits: &[AuditEntry], conn: &mut PgConnection) -> Result
     let old_values: Vec<&str> = audits.iter().map(|a| a.old_value.as_str()).collect();
     let new_values: Vec<&str> = audits.iter().map(|a| a.new_value.as_str()).collect();
 
-    sqlx::query(
+    let rows: Vec<(i32,)> = sqlx::query_as(
         r#"
         INSERT INTO course_audits (course_id, timestamp, field_changed, old_value, new_value)
         SELECT v.course_id, NOW(), v.field_changed, v.old_value, v.new_value
         FROM UNNEST($1::int4[], $2::text[], $3::text[], $4::text[])
             AS v(course_id, field_changed, old_value, new_value)
+        RETURNING id
         "#,
     )
     .bind(&course_ids)
     .bind(&fields)
     .bind(&old_values)
     .bind(&new_values)
-    .execute(&mut *conn)
+    .fetch_all(&mut *conn)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to batch insert course_audits: {}", e))?;
 
-    Ok(())
+    Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
 async fn insert_metrics(metrics: &[MetricEntry], conn: &mut PgConnection) -> Result<()> {
@@ -462,10 +464,13 @@ async fn insert_metrics(metrics: &[MetricEntry], conn: &mut PgConnection) -> Res
 /// # Performance
 /// - Reduces N database round-trips to 5 (old-data CTE + upsert, audits, metrics, instructors, junction)
 /// - Typical usage: 50-200 courses per batch
-pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Result<UpsertCounts> {
+pub async fn batch_upsert_courses(
+    courses: &[Course],
+    db_pool: &PgPool,
+) -> Result<(UpsertCounts, Vec<AuditLogEntry>)> {
     if courses.is_empty() {
         info!("No courses to upsert, skipping batch operation");
-        return Ok(UpsertCounts::default());
+        return Ok((UpsertCounts::default(), Vec::new()));
     }
 
     let start = Instant::now();
@@ -502,7 +507,7 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
     };
 
     // Step 4: Insert audits and metrics
-    insert_audits(&audits, &mut tx).await?;
+    let audit_ids = insert_audits(&audits, &mut tx).await?;
     insert_metrics(&metrics, &mut tx).await?;
 
     // Step 5: Upsert instructors (returns email -> id map)
@@ -512,6 +517,14 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
     upsert_course_instructors(courses, &crn_term_to_id, &email_to_id, &mut tx).await?;
 
     tx.commit().await?;
+
+    let audit_entries = if !audit_ids.is_empty() {
+        fetch_audit_entries_by_ids(db_pool, &audit_ids)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
 
     let duration = start.elapsed();
     info!(
@@ -524,7 +537,56 @@ pub async fn batch_upsert_courses(courses: &[Course], db_pool: &PgPool) -> Resul
         "Batch upserted courses with instructors, audits, and metrics"
     );
 
-    Ok(counts)
+    Ok((counts, audit_entries))
+}
+
+async fn fetch_audit_entries_by_ids(
+    db_pool: &PgPool,
+    audit_ids: &[i32],
+) -> Result<Vec<AuditLogEntry>> {
+    #[derive(sqlx::FromRow)]
+    struct AuditRow {
+        id: i32,
+        course_id: i32,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        field_changed: String,
+        old_value: String,
+        new_value: String,
+        subject: Option<String>,
+        course_number: Option<String>,
+        crn: Option<String>,
+        title: Option<String>,
+        term_code: Option<String>,
+    }
+
+    let rows: Vec<AuditRow> = sqlx::query_as(
+        "SELECT a.id, a.course_id, a.timestamp, a.field_changed, a.old_value, a.new_value, \
+                c.subject, c.course_number, c.crn, c.title, c.term_code \
+         FROM course_audits a \
+         LEFT JOIN courses c ON c.id = a.course_id \
+         WHERE a.id = ANY($1)",
+    )
+    .bind(audit_ids)
+    .fetch_all(db_pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to fetch audit entries: {}", e))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| AuditLogEntry {
+            id: row.id,
+            course_id: row.course_id,
+            timestamp: row.timestamp.to_rfc3339(),
+            field_changed: row.field_changed,
+            old_value: row.old_value,
+            new_value: row.new_value,
+            subject: row.subject,
+            course_number: row.course_number,
+            crn: row.crn,
+            course_title: row.title,
+            term_code: row.term_code,
+        })
+        .collect())
 }
 
 // ---------------------------------------------------------------------------

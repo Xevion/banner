@@ -3,17 +3,17 @@
 use crate::banner::BannerApi;
 use crate::banner::Course;
 use crate::data::models::ReferenceData;
+use crate::events::EventBuffer;
 use crate::status::ServiceStatusRegistry;
 use crate::web::schedule_cache::ScheduleCache;
 use crate::web::session_cache::{OAuthStateStore, SessionCache};
-use crate::web::ws::ScrapeJobEvent;
 use anyhow::Result;
 use dashmap::DashMap;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::RwLock;
 
 /// In-memory cache for reference data (code→description lookups).
 ///
@@ -80,13 +80,13 @@ pub struct AppState {
     pub session_cache: SessionCache,
     pub oauth_state_store: OAuthStateStore,
     pub schedule_cache: ScheduleCache,
-    pub scrape_job_tx: broadcast::Sender<ScrapeJobEvent>,
+    pub events: Arc<EventBuffer>,
     pub search_options_cache: Arc<DashMap<String, (Instant, serde_json::Value)>>,
 }
 
 impl AppState {
     pub fn new(banner_api: Arc<BannerApi>, db_pool: PgPool) -> Self {
-        let (scrape_job_tx, _) = broadcast::channel(64);
+        let events = Arc::new(EventBuffer::new(1024));
         let schedule_cache = ScheduleCache::new(db_pool.clone());
         Self {
             session_cache: SessionCache::new(db_pool.clone()),
@@ -96,14 +96,9 @@ impl AppState {
             service_statuses: ServiceStatusRegistry::new(),
             reference_cache: Arc::new(RwLock::new(ReferenceCache::new())),
             schedule_cache,
-            scrape_job_tx,
+            events,
             search_options_cache: Arc::new(DashMap::new()),
         }
-    }
-
-    /// Subscribe to scrape job lifecycle events.
-    pub fn scrape_job_events(&self) -> broadcast::Receiver<ScrapeJobEvent> {
-        self.scrape_job_tx.subscribe()
     }
 
     /// Initialize the reference cache from the database.

@@ -7,7 +7,7 @@ use chrono::{DateTime, Datelike, Timelike, Utc};
 use chrono_tz::US::Central;
 use std::time::Duration;
 
-use crate::data::scrape_jobs::SubjectResultStats;
+use crate::data::models::SubjectResultStats;
 
 const FLOOR_INTERVAL: Duration = Duration::from_secs(3 * 60);
 const MODERATE_HIGH_INTERVAL: Duration = Duration::from_secs(5 * 60);

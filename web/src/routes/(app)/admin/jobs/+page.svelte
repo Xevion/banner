@@ -1,9 +1,9 @@
 <script lang="ts">
 import { type ScrapeJobDto, client } from "$lib/api";
 import { FlexRender, createSvelteTable } from "$lib/components/ui/data-table/index.js";
+import { useStream } from "$lib/composables";
 import { formatAbsoluteDate } from "$lib/date";
 import { formatDuration } from "$lib/time";
-import { type ConnectionState, ScrapeJobsStore } from "$lib/ws";
 import { ArrowDown, ArrowUp, ArrowUpDown, TriangleAlert } from "@lucide/svelte";
 import {
   type ColumnDef,
@@ -15,15 +15,51 @@ import {
 import { SvelteMap } from "svelte/reactivity";
 import { onMount } from "svelte";
 
-let jobs = $state<ScrapeJobDto[]>([]);
-let connectionState = $state<ConnectionState>("disconnected");
 let initialized = $state(false);
 let error = $state<string | null>(null);
 let sorting: SortingState = $state([]);
 let tick = $state(0);
 let subjectMap = new SvelteMap<string, string>();
 
-let store: ScrapeJobsStore | undefined;
+// Helper to update a job by ID in an array
+function updateById(
+  jobs: ScrapeJobDto[],
+  id: number,
+  updates: Partial<ScrapeJobDto>
+): ScrapeJobDto[] {
+  return jobs.map((job) => (job.id === id ? { ...job, ...updates } : job));
+}
+
+// Use the useStream composable for subscription management
+const stream = useStream("scrapeJobs", null, {
+  initial: [] as ScrapeJobDto[],
+  onSnapshot: (snapshot) => {
+    initialized = true;
+    return sortJobs(snapshot.jobs);
+  },
+  on: {
+    created: (jobs, e) => sortJobs([...jobs, e.job]),
+    locked: (jobs, e) =>
+      updateById(jobs, e.id, {
+        lockedAt: e.lockedAt,
+        status: e.status,
+      }),
+    completed: (jobs, e) => jobs.filter((j) => j.id !== e.id),
+    retried: (jobs, e) =>
+      updateById(jobs, e.id, {
+        retryCount: e.retryCount,
+        queuedAt: e.queuedAt,
+        status: e.status,
+        lockedAt: null,
+      }),
+    exhausted: (jobs, e) => updateById(jobs, e.id, { status: "exhausted" }),
+    deleted: (jobs, e) => jobs.filter((j) => j.id !== e.id),
+  },
+});
+
+// Expose jobs as a derived binding for the template
+const jobs = $derived(stream.state);
+const connectionState = $derived(stream.connectionState);
 
 // Shared tooltip state — single tooltip for all timing cells via event delegation
 let tooltipText = $state<string | null>(null);
@@ -73,21 +109,8 @@ onMount(() => {
       // Subject lookup is best-effort
     });
 
-  // Initialize WebSocket store
-  store = new ScrapeJobsStore(() => {
-    if (!store) return;
-    connectionState = store.getConnectionState();
-    initialized = store.isInitialized();
-    // getJobs() returns a cached array when unchanged, so only reassign
-    // when the reference differs to avoid triggering reactive table rebuilds.
-    const next = store.getJobs();
-    if (next !== jobs) jobs = next;
-  });
-  store.connect();
-
   return () => {
     clearInterval(tickInterval);
-    store?.disconnect();
   };
 });
 
@@ -97,29 +120,45 @@ function handleSortingChange(updater: Updater<SortingState>) {
 
 // --- Helper functions ---
 
+const PRIORITY_ORDER: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+function sortJobs(jobs: ScrapeJobDto[]): ScrapeJobDto[] {
+  return [...jobs].sort((a, b) => {
+    const pa = PRIORITY_ORDER[String(a.priority).toLowerCase()] ?? 2;
+    const pb = PRIORITY_ORDER[String(b.priority).toLowerCase()] ?? 2;
+    if (pa !== pb) return pa - pb;
+    return new Date(a.executeAt).getTime() - new Date(b.executeAt).getTime();
+  });
+}
+
 function formatJobDetails(job: ScrapeJobDto, subjects: Map<string, string>): string {
   const payload = job.targetPayload as Record<string, unknown>;
   switch (job.targetType) {
-    case "Subject": {
+    case "subject": {
       const code = payload.subject as string;
       const desc = subjects.get(code);
       return desc ? `${code} \u2014 ${desc}` : code;
     }
-    case "CrnList": {
+    case "crnList": {
       const crns = payload.crns as string[];
       return `${crns.length} CRNs`;
     }
-    case "SingleCrn":
+    case "singleCrn":
       return `CRN ${payload.crn as string}`;
-    case "CourseRange":
+    case "courseRange":
       return `${payload.subject as string} ${payload.low as number}\u2013${payload.high as number}`;
     default:
       return JSON.stringify(payload);
   }
 }
 
-function priorityColor(priority: string): string {
-  const p = priority.toLowerCase();
+function priorityColor(priority: ScrapeJobDto["priority"]): string {
+  const p = String(priority).toLowerCase();
   if (p === "urgent" || p === "critical") return "text-red-500";
   if (p === "high") return "text-orange-500";
   if (p === "low") return "text-muted-foreground";
@@ -152,6 +191,10 @@ function statusColor(status: string): { text: string; dot: string } {
 function formatStatusLabel(status: string): string {
   // Convert camelCase to separate words, capitalize first letter
   return status.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function formatTargetType(targetType: ScrapeJobDto["targetType"]): string {
+  return formatStatusLabel(String(targetType));
 }
 
 function lockDurationColor(ms: number): string {
@@ -267,7 +310,12 @@ const skeletonWidths: Record<string, string> = {
 function getTimingDisplay(
   job: ScrapeJobDto,
   tick: number
-): { text: string; colorClass: string; icon: "warning" | "none"; tooltip: string } {
+): {
+  text: string;
+  colorClass: string;
+  icon: "warning" | "none";
+  tooltip: string;
+} {
   void tick;
   const now = Date.now();
   const queuedTime = new Date(job.queuedAt).getTime();
@@ -365,7 +413,7 @@ function getTimingDisplay(
         </span>
         <button
           class="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
-          onclick={() => store?.retry()}
+          onclick={() => stream.retry()}
         >
           Retry
         </button>
@@ -432,7 +480,9 @@ function getTimingDisplay(
               {#each columns as col (col.id)}
                 <td class="px-3 py-2.5">
                   <div
-                    class="h-3.5 rounded bg-muted animate-pulse {skeletonWidths[col.id ?? ''] ?? 'w-20'}"
+                    class="h-3.5 rounded bg-muted animate-pulse {skeletonWidths[
+                      col.id ?? ''
+                    ] ?? 'w-20'}"
                   ></div>
                 </td>
               {/each}
@@ -442,7 +492,10 @@ function getTimingDisplay(
       {:else if jobs.length === 0}
         <tbody>
           <tr>
-            <td colspan={columns.length} class="py-12 text-center text-muted-foreground">
+            <td
+              colspan={columns.length}
+              class="py-12 text-center text-muted-foreground"
+            >
               No scrape jobs found.
             </td>
           </tr>
@@ -459,15 +512,26 @@ function getTimingDisplay(
               {#each row.getVisibleCells() as cell (cell.id)}
                 {@const colId = cell.column.id}
                 {#if colId === "id"}
-                  <td class="px-3 py-2.5 tabular-nums text-muted-foreground/70 w-12">{job.id}</td>
+                  <td
+                    class="px-3 py-2.5 tabular-nums text-muted-foreground/70 w-12"
+                    >{job.id}</td
+                  >
                 {:else if colId === "status"}
                   <td class="px-3 py-2.5 whitespace-nowrap">
                     <span class="inline-flex items-center gap-1.5">
-                      <span class="size-1.5 shrink-0 rounded-full {sc.dot}"></span>
+                      <span class="size-1.5 shrink-0 rounded-full {sc.dot}"
+                      ></span>
                       <span class="flex flex-col leading-tight">
-                        <span class={sc.text}>{formatStatusLabel(job.status)}</span>
+                        <span class={sc.text}
+                          >{formatStatusLabel(job.status)}</span
+                        >
                         {#if job.maxRetries > 0}
-                          <span class="text-[10px] {retryColor(job.retryCount, job.maxRetries)}">
+                          <span
+                            class="text-[10px] {retryColor(
+                              job.retryCount,
+                              job.maxRetries,
+                            )}"
+                          >
                             {job.retryCount}/{job.maxRetries} retries
                           </span>
                         {/if}
@@ -479,16 +543,23 @@ function getTimingDisplay(
                     <span
                       class="inline-flex items-center rounded-md bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
                     >
-                      {job.targetType}
+                      {formatTargetType(job.targetType)}
                     </span>
                   </td>
                 {:else if colId === "details"}
-                  <td class="px-3 py-2.5 max-w-48 truncate text-muted-foreground" title={formatJobDetails(job, subjectMap)}>
+                  <td
+                    class="px-3 py-2.5 max-w-48 truncate text-muted-foreground"
+                    title={formatJobDetails(job, subjectMap)}
+                  >
                     {formatJobDetails(job, subjectMap)}
                   </td>
                 {:else if colId === "priority"}
                   <td class="px-3 py-2.5 whitespace-nowrap">
-                    <span class="font-medium capitalize {priorityColor(job.priority)}">
+                    <span
+                      class="font-medium capitalize {priorityColor(
+                        job.priority,
+                      )}"
+                    >
                       {job.priority}
                     </span>
                   </td>
@@ -498,7 +569,9 @@ function getTimingDisplay(
                       class="inline-flex items-center gap-1.5 tabular-nums text-foreground"
                       data-timing-tooltip={timingDisplay.tooltip}
                     >
-                      <span class="size-3.5 shrink-0 inline-flex items-center justify-center {timingDisplay.colorClass}">
+                      <span
+                        class="size-3.5 shrink-0 inline-flex items-center justify-center {timingDisplay.colorClass}"
+                      >
                         {#if timingDisplay.icon === "warning"}
                           <TriangleAlert class="size-3.5" />
                         {/if}

@@ -1,11 +1,9 @@
 use crate::banner::{BannerApi, BannerApiError};
-use crate::data::models::{ScrapeJob, ScrapeJobStatus, UpsertCounts};
-use crate::data::scrape_jobs;
+use crate::data::models::{ScrapeJob, UpsertCounts};
+use crate::db::DbContext;
 use crate::error::Result;
 use crate::scraper::jobs::{JobError, JobType};
-use crate::web::ws::ScrapeJobEvent;
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
@@ -20,25 +18,14 @@ const JOB_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// Each worker runs in its own asynchronous task and continuously polls the
 /// database for scrape jobs to execute.
 pub struct Worker {
-    id: usize, // For logging purposes
-    db_pool: PgPool,
+    id: usize,
+    db: DbContext,
     banner_api: Arc<BannerApi>,
-    job_events_tx: broadcast::Sender<ScrapeJobEvent>,
 }
 
 impl Worker {
-    pub fn new(
-        id: usize,
-        db_pool: PgPool,
-        banner_api: Arc<BannerApi>,
-        job_events_tx: broadcast::Sender<ScrapeJobEvent>,
-    ) -> Self {
-        Self {
-            id,
-            db_pool,
-            banner_api,
-            job_events_tx,
-        }
+    pub fn new(id: usize, db: DbContext, banner_api: Arc<BannerApi>) -> Self {
+        Self { id, db, banner_api }
     }
 
     /// Runs the worker's main loop.
@@ -79,14 +66,7 @@ impl Worker {
             let started_at = Utc::now();
             let start = std::time::Instant::now();
 
-            // Emit JobLocked event
-            let locked_at = started_at.to_rfc3339();
-            debug!(job_id, "Emitting JobLocked event");
-            let _ = self.job_events_tx.send(ScrapeJobEvent::JobLocked {
-                id: job_id,
-                locked_at,
-                status: ScrapeJobStatus::Processing,
-            });
+            // Locked event is emitted automatically by lock_next()
 
             // Process the job, racing against shutdown signal and timeout
             let process_result = tokio::select! {
@@ -130,8 +110,9 @@ impl Worker {
     ///
     /// This uses a `FOR UPDATE SKIP LOCKED` query to ensure that multiple
     /// workers can poll the queue concurrently without conflicts.
+    /// Emits a `ScrapeJobEvent::Locked` event automatically via DbContext.
     async fn fetch_and_lock_job(&self) -> Result<Option<ScrapeJob>> {
-        scrape_jobs::fetch_and_lock_job(&self.db_pool).await
+        self.db.scrape_jobs().lock_next().await
     }
 
     async fn process_job(&self, job: ScrapeJob) -> Result<UpsertCounts, JobError> {
@@ -159,7 +140,7 @@ impl Worker {
 
             // Process the job - API errors are recoverable
             job_impl
-                .process(&self.banner_api, &self.db_pool)
+                .process(&self.banner_api, &self.db)
                 .await
                 .map_err(JobError::Recoverable)
         }
@@ -167,20 +148,8 @@ impl Worker {
         .await
     }
 
-    async fn delete_job(&self, job_id: i32) -> Result<()> {
-        scrape_jobs::delete_job(job_id, &self.db_pool).await
-    }
-
     async fn unlock_job(&self, job_id: i32) -> Result<()> {
-        scrape_jobs::unlock_job(job_id, &self.db_pool).await
-    }
-
-    async fn unlock_and_increment_retry(
-        &self,
-        job_id: i32,
-        max_retries: i32,
-    ) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
-        scrape_jobs::unlock_and_increment_retry(job_id, max_retries, &self.db_pool).await
+        self.db.scrape_jobs().unlock(job_id).await
     }
 
     /// Handle shutdown signal received during job processing
@@ -234,31 +203,30 @@ impl Worker {
                 );
 
                 // Log the result
-                if let Err(e) = scrape_jobs::insert_job_result(
-                    target_type,
-                    payload,
-                    priority,
-                    queued_at,
-                    started_at,
-                    duration_ms,
-                    true,
-                    None,
-                    retry_count,
-                    Some(&counts),
-                    &self.db_pool,
-                )
-                .await
+                if let Err(e) = self
+                    .db
+                    .scrape_jobs()
+                    .insert_result(
+                        target_type,
+                        payload,
+                        priority,
+                        queued_at,
+                        started_at,
+                        duration_ms,
+                        true,
+                        None,
+                        retry_count,
+                        Some(&counts),
+                    )
+                    .await
                 {
                     error!(worker_id = self.id, job_id, error = ?e, "Failed to insert job result");
                 }
 
-                if let Err(e) = self.delete_job(job_id).await {
-                    error!(worker_id = self.id, job_id, error = ?e, "Failed to delete completed job");
+                // Mark job as completed (deletes it and emits Completed event)
+                if let Err(e) = self.db.scrape_jobs().complete(job_id).await {
+                    error!(worker_id = self.id, job_id, error = ?e, "Failed to complete job");
                 }
-                debug!(job_id, "Emitting JobCompleted event");
-                let _ = self
-                    .job_events_tx
-                    .send(ScrapeJobEvent::JobCompleted { id: job_id });
             }
             Err(JobError::Recoverable(e)) => {
                 self.handle_recoverable_error(
@@ -278,20 +246,22 @@ impl Worker {
             Err(JobError::Unrecoverable(e)) => {
                 // Log the failed result
                 let err_msg = format!("{e:#}");
-                if let Err(log_err) = scrape_jobs::insert_job_result(
-                    target_type,
-                    payload,
-                    priority,
-                    queued_at,
-                    started_at,
-                    duration_ms,
-                    false,
-                    Some(&err_msg),
-                    retry_count,
-                    None,
-                    &self.db_pool,
-                )
-                .await
+                if let Err(log_err) = self
+                    .db
+                    .scrape_jobs()
+                    .insert_result(
+                        target_type,
+                        payload,
+                        priority,
+                        queued_at,
+                        started_at,
+                        duration_ms,
+                        false,
+                        Some(&err_msg),
+                        retry_count,
+                        None,
+                    )
+                    .await
                 {
                     error!(worker_id = self.id, job_id, error = ?log_err, "Failed to insert job result");
                 }
@@ -303,13 +273,10 @@ impl Worker {
                     error = ?e,
                     "Job corrupted, deleting"
                 );
-                if let Err(e) = self.delete_job(job_id).await {
+                // Delete job (emits Deleted event automatically)
+                if let Err(e) = self.db.scrape_jobs().delete(job_id).await {
                     error!(worker_id = self.id, job_id, error = ?e, "Failed to delete corrupted job");
                 }
-                debug!(job_id, "Emitting JobDeleted event");
-                let _ = self
-                    .job_events_tx
-                    .send(ScrapeJobEvent::JobDeleted { id: job_id });
             }
         }
     }
@@ -356,30 +323,39 @@ impl Worker {
             );
         }
 
-        // Atomically unlock and increment retry count, checking if retry is allowed
-        match self.unlock_and_increment_retry(job_id, max_retries).await {
-            Ok(Some(new_queued_at)) => {
-                debug!(
-                    worker_id = self.id,
-                    job_id,
-                    retry_attempt = next_attempt,
-                    remaining_retries = remaining_retries,
-                    "Job unlocked for retry"
-                );
-                debug!(job_id, "Emitting JobRetried event");
-                let _ = self.job_events_tx.send(ScrapeJobEvent::JobRetried {
-                    id: job_id,
-                    retry_count: next_attempt,
-                    queued_at: new_queued_at.to_rfc3339(),
-                    status: ScrapeJobStatus::Pending,
-                });
-                // Don't log a result yet — the job will be retried
+        // Check if retries remain
+        if next_attempt < max_retries {
+            // Retry is allowed - unlock job with incremented retry count
+            // Use immediate retry for now (execute_at = NOW)
+            let execute_at = Utc::now();
+            match self
+                .db
+                .scrape_jobs()
+                .retry(job_id, next_attempt, execute_at)
+                .await
+            {
+                Ok(()) => {
+                    debug!(
+                        worker_id = self.id,
+                        job_id,
+                        retry_attempt = next_attempt,
+                        remaining_retries = remaining_retries,
+                        "Job unlocked for retry"
+                    );
+                    // Retried event emitted automatically by retry()
+                }
+                Err(e) => {
+                    error!(worker_id = self.id, job_id, error = ?e, "Failed to unlock job for retry");
+                }
             }
-            Ok(None) => {
-                // Max retries exceeded — log final failure result
-                let duration_ms = duration.as_millis() as i32;
-                let err_msg = format!("{e:#}");
-                if let Err(log_err) = scrape_jobs::insert_job_result(
+        } else {
+            // Max retries exceeded — log final failure result
+            let duration_ms = duration.as_millis() as i32;
+            let err_msg = format!("{e:#}");
+            if let Err(log_err) = self
+                .db
+                .scrape_jobs()
+                .insert_result(
                     target_type,
                     payload,
                     priority,
@@ -390,35 +366,24 @@ impl Worker {
                     Some(&err_msg),
                     next_attempt,
                     None,
-                    &self.db_pool,
                 )
                 .await
-                {
-                    error!(worker_id = self.id, job_id, error = ?log_err, "Failed to insert job result");
-                }
-
-                error!(
-                    worker_id = self.id,
-                    job_id,
-                    duration_ms = duration.as_millis(),
-                    retry_count = next_attempt,
-                    max_retries = max_retries,
-                    error = ?e,
-                    "Job failed permanently (max retries exceeded), deleting"
-                );
-                if let Err(e) = self.delete_job(job_id).await {
-                    error!(worker_id = self.id, job_id, error = ?e, "Failed to delete failed job");
-                }
-                debug!(job_id, "Emitting JobExhausted and JobDeleted events");
-                let _ = self
-                    .job_events_tx
-                    .send(ScrapeJobEvent::JobExhausted { id: job_id });
-                let _ = self
-                    .job_events_tx
-                    .send(ScrapeJobEvent::JobDeleted { id: job_id });
+            {
+                error!(worker_id = self.id, job_id, error = ?log_err, "Failed to insert job result");
             }
-            Err(e) => {
-                error!(worker_id = self.id, job_id, error = ?e, "Failed to unlock and increment retry count");
+
+            error!(
+                worker_id = self.id,
+                job_id,
+                duration_ms = duration.as_millis(),
+                retry_count = next_attempt,
+                max_retries = max_retries,
+                error = ?e,
+                "Job failed permanently (max retries exceeded), deleting"
+            );
+            // Mark as exhausted (emits Exhausted + Deleted events automatically)
+            if let Err(e) = self.db.scrape_jobs().exhaust(job_id).await {
+                error!(worker_id = self.id, job_id, error = ?e, "Failed to exhaust job");
             }
         }
     }

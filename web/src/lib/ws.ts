@@ -1,64 +1,71 @@
-import type { ScrapeJobDto, ScrapeJobEvent } from "$lib/bindings";
+import type {
+  StreamKind,
+  StreamFilter,
+  StreamClientMessage,
+  StreamDelta,
+  StreamServerMessage,
+  StreamSnapshot,
+  AuditLogFilter,
+  ScrapeJobsFilter,
+} from "$lib/bindings";
 
 export type ConnectionState = "connected" | "reconnecting" | "disconnected";
-
-const PRIORITY_ORDER: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
 
 const MAX_RECONNECT_DELAY = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
-function sortJobs(jobs: Iterable<ScrapeJobDto>): ScrapeJobDto[] {
-  return Array.from(jobs).sort((a, b) => {
-    const pa = PRIORITY_ORDER[a.priority.toLowerCase()] ?? 2;
-    const pb = PRIORITY_ORDER[b.priority.toLowerCase()] ?? 2;
-    if (pa !== pb) return pa - pb;
-    return new Date(a.executeAt).getTime() - new Date(b.executeAt).getTime();
-  });
+type StreamKey = StreamKind;
+type SnapshotFor<S extends StreamKey> = Extract<StreamSnapshot, { stream: S }>;
+type DeltaFor<S extends StreamKey> = Extract<StreamDelta, { stream: S }>;
+type FilterFor<S extends StreamKey> = S extends "scrapeJobs"
+  ? ScrapeJobsFilter | null
+  : S extends "auditLog"
+    ? AuditLogFilter | null
+    : never;
+
+interface SubscriptionHandlers<S extends StreamKey> {
+  onSnapshot: (snapshot: SnapshotFor<S>) => void;
+  onDelta: (delta: DeltaFor<S>) => void;
+  onError?: (error: StreamServerMessage & { type: "error" }) => void;
 }
 
-export class ScrapeJobsStore {
+interface SubscriptionSpec<S extends StreamKey> {
+  stream: S;
+  filter: FilterFor<S>;
+  handlers: SubscriptionHandlers<S>;
+  subId: string | null;
+}
+
+interface PendingRequest {
+  kind: "subscribe" | "modify" | "unsubscribe";
+  spec?: SubscriptionSpec<StreamKey>;
+}
+
+export class StreamClient {
   private ws: WebSocket | null = null;
-  private jobs = new Map<number, ScrapeJobDto>();
   private _connectionState: ConnectionState = "disconnected";
-  private _initialized = false;
-  private onUpdate: () => void;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private intentionalClose = false;
+  private requestSeq = 1;
 
-  /** Cached sorted array, invalidated on data mutations. */
-  private cachedJobs: ScrapeJobDto[] = [];
-  private cacheDirty = false;
+  private subscriptions: SubscriptionSpec<StreamKey>[] = [];
+  private subById = new Map<string, SubscriptionSpec<StreamKey>>();
+  private pendingRequests = new Map<string, PendingRequest>();
+  private onStateChange?: () => void;
 
-  constructor(onUpdate: () => void) {
-    this.onUpdate = onUpdate;
-  }
-
-  getJobs(): ScrapeJobDto[] {
-    if (this.cacheDirty) {
-      this.cachedJobs = sortJobs(this.jobs.values());
-      this.cacheDirty = false;
-    }
-    return this.cachedJobs;
+  constructor(onStateChange?: () => void) {
+    this.onStateChange = onStateChange;
   }
 
   getConnectionState(): ConnectionState {
     return this._connectionState;
   }
 
-  isInitialized(): boolean {
-    return this._initialized;
-  }
-
   connect(): void {
     this.intentionalClose = false;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/api/admin/scrape-jobs/ws`;
+    const url = `${protocol}//${window.location.host}/api/ws`;
 
     try {
       this.ws = new WebSocket(url);
@@ -70,15 +77,21 @@ export class ScrapeJobsStore {
     this.ws.onopen = () => {
       this._connectionState = "connected";
       this.reconnectAttempts = 0;
-      this.onUpdate();
+      this.subById.clear();
+      this.pendingRequests.clear();
+      for (const spec of this.subscriptions) {
+        spec.subId = null;
+        this.sendSubscribe(spec);
+      }
+      this.onStateChange?.();
     };
 
     this.ws.onmessage = (event) => {
       try {
-        const parsed = JSON.parse(event.data as string) as ScrapeJobEvent;
-        this.handleEvent(parsed);
+        const parsed = JSON.parse(event.data as string) as StreamServerMessage;
+        this.handleMessage(parsed);
       } catch {
-        // Ignore malformed messages
+        // ignore malformed messages
       }
     };
 
@@ -90,58 +103,8 @@ export class ScrapeJobsStore {
     };
 
     this.ws.onerror = () => {
-      // onclose will fire after onerror, so reconnect is handled there
+      // onclose will handle reconnects
     };
-  }
-
-  handleEvent(event: ScrapeJobEvent): void {
-    switch (event.type) {
-      case "init":
-        this.jobs.clear();
-        for (const job of event.jobs) {
-          this.jobs.set(job.id, job);
-        }
-        this._initialized = true;
-        break;
-      case "jobCreated":
-        this.jobs.set(event.job.id, event.job);
-        break;
-      case "jobLocked": {
-        const job = this.jobs.get(event.id);
-        if (job) {
-          this.jobs.set(event.id, { ...job, lockedAt: event.lockedAt, status: event.status });
-        }
-        break;
-      }
-      case "jobCompleted":
-        this.jobs.delete(event.id);
-        break;
-      case "jobRetried": {
-        const job = this.jobs.get(event.id);
-        if (job) {
-          this.jobs.set(event.id, {
-            ...job,
-            retryCount: event.retryCount,
-            queuedAt: event.queuedAt,
-            status: event.status,
-            lockedAt: null,
-          });
-        }
-        break;
-      }
-      case "jobExhausted": {
-        const job = this.jobs.get(event.id);
-        if (job) {
-          this.jobs.set(event.id, { ...job, status: "exhausted" });
-        }
-        break;
-      }
-      case "jobDeleted":
-        this.jobs.delete(event.id);
-        break;
-    }
-    this.cacheDirty = true;
-    this.onUpdate();
   }
 
   disconnect(): void {
@@ -155,32 +118,156 @@ export class ScrapeJobsStore {
       this.ws = null;
     }
     this._connectionState = "disconnected";
-    this.onUpdate();
+    this.onStateChange?.();
   }
 
-  resync(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: "resync" }));
-    }
-  }
-
-  /** Attempt to reconnect after being disconnected. Resets attempt counter. */
   retry(): void {
     this.reconnectAttempts = 0;
     this._connectionState = "reconnecting";
-    this.onUpdate();
+    this.onStateChange?.();
     this.connect();
+  }
+
+  subscribe<S extends StreamKey>(
+    stream: S,
+    filter: FilterFor<S>,
+    handlers: SubscriptionHandlers<S>
+  ): { modify: (next: FilterFor<S>) => void; unsubscribe: () => void } {
+    const spec: SubscriptionSpec<S> = {
+      stream,
+      filter,
+      handlers,
+      subId: null,
+    };
+    const storedSpec = spec as unknown as SubscriptionSpec<StreamKey>;
+
+    this.subscriptions.push(storedSpec);
+    this.sendSubscribe(storedSpec);
+
+    return {
+      modify: (next) => {
+        spec.filter = next;
+        if (spec.subId) {
+          this.sendModify(spec.subId, spec.stream, next);
+        }
+      },
+      unsubscribe: () => {
+        this.subscriptions = this.subscriptions.filter((s) => s !== storedSpec);
+        if (spec.subId) {
+          this.sendUnsubscribe(spec.subId);
+          this.subById.delete(spec.subId);
+          spec.subId = null;
+        }
+      },
+    };
+  }
+
+  private handleMessage(message: StreamServerMessage): void {
+    switch (message.type) {
+      case "ready":
+        return;
+      case "subscribed": {
+        const pending = this.pendingRequests.get(message.request_id);
+        if (!pending?.spec) return;
+        pending.spec.subId = message.subscription_id;
+        this.subById.set(message.subscription_id, pending.spec);
+        this.pendingRequests.delete(message.request_id);
+        return;
+      }
+      case "modified":
+      case "unsubscribed":
+        this.pendingRequests.delete(message.request_id);
+        return;
+      case "snapshot": {
+        const spec = this.subById.get(message.subscription_id);
+        if (!spec) return;
+        spec.handlers.onSnapshot(message.snapshot as SnapshotFor<StreamKey>);
+        return;
+      }
+      case "delta": {
+        const spec = this.subById.get(message.subscription_id);
+        if (!spec) return;
+        spec.handlers.onDelta(message.delta as DeltaFor<StreamKey>);
+        return;
+      }
+      case "error": {
+        const pending = message.request_id
+          ? this.pendingRequests.get(message.request_id)
+          : undefined;
+        if (pending?.spec?.handlers.onError) {
+          pending.spec.handlers.onError(message);
+          if (message.request_id) this.pendingRequests.delete(message.request_id);
+        }
+        return;
+      }
+      case "pong":
+        return;
+    }
+  }
+
+  private sendSubscribe(spec: SubscriptionSpec<StreamKey>): void {
+    const requestId = this.nextRequestId();
+    const filter =
+      spec.filter === null
+        ? null
+        : spec.filter
+          ? ({ stream: spec.stream, ...spec.filter } as StreamFilter)
+          : undefined;
+    const message: StreamClientMessage = {
+      type: "subscribe",
+      request_id: requestId,
+      stream: spec.stream,
+      filter,
+    };
+    if (this.sendMessage(message)) {
+      this.pendingRequests.set(requestId, { kind: "subscribe", spec });
+    }
+  }
+
+  private sendModify<S extends StreamKey>(subId: string, stream: S, filter: FilterFor<S>): void {
+    const requestId = this.nextRequestId();
+    const wrappedFilter =
+      filter === null ? null : filter ? ({ stream, ...filter } as StreamFilter) : undefined;
+    const message: StreamClientMessage = {
+      type: "modify",
+      request_id: requestId,
+      subscription_id: subId,
+      filter: wrappedFilter,
+    };
+    if (this.sendMessage(message)) {
+      this.pendingRequests.set(requestId, { kind: "modify" });
+    }
+  }
+
+  private sendUnsubscribe(subId: string): void {
+    const requestId = this.nextRequestId();
+    const message: StreamClientMessage = {
+      type: "unsubscribe",
+      request_id: requestId,
+      subscription_id: subId,
+    };
+    if (this.sendMessage(message)) {
+      this.pendingRequests.set(requestId, { kind: "unsubscribe" });
+    }
+  }
+
+  private sendMessage(message: StreamClientMessage): boolean {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+      return true;
+    }
+    return false;
   }
 
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       this._connectionState = "disconnected";
-      this.onUpdate();
+      this.onStateChange?.();
       return;
     }
 
     this._connectionState = "reconnecting";
-    this.onUpdate();
+    this.onStateChange?.();
 
     const delay = Math.min(1000 * 2 ** this.reconnectAttempts, MAX_RECONNECT_DELAY);
     this.reconnectAttempts++;
@@ -189,5 +276,12 @@ export class ScrapeJobsStore {
       this.reconnectTimer = null;
       this.connect();
     }, delay);
+  }
+
+  private nextRequestId(): string {
+    // TODO: Switch to something shorter/simpler like nanoid.
+    const id = this.requestSeq;
+    this.requestSeq += 1;
+    return `req_${Date.now()}_${id}`;
   }
 }

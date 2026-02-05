@@ -36,8 +36,8 @@ use crate::web::admin_terms;
 use crate::web::auth::{self, AuthConfig};
 use crate::web::calendar;
 use crate::web::error::{ApiError, ApiErrorCode, db_error};
+use crate::web::stream;
 use crate::web::timeline;
-use crate::web::ws;
 use crate::{data, web::admin};
 use crate::{data::models, web::admin_rmp};
 #[cfg(feature = "embed-assets")]
@@ -83,6 +83,7 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
         .route("/reference/{category}", get(get_reference))
         .route("/search-options", get(get_search_options))
         .route("/timeline", post(timeline::timeline))
+        .route("/ws", get(stream::stream_ws))
         .with_state(app_state.clone());
 
     let auth_router = Router::new()
@@ -101,7 +102,6 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
             put(admin::set_user_admin),
         )
         .route("/admin/scrape-jobs", get(admin::list_scrape_jobs))
-        .route("/admin/scrape-jobs/ws", get(ws::scrape_jobs_ws))
         .route("/admin/audit-log", get(admin::list_audit_log))
         .route("/admin/instructors", get(admin_rmp::list_instructors))
         .route("/admin/instructors/{id}", get(admin_rmp::get_instructor))
@@ -142,9 +142,10 @@ pub fn create_router(app_state: AppState, auth_config: AuthConfig) -> Router {
             "/admin/terms/{code}/disable",
             post(admin_terms::disable_term),
         )
-        .with_state(app_state);
+        .with_state(app_state.clone());
 
     let mut router = Router::new()
+        .with_state(app_state)
         .nest("/api", api_router)
         .nest("/api", auth_router)
         .nest("/api", admin_router);

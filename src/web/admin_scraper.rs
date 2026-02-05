@@ -12,7 +12,7 @@ use sqlx::Row;
 use ts_rs::TS;
 
 use crate::banner::models::terms::Term;
-use crate::data::scrape_jobs;
+use crate::db::DbContext;
 use crate::scraper::adaptive::{self, SubjectSchedule, SubjectStats};
 use crate::state::AppState;
 use crate::web::extractors::AdminUser;
@@ -429,15 +429,14 @@ pub async fn scraper_subjects(
     _admin: AdminUser,
     State(state): State<AppState>,
 ) -> Result<Json<SubjectsResponse>, ApiError> {
-    let raw_stats = scrape_jobs::fetch_subject_stats(&state.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to fetch subject stats");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Failed to fetch subject stats"})),
-            )
-        })?;
+    let db = DbContext::new(state.db_pool.clone(), state.events.clone());
+    let raw_stats = db.scrape_jobs().fetch_subject_stats().await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to fetch subject stats");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to fetch subject stats"})),
+        )
+    })?;
 
     let now = Utc::now();
     let multiplier = adaptive::time_of_day_multiplier(now);
