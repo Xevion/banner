@@ -68,7 +68,7 @@ type Intersection<T extends readonly unknown[]> = (T extends [infer H, ...infer 
  * Lazily merges several objects (or thunks) while preserving
  * getter semantics from every source. Proxy-based.
  */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- dynamic proxy-based merge intentionally operates on untyped values */
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic proxy-based merge intentionally operates on untyped values */
 export function mergeObjects<Sources extends readonly MaybeThunk<any>[]>(
   ...sources: Sources
 ): Intersection<{ [K in keyof Sources]: Sources[K] }> {
@@ -118,5 +118,5 @@ export function mergeObjects<Sources extends readonly MaybeThunk<any>[]>(
       };
     },
   }) as Intersection<{ [K in keyof Sources]: Sources[K] }>;
-  /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any */
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 }

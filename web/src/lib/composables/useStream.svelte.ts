@@ -3,7 +3,7 @@
  *
  * Provides declarative event handling with Svelte 5 runes.
  */
-import { StreamClient, type ConnectionState } from "$lib/ws";
+import { acquireStreamClient, releaseStreamClient, type ConnectionState } from "$lib/ws";
 import type {
   StreamKind,
   StreamSnapshot,
@@ -41,6 +41,8 @@ interface UseStreamOptions<S extends StreamKind, T> {
   };
   /** Optional custom snapshot handler (defaults to extracting data array) */
   onSnapshot?: (snapshot: SnapshotFor<S>) => T;
+  /** Fallback delta handler for streams without typed event discriminators */
+  onDelta?: (state: T, event: EventFor<S>) => T;
 }
 
 interface UseStreamReturn<S extends StreamKind, T> {
@@ -78,40 +80,43 @@ export function useStream<S extends StreamKind, T>(
 ): UseStreamReturn<S, T> {
   let state = $state<T>(options.initial);
   let connectionState = $state<ConnectionState>("disconnected");
-  let client: StreamClient | null = null;
+  let client: ReturnType<typeof acquireStreamClient> | null = null;
   let subscription: { modify: (f: FilterFor<S>) => void; unsubscribe: () => void } | null = null;
 
   $effect(() => {
-    client = new StreamClient(() => {
+    const stateChangeHandler = () => {
       connectionState = client!.getConnectionState();
-    });
+    };
+    client = acquireStreamClient(stateChangeHandler);
 
     subscription = client.subscribe(stream, filter, {
       onSnapshot: (snapshot) => {
         if (options.onSnapshot) {
           state = options.onSnapshot(snapshot as SnapshotFor<S>);
         } else {
-          // Default: extract data from snapshot based on stream type
           state = extractSnapshotState(stream, snapshot) as T;
         }
       },
       onDelta: (delta) => {
         const event = extractEvent(stream, delta);
-        if (event && "type" in event) {
+        if (!event) return;
+        if ("type" in event) {
           const eventType = event.type as EventType<S> & string;
           const handler = options.on[eventType];
           if (handler) {
             state = handler(state, event as never);
+            return;
           }
+        }
+        if (options.onDelta) {
+          state = options.onDelta(state, event);
         }
       },
     });
 
-    client.connect();
-
     return () => {
       subscription?.unsubscribe();
-      client?.disconnect();
+      releaseStreamClient(stateChangeHandler);
     };
   });
 

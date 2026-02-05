@@ -15,6 +15,12 @@ import {
 import { SvelteMap } from "svelte/reactivity";
 import { onMount } from "svelte";
 
+// active prop no longer needed - Tabs.Content handles mount/unmount lifecycle
+interface Props {
+  active?: boolean;
+}
+let { active: _active = true }: Props = $props();
+
 let initialized = $state(false);
 let error = $state<string | null>(null);
 let sorting: SortingState = $state([]);
@@ -392,8 +398,7 @@ function getTimingDisplay(
 }
 </script>
 
-<div class="flex items-center justify-between mb-4">
-  <h1 class="text-lg font-semibold text-foreground">Scrape Jobs</h1>
+<div class="flex items-center justify-end mb-4">
   <div class="flex items-center gap-2 text-sm">
     {#if connectionState === "connected"}
       <span class="inline-flex items-center gap-1.5">

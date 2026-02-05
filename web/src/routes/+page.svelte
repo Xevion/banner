@@ -96,7 +96,6 @@ setCourseDetailContext(courseDetailCtx);
 // Wire up navigation callback once CourseTable is mounted
 $effect(() => {
   if (courseTableRef) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
     courseDetailCtx.navigateToSection = (crn: string) => courseTableRef?.navigateToSection(crn);
   }
 });

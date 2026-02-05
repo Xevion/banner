@@ -52,10 +52,22 @@ export class StreamClient {
   private subscriptions: SubscriptionSpec<StreamKey>[] = [];
   private subById = new Map<string, SubscriptionSpec<StreamKey>>();
   private pendingRequests = new Map<string, PendingRequest>();
-  private onStateChange?: () => void;
+  private stateListeners = new Set<() => void>();
 
   constructor(onStateChange?: () => void) {
-    this.onStateChange = onStateChange;
+    if (onStateChange) this.stateListeners.add(onStateChange);
+  }
+
+  addStateListener(fn: () => void): void {
+    this.stateListeners.add(fn);
+  }
+
+  removeStateListener(fn: () => void): void {
+    this.stateListeners.delete(fn);
+  }
+
+  private notifyStateListeners(): void {
+    for (const fn of this.stateListeners) fn();
   }
 
   getConnectionState(): ConnectionState {
@@ -83,7 +95,7 @@ export class StreamClient {
         spec.subId = null;
         this.sendSubscribe(spec);
       }
-      this.onStateChange?.();
+      this.notifyStateListeners();
     };
 
     this.ws.onmessage = (event) => {
@@ -118,13 +130,13 @@ export class StreamClient {
       this.ws = null;
     }
     this._connectionState = "disconnected";
-    this.onStateChange?.();
+    this.notifyStateListeners();
   }
 
   retry(): void {
     this.reconnectAttempts = 0;
     this._connectionState = "reconnecting";
-    this.onStateChange?.();
+    this.notifyStateListeners();
     this.connect();
   }
 
@@ -262,12 +274,12 @@ export class StreamClient {
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       this._connectionState = "disconnected";
-      this.onStateChange?.();
+      this.notifyStateListeners();
       return;
     }
 
     this._connectionState = "reconnecting";
-    this.onStateChange?.();
+    this.notifyStateListeners();
 
     const delay = Math.min(1000 * 2 ** this.reconnectAttempts, MAX_RECONNECT_DELAY);
     this.reconnectAttempts++;
@@ -283,5 +295,30 @@ export class StreamClient {
     const id = this.requestSeq;
     this.requestSeq += 1;
     return `req_${Date.now()}_${id}`;
+  }
+}
+
+// Shared singleton for multiple useStream calls on the same page
+let sharedClient: StreamClient | null = null;
+let refCount = 0;
+
+export function acquireStreamClient(onStateChange: () => void): StreamClient {
+  if (!sharedClient) {
+    sharedClient = new StreamClient();
+    sharedClient.connect();
+  }
+  refCount++;
+  sharedClient.addStateListener(onStateChange);
+  return sharedClient;
+}
+
+export function releaseStreamClient(onStateChange: () => void): void {
+  if (!sharedClient) return;
+  sharedClient.removeStateListener(onStateChange);
+  refCount--;
+  if (refCount <= 0) {
+    sharedClient.disconnect();
+    sharedClient = null;
+    refCount = 0;
   }
 }
