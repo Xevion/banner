@@ -166,7 +166,7 @@ impl BannerApi {
 
         debug!(
             term = term,
-            subject = query.get_subject().map(|s| s.as_str()).unwrap_or("all"),
+            subject = query.get_subject().unwrap_or("all"),
             max_results = query.get_max_results(),
             "Searching for courses"
         );

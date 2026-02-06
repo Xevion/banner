@@ -1,18 +1,11 @@
 //! Query builder for Banner API course searches.
 
 use std::collections::HashMap;
-use std::time::Duration;
 
-/// Range of two integers
-#[derive(Debug, Clone)]
-pub struct Range {
-    pub low: i32,
-    pub high: i32,
-}
+use chrono::{NaiveTime, Timelike};
 
 /// Builder for constructing Banner API search queries.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 pub struct SearchQuery {
     subject: Option<String>,
     title: Option<String>,
@@ -24,13 +17,14 @@ pub struct SearchQuery {
     instructional_method: Option<Vec<String>>,
     attributes: Option<Vec<String>>,
     instructor: Option<Vec<u64>>,
-    start_time: Option<Duration>,
-    end_time: Option<Duration>,
+    start_time: Option<NaiveTime>,
+    end_time: Option<NaiveTime>,
     min_credits: Option<i32>,
     max_credits: Option<i32>,
     offset: i32,
     max_results: i32,
-    course_number_range: Option<Range>,
+    course_number_low: Option<i32>,
+    course_number_high: Option<i32>,
 }
 
 #[allow(dead_code)]
@@ -114,13 +108,13 @@ impl SearchQuery {
     }
 
     /// Sets the start time for the query
-    pub fn start_time(mut self, start_time: Duration) -> Self {
+    pub fn start_time(mut self, start_time: NaiveTime) -> Self {
         self.start_time = Some(start_time);
         self
     }
 
     /// Sets the end time for the query
-    pub fn end_time(mut self, end_time: Duration) -> Self {
+    pub fn end_time(mut self, end_time: NaiveTime) -> Self {
         self.end_time = Some(end_time);
         self
     }
@@ -146,7 +140,8 @@ impl SearchQuery {
 
     /// Sets the course number range for the query
     pub fn course_numbers(mut self, low: i32, high: i32) -> Self {
-        self.course_number_range = Some(Range { low, high });
+        self.course_number_low = Some(low);
+        self.course_number_high = Some(high);
         self
     }
 
@@ -164,8 +159,8 @@ impl SearchQuery {
     }
 
     /// Gets the subject field
-    pub fn get_subject(&self) -> Option<&String> {
-        self.subject.as_ref()
+    pub fn get_subject(&self) -> Option<&str> {
+        self.subject.as_deref()
     }
 
     /// Gets the max_results field
@@ -177,91 +172,188 @@ impl SearchQuery {
     pub fn to_params(&self) -> HashMap<String, String> {
         let mut params = HashMap::new();
 
+        for field in self.fields() {
+            match field {
+                QueryField::Single {
+                    param_key, value, ..
+                } => {
+                    params.insert(param_key.to_string(), value);
+                }
+                QueryField::Time { prefix, time, .. } => {
+                    let (hour, minute, meridiem) = format_time_parameter(time);
+                    params.insert(format!("select_{prefix}_hour"), hour);
+                    params.insert(format!("select_{prefix}_min"), minute);
+                    params.insert(format!("select_{prefix}_ampm"), meridiem);
+                }
+            }
+        }
+
+        params
+    }
+
+    /// Returns the list of active query fields for serialization.
+    ///
+    /// Both `to_params()` and `Display` consume this, so adding a field
+    /// once here covers both serializations.
+    fn fields(&self) -> Vec<QueryField> {
+        let mut fields = Vec::new();
+
         if let Some(ref subject) = self.subject {
-            params.insert("txt_subject".to_string(), subject.clone());
+            fields.push(QueryField::single(
+                "txt_subject",
+                "subject",
+                subject.clone(),
+            ));
         }
-
         if let Some(ref title) = self.title {
-            params.insert("txt_courseTitle".to_string(), title.trim().to_string());
+            fields.push(QueryField::single(
+                "txt_courseTitle",
+                "title",
+                title.trim().to_string(),
+            ));
         }
-
         if let Some(ref crn) = self.course_reference_number {
-            params.insert("txt_courseReferenceNumber".to_string(), crn.clone());
+            fields.push(QueryField::single(
+                "txt_courseReferenceNumber",
+                "crn",
+                crn.clone(),
+            ));
         }
-
         if let Some(ref keywords) = self.keywords {
-            params.insert("txt_keywordlike".to_string(), keywords.join(" "));
+            fields.push(QueryField::single(
+                "txt_keywordlike",
+                "keywords",
+                keywords.join(" "),
+            ));
         }
-
         if self.open_only == Some(true) {
-            params.insert("chk_open_only".to_string(), "true".to_string());
+            fields.push(QueryField::single(
+                "chk_open_only",
+                "openOnly",
+                "true".to_string(),
+            ));
         }
-
         if let Some(ref term_part) = self.term_part {
-            params.insert("txt_partOfTerm".to_string(), term_part.join(","));
+            fields.push(QueryField::single(
+                "txt_partOfTerm",
+                "termPart",
+                term_part.join(","),
+            ));
         }
-
         if let Some(ref campus) = self.campus {
-            params.insert("txt_campus".to_string(), campus.join(","));
+            fields.push(QueryField::single("txt_campus", "campus", campus.join(",")));
         }
-
+        if let Some(ref instructional_method) = self.instructional_method {
+            fields.push(QueryField::single(
+                "txt_instructionalMethod",
+                "instructionalMethod",
+                instructional_method.join(","),
+            ));
+        }
         if let Some(ref attributes) = self.attributes {
-            params.insert("txt_attribute".to_string(), attributes.join(","));
+            fields.push(QueryField::single(
+                "txt_attribute",
+                "attributes",
+                attributes.join(","),
+            ));
         }
-
         if let Some(ref instructor) = self.instructor {
-            let instructor_str = instructor
+            let value = instructor
                 .iter()
                 .map(|i| i.to_string())
                 .collect::<Vec<_>>()
                 .join(",");
-            params.insert("txt_instructor".to_string(), instructor_str);
+            fields.push(QueryField::single("txt_instructor", "instructor", value));
         }
-
         if let Some(start_time) = self.start_time {
-            let (hour, minute, meridiem) = format_time_parameter(start_time);
-            params.insert("select_start_hour".to_string(), hour);
-            params.insert("select_start_min".to_string(), minute);
-            params.insert("select_start_ampm".to_string(), meridiem);
+            fields.push(QueryField::Time {
+                prefix: "start",
+                display_name: "startTime",
+                time: start_time,
+            });
         }
-
         if let Some(end_time) = self.end_time {
-            let (hour, minute, meridiem) = format_time_parameter(end_time);
-            params.insert("select_end_hour".to_string(), hour);
-            params.insert("select_end_min".to_string(), minute);
-            params.insert("select_end_ampm".to_string(), meridiem);
+            fields.push(QueryField::Time {
+                prefix: "end",
+                display_name: "endTime",
+                time: end_time,
+            });
         }
-
         if let Some(min_credits) = self.min_credits {
-            params.insert("txt_credithourlow".to_string(), min_credits.to_string());
+            fields.push(QueryField::single(
+                "txt_credithourlow",
+                "minCredits",
+                min_credits.to_string(),
+            ));
         }
-
         if let Some(max_credits) = self.max_credits {
-            params.insert("txt_credithourhigh".to_string(), max_credits.to_string());
+            fields.push(QueryField::single(
+                "txt_credithourhigh",
+                "maxCredits",
+                max_credits.to_string(),
+            ));
         }
-
-        if let Some(ref range) = self.course_number_range {
-            params.insert("txt_course_number_range".to_string(), range.low.to_string());
-            params.insert(
-                "txt_course_number_range_to".to_string(),
-                range.high.to_string(),
-            );
+        if let Some(low) = self.course_number_low {
+            fields.push(QueryField::single(
+                "txt_course_number_range",
+                "courseNumberLow",
+                low.to_string(),
+            ));
         }
+        if let Some(high) = self.course_number_high {
+            fields.push(QueryField::single(
+                "txt_course_number_range_to",
+                "courseNumberHigh",
+                high.to_string(),
+            ));
+        }
+        fields.push(QueryField::single(
+            "pageOffset",
+            "offset",
+            self.offset.to_string(),
+        ));
+        fields.push(QueryField::single(
+            "pageMaxSize",
+            "maxResults",
+            self.max_results.to_string(),
+        ));
 
-        params.insert("pageOffset".to_string(), self.offset.to_string());
-        params.insert("pageMaxSize".to_string(), self.max_results.to_string());
-
-        params
+        fields
     }
 }
 
-/// Formats a Duration into hour, minute, and meridiem strings for Banner API.
+/// A single field in a search query, used to unify `to_params()` and `Display`.
+enum QueryField {
+    /// A simple key-value field.
+    Single {
+        param_key: &'static str,
+        display_name: &'static str,
+        value: String,
+    },
+    /// A time field that expands to three params (hour, min, ampm).
+    Time {
+        prefix: &'static str,
+        display_name: &'static str,
+        time: NaiveTime,
+    },
+}
+
+impl QueryField {
+    fn single(param_key: &'static str, display_name: &'static str, value: String) -> Self {
+        Self::Single {
+            param_key,
+            display_name,
+            value,
+        }
+    }
+}
+
+/// Formats a NaiveTime into hour, minute, and meridiem strings for Banner API.
 ///
 /// Uses 12-hour format: midnight = 12:00 AM, noon = 12:00 PM.
-fn format_time_parameter(duration: Duration) -> (String, String, String) {
-    let total_minutes = duration.as_secs() / 60;
-    let hours = total_minutes / 60;
-    let minutes = total_minutes % 60;
+fn format_time_parameter(time: NaiveTime) -> (String, String, String) {
+    let hours = time.hour();
+    let minutes = time.minute();
 
     let meridiem = if hours >= 12 { "PM" } else { "AM" };
     let hour_12 = match hours % 12 {
@@ -361,7 +453,7 @@ mod tests {
 
     #[test]
     fn test_format_time_9am() {
-        let (h, m, mer) = format_time_parameter(Duration::from_secs(9 * 3600));
+        let (h, m, mer) = format_time_parameter(NaiveTime::from_hms_opt(9, 0, 0).unwrap());
         assert_eq!(h, "9");
         assert_eq!(m, "0");
         assert_eq!(mer, "AM");
@@ -369,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_format_time_noon() {
-        let (h, m, mer) = format_time_parameter(Duration::from_secs(12 * 3600));
+        let (h, m, mer) = format_time_parameter(NaiveTime::from_hms_opt(12, 0, 0).unwrap());
         assert_eq!(h, "12");
         assert_eq!(m, "0");
         assert_eq!(mer, "PM");
@@ -377,7 +469,7 @@ mod tests {
 
     #[test]
     fn test_format_time_1pm() {
-        let (h, m, mer) = format_time_parameter(Duration::from_secs(13 * 3600));
+        let (h, m, mer) = format_time_parameter(NaiveTime::from_hms_opt(13, 0, 0).unwrap());
         assert_eq!(h, "1");
         assert_eq!(m, "0");
         assert_eq!(mer, "PM");
@@ -385,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_format_time_930am() {
-        let (h, m, mer) = format_time_parameter(Duration::from_secs(9 * 3600 + 30 * 60));
+        let (h, m, mer) = format_time_parameter(NaiveTime::from_hms_opt(9, 30, 0).unwrap());
         assert_eq!(h, "9");
         assert_eq!(m, "30");
         assert_eq!(mer, "AM");
@@ -393,7 +485,7 @@ mod tests {
 
     #[test]
     fn test_format_time_midnight() {
-        let (h, m, mer) = format_time_parameter(Duration::from_secs(0));
+        let (h, m, mer) = format_time_parameter(NaiveTime::from_hms_opt(0, 0, 0).unwrap());
         assert_eq!(h, "12");
         assert_eq!(m, "0");
         assert_eq!(mer, "AM");
@@ -402,8 +494,8 @@ mod tests {
     #[test]
     fn test_time_params_in_query() {
         let params = SearchQuery::new()
-            .start_time(Duration::from_secs(9 * 3600))
-            .end_time(Duration::from_secs(17 * 3600))
+            .start_time(NaiveTime::from_hms_opt(9, 0, 0).unwrap())
+            .end_time(NaiveTime::from_hms_opt(17, 0, 0).unwrap())
             .to_params();
         assert_eq!(params.get("select_start_hour").unwrap(), "9");
         assert_eq!(params.get("select_start_ampm").unwrap(), "AM");
@@ -442,6 +534,33 @@ mod tests {
     }
 
     #[test]
+    fn test_instructional_method_param() {
+        let params = SearchQuery::new()
+            .instructional_method(vec!["ONLINE".into(), "HYBRID".into()])
+            .to_params();
+        assert_eq!(
+            params.get("txt_instructionalMethod").unwrap(),
+            "ONLINE,HYBRID"
+        );
+    }
+
+    #[test]
+    fn test_instructional_method_display() {
+        let display = SearchQuery::new()
+            .instructional_method(vec!["ONLINE".into()])
+            .to_string();
+        assert!(display.contains("instructionalMethod=ONLINE"));
+    }
+
+    #[test]
+    fn test_crn_display() {
+        let display = SearchQuery::new()
+            .course_reference_number("12345")
+            .to_string();
+        assert!(display.contains("crn=12345"));
+    }
+
+    #[test]
     fn test_full_query_param_count() {
         let params = SearchQuery::new()
             .subject("CS")
@@ -449,70 +568,38 @@ mod tests {
             .course_reference_number("12345")
             .keyword("programming")
             .open_only(true)
+            .instructional_method(vec!["ONLINE".into()])
             .credits(3, 4)
             .course_numbers(1000, 1999)
             .offset(0)
             .max_results(25)
             .to_params();
-        // subject, title, crn, keyword, open_only, min_credits, max_credits,
-        // course_number_range, course_number_range_to, pageOffset, pageMaxSize = 11
-        assert_eq!(params.len(), 11);
+        // subject, title, crn, keyword, open_only, instructional_method,
+        // min_credits, max_credits, course_number_range, course_number_range_to,
+        // pageOffset, pageMaxSize = 12
+        assert_eq!(params.len(), 12);
     }
 }
 
 impl std::fmt::Display for SearchQuery {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut parts = Vec::new();
-
-        if let Some(ref subject) = self.subject {
-            parts.push(format!("subject={subject}"));
-        }
-        if let Some(ref title) = self.title {
-            parts.push(format!("title={}", title.trim()));
-        }
-        if let Some(ref keywords) = self.keywords {
-            parts.push(format!("keywords={}", keywords.join(" ")));
-        }
-        if self.open_only == Some(true) {
-            parts.push("openOnly=true".to_string());
-        }
-        if let Some(ref term_part) = self.term_part {
-            parts.push(format!("termPart={}", term_part.join(",")));
-        }
-        if let Some(ref campus) = self.campus {
-            parts.push(format!("campus={}", campus.join(",")));
-        }
-        if let Some(ref attributes) = self.attributes {
-            parts.push(format!("attributes={}", attributes.join(",")));
-        }
-        if let Some(ref instructor) = self.instructor {
-            let instructor_str = instructor
-                .iter()
-                .map(|i| i.to_string())
-                .collect::<Vec<_>>()
-                .join(",");
-            parts.push(format!("instructor={instructor_str}"));
-        }
-        if let Some(start_time) = self.start_time {
-            let (hour, minute, meridiem) = format_time_parameter(start_time);
-            parts.push(format!("startTime={hour}:{minute}:{meridiem}"));
-        }
-        if let Some(end_time) = self.end_time {
-            let (hour, minute, meridiem) = format_time_parameter(end_time);
-            parts.push(format!("endTime={hour}:{minute}:{meridiem}"));
-        }
-        if let Some(min_credits) = self.min_credits {
-            parts.push(format!("minCredits={min_credits}"));
-        }
-        if let Some(max_credits) = self.max_credits {
-            parts.push(format!("maxCredits={max_credits}"));
-        }
-        if let Some(ref range) = self.course_number_range {
-            parts.push(format!("courseNumberRange={}-{}", range.low, range.high));
-        }
-
-        parts.push(format!("offset={}", self.offset));
-        parts.push(format!("maxResults={}", self.max_results));
+        let parts: Vec<String> = self
+            .fields()
+            .into_iter()
+            .map(|field| match field {
+                QueryField::Single {
+                    display_name,
+                    value,
+                    ..
+                } => format!("{display_name}={value}"),
+                QueryField::Time {
+                    display_name, time, ..
+                } => {
+                    let (hour, minute, meridiem) = format_time_parameter(time);
+                    format!("{display_name}={hour}:{minute}:{meridiem}")
+                }
+            })
+            .collect();
 
         write!(f, "{}", parts.join(", "))
     }
