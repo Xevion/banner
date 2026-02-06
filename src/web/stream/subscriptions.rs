@@ -3,7 +3,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::web::stream::filters::{
-    AuditLogFilter, ScrapeJobsFilter, parse_audit_log_filter, parse_scrape_jobs_filter,
+    AuditLogFilter, ScrapeJobsFilter, ScraperStatsFilter, ScraperTimeseriesFilter,
+    parse_audit_log_filter, parse_scrape_jobs_filter, parse_scraper_stats_filter,
+    parse_scraper_timeseries_filter,
 };
 use crate::web::stream::protocol::{StreamError, StreamFilter, StreamKind};
 
@@ -15,6 +17,13 @@ pub enum Subscription {
     AuditLog {
         filter: AuditLogFilter,
     },
+    ScraperStats {
+        filter: ScraperStatsFilter,
+    },
+    ScraperTimeseries {
+        filter: ScraperTimeseriesFilter,
+    },
+    ScraperSubjects,
 }
 
 impl Subscription {
@@ -22,7 +31,17 @@ impl Subscription {
         match self {
             Subscription::ScrapeJobs { .. } => StreamKind::ScrapeJobs,
             Subscription::AuditLog { .. } => StreamKind::AuditLog,
+            Subscription::ScraperStats { .. } => StreamKind::ScraperStats,
+            Subscription::ScraperTimeseries { .. } => StreamKind::ScraperTimeseries,
+            Subscription::ScraperSubjects => StreamKind::ScraperSubjects,
         }
+    }
+
+    pub fn is_computed(&self) -> bool {
+        matches!(
+            self,
+            Self::ScraperStats { .. } | Self::ScraperTimeseries { .. } | Self::ScraperSubjects
+        )
     }
 }
 
@@ -59,13 +78,16 @@ impl SubscriptionRegistry {
         self.subscriptions.remove(id)
     }
 
-    #[allow(dead_code)]
     pub fn get(&self, id: &str) -> Option<&Subscription> {
         self.subscriptions.get(id)
     }
 
     pub fn get_mut(&mut self, id: &str) -> Option<&mut Subscription> {
         self.subscriptions.get_mut(id)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &Subscription)> {
+        self.subscriptions.iter()
     }
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&String, &mut Subscription)> {
@@ -102,5 +124,14 @@ pub fn build_subscription(
             let filter = parse_audit_log_filter(filter)?;
             Ok(Subscription::AuditLog { filter })
         }
+        StreamKind::ScraperStats => {
+            let filter = parse_scraper_stats_filter(filter)?;
+            Ok(Subscription::ScraperStats { filter })
+        }
+        StreamKind::ScraperTimeseries => {
+            let filter = parse_scraper_timeseries_filter(filter)?;
+            Ok(Subscription::ScraperTimeseries { filter })
+        }
+        StreamKind::ScraperSubjects => Ok(Subscription::ScraperSubjects),
     }
 }

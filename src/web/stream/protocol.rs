@@ -3,7 +3,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::web::stream::filters::{AuditLogFilter, ScrapeJobsFilter};
+use crate::web::admin_scraper::{ScraperStatsResponse, SubjectSummary, TimeseriesPoint};
+use crate::web::stream::filters::{
+    AuditLogFilter, ScrapeJobsFilter, ScraperStatsFilter, ScraperTimeseriesFilter,
+};
 use crate::web::ws::{ScrapeJobDto, ScrapeJobEvent};
 
 pub const STREAM_PROTOCOL_VERSION: u32 = 1;
@@ -14,6 +17,9 @@ pub const STREAM_PROTOCOL_VERSION: u32 = 1;
 pub enum StreamKind {
     ScrapeJobs,
     AuditLog,
+    ScraperStats,
+    ScraperTimeseries,
+    ScraperSubjects,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -22,6 +28,9 @@ pub enum StreamKind {
 pub enum StreamFilter {
     ScrapeJobs(ScrapeJobsFilter),
     AuditLog(AuditLogFilter),
+    ScraperStats(ScraperStatsFilter),
+    ScraperTimeseries(ScraperTimeseriesFilter),
+    ScraperSubjects {},
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -72,6 +81,17 @@ pub enum StreamSnapshot {
     AuditLog {
         entries: Vec<crate::web::audit::AuditLogEntry>,
     },
+    ScraperStats {
+        stats: ScraperStatsResponse,
+    },
+    ScraperTimeseries {
+        points: Vec<TimeseriesPoint>,
+        period: String,
+        bucket: String,
+    },
+    ScraperSubjects {
+        subjects: Vec<SubjectSummary>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -83,6 +103,16 @@ pub enum StreamDelta {
     },
     AuditLog {
         entries: Vec<crate::web::audit::AuditLogEntry>,
+    },
+    ScraperStats {
+        stats: ScraperStatsResponse,
+    },
+    ScraperTimeseries {
+        changed: Vec<TimeseriesPoint>,
+    },
+    ScraperSubjects {
+        changed: Vec<SubjectSummary>,
+        removed: Vec<String>,
     },
 }
 

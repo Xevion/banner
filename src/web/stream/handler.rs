@@ -8,11 +8,16 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
+use tokio::sync::broadcast::error::RecvError;
 use tracing::debug;
 
 use crate::events::{AuditLogEvent, DomainEvent};
 use crate::state::AppState;
+use crate::web::admin_scraper::{
+    compute_stats, compute_subjects, compute_timeseries, default_bucket_for_period,
+};
 use crate::web::extractors::AdminUser;
+use crate::web::stream::computed::{ComputedCacheKey, ComputedUpdate};
 use crate::web::stream::protocol::{
     STREAM_PROTOCOL_VERSION, StreamClientMessage, StreamDelta, StreamError, StreamErrorCode,
     StreamKind, StreamServerMessage, StreamSnapshot,
@@ -39,6 +44,26 @@ impl ClientMessageResult {
         } else {
             Self::Disconnected
         }
+    }
+}
+
+/// Convert a subscription to its corresponding computed cache key, if applicable.
+fn subscription_to_cache_key(sub: &Subscription) -> Option<ComputedCacheKey> {
+    match sub {
+        Subscription::ScraperStats { filter } => Some(ComputedCacheKey::Stats {
+            period: filter.period.clone(),
+            term: filter.term.clone(),
+        }),
+        Subscription::ScraperTimeseries { filter } => Some(ComputedCacheKey::Timeseries {
+            period: filter.period.clone(),
+            bucket: filter
+                .bucket
+                .clone()
+                .unwrap_or_else(|| default_bucket_for_period(&filter.period).to_string()),
+            term: filter.term.clone(),
+        }),
+        Subscription::ScraperSubjects => Some(ComputedCacheKey::Subjects),
+        _ => None,
     }
 }
 
@@ -89,6 +114,7 @@ async fn handle_stream_ws(socket: WebSocket, state: AppState) {
     let mut registry = SubscriptionRegistry::new();
 
     let (mut cursor, mut head_watch) = state.events.subscribe();
+    let mut computed_rx = state.computed_streams.subscribe();
 
     loop {
         tokio::select! {
@@ -130,6 +156,22 @@ async fn handle_stream_ws(socket: WebSocket, state: AppState) {
                 }
                 if send_failed {
                     break;
+                }
+            }
+            update = computed_rx.recv() => {
+                match update {
+                    Ok(update) => {
+                        if !dispatch_computed_update(&mut sink, &registry, update).await {
+                            break;
+                        }
+                    }
+                    Err(RecvError::Lagged(n)) => {
+                        debug!(skipped = n, "Computed updates lagged, resyncing");
+                        if !resync_computed(&mut sink, &state, &registry).await {
+                            break;
+                        }
+                    }
+                    Err(RecvError::Closed) => break,
                 }
             }
         }
@@ -174,7 +216,13 @@ async fn handle_client_message(
                 }
             };
 
+            // Register computed stream interest before inserting
+            let cache_key = subscription_to_cache_key(&subscription);
             registry.insert(sub_id.clone(), subscription);
+            if let Some(key) = cache_key {
+                state.computed_streams.register(key);
+            }
+
             let subscribed = StreamServerMessage::Subscribed {
                 request_id,
                 subscription_id: sub_id.clone(),
@@ -193,7 +241,7 @@ async fn handle_client_message(
             subscription_id,
             filter,
         } => {
-            let Some(subscription) = registry.get_mut(&subscription_id) else {
+            let Some(subscription) = registry.get(&subscription_id) else {
                 let sent = send_error(
                     sink,
                     Some(request_id),
@@ -205,6 +253,8 @@ async fn handle_client_message(
             };
 
             let stream = subscription.kind();
+            let old_cache_key = subscription_to_cache_key(subscription);
+
             let updated = match build_subscription(stream, filter) {
                 Ok(sub) => sub,
                 Err(StreamError { code, message }) => {
@@ -213,6 +263,20 @@ async fn handle_client_message(
                 }
             };
 
+            let new_cache_key = subscription_to_cache_key(&updated);
+
+            // Update computed stream registration if cache key changed
+            if old_cache_key != new_cache_key {
+                if let Some(key) = old_cache_key {
+                    state.computed_streams.deregister(key);
+                }
+                if let Some(key) = new_cache_key {
+                    state.computed_streams.register(key);
+                }
+            }
+
+            // Now get mutable reference and update
+            let subscription = registry.get_mut(&subscription_id).unwrap();
             *subscription = updated;
             let modified = StreamServerMessage::Modified {
                 request_id,
@@ -230,6 +294,12 @@ async fn handle_client_message(
             request_id,
             subscription_id,
         } => {
+            // Deregister computed stream interest before removing
+            if let Some(sub) = registry.get(&subscription_id)
+                && let Some(key) = subscription_to_cache_key(sub)
+            {
+                state.computed_streams.deregister(key);
+            }
             registry.remove(&subscription_id);
             let msg = StreamServerMessage::Unsubscribed {
                 request_id,
@@ -315,6 +385,91 @@ async fn send_snapshot(
                 },
             )
             .await
+        }
+        Subscription::ScraperStats { filter } => {
+            match compute_stats(&state.db_pool, &filter.period, filter.term.as_deref()).await {
+                Ok(stats) => {
+                    send_message(
+                        sink,
+                        &StreamServerMessage::Snapshot {
+                            subscription_id: subscription_id.to_string(),
+                            snapshot: StreamSnapshot::ScraperStats { stats },
+                        },
+                    )
+                    .await
+                }
+                Err(_) => {
+                    send_error(
+                        sink,
+                        None,
+                        StreamErrorCode::InternalError,
+                        "Failed to load stats",
+                    )
+                    .await
+                }
+            }
+        }
+        Subscription::ScraperTimeseries { filter } => {
+            let bucket = filter
+                .bucket
+                .clone()
+                .unwrap_or_else(|| default_bucket_for_period(&filter.period).to_string());
+            match compute_timeseries(
+                &state.db_pool,
+                &filter.period,
+                Some(bucket.as_str()),
+                filter.term.as_deref(),
+            )
+            .await
+            {
+                Ok((points, period, bucket)) => {
+                    send_message(
+                        sink,
+                        &StreamServerMessage::Snapshot {
+                            subscription_id: subscription_id.to_string(),
+                            snapshot: StreamSnapshot::ScraperTimeseries {
+                                points,
+                                period,
+                                bucket,
+                            },
+                        },
+                    )
+                    .await
+                }
+                Err(_) => {
+                    send_error(
+                        sink,
+                        None,
+                        StreamErrorCode::InternalError,
+                        "Failed to load timeseries",
+                    )
+                    .await
+                }
+            }
+        }
+        Subscription::ScraperSubjects => {
+            let ref_cache = state.reference_cache.read().await;
+            match compute_subjects(&state.db_pool, &state.events, &ref_cache).await {
+                Ok(subjects) => {
+                    send_message(
+                        sink,
+                        &StreamServerMessage::Snapshot {
+                            subscription_id: subscription_id.to_string(),
+                            snapshot: StreamSnapshot::ScraperSubjects { subjects },
+                        },
+                    )
+                    .await
+                }
+                Err(_) => {
+                    send_error(
+                        sink,
+                        None,
+                        StreamErrorCode::InternalError,
+                        "Failed to load subjects",
+                    )
+                    .await
+                }
+            }
         }
     }
 }
@@ -429,4 +584,189 @@ async fn resync_audit_log(
         }
     }
     true
+}
+
+async fn dispatch_computed_update(
+    sink: &mut futures::stream::SplitSink<WebSocket, Message>,
+    registry: &SubscriptionRegistry,
+    update: ComputedUpdate,
+) -> bool {
+    for (subscription_id, subscription) in registry.iter() {
+        let matches = match (&update.key, subscription) {
+            (ComputedCacheKey::Stats { period, term }, Subscription::ScraperStats { filter }) => {
+                &filter.period == period && &filter.term == term
+            }
+            (
+                ComputedCacheKey::Timeseries {
+                    period,
+                    bucket,
+                    term,
+                },
+                Subscription::ScraperTimeseries { filter },
+            ) => {
+                let filter_bucket = filter
+                    .bucket
+                    .clone()
+                    .unwrap_or_else(|| default_bucket_for_period(&filter.period).to_string());
+                &filter.period == period && &filter_bucket == bucket && &filter.term == term
+            }
+            (ComputedCacheKey::Subjects, Subscription::ScraperSubjects) => true,
+            _ => false,
+        };
+
+        if matches && let Some(ref delta) = update.delta {
+            let msg = StreamServerMessage::Delta {
+                subscription_id: subscription_id.clone(),
+                delta: delta.clone(),
+            };
+            if !send_message(sink, &msg).await {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Send computed snapshots for all computed subscriptions.
+async fn send_computed_snapshot(
+    sink: &mut futures::stream::SplitSink<WebSocket, Message>,
+    state: &AppState,
+    subscription: &Subscription,
+    subscription_id: &str,
+) -> bool {
+    match subscription {
+        Subscription::ScraperStats { filter } => {
+            match compute_stats(&state.db_pool, &filter.period, filter.term.as_deref()).await {
+                Ok(stats) => {
+                    send_message(
+                        sink,
+                        &StreamServerMessage::Snapshot {
+                            subscription_id: subscription_id.to_string(),
+                            snapshot: StreamSnapshot::ScraperStats { stats },
+                        },
+                    )
+                    .await
+                }
+                Err(_) => {
+                    send_error(
+                        sink,
+                        None,
+                        StreamErrorCode::InternalError,
+                        "Failed to load stats",
+                    )
+                    .await
+                }
+            }
+        }
+        Subscription::ScraperTimeseries { filter } => {
+            let bucket = filter
+                .bucket
+                .clone()
+                .unwrap_or_else(|| default_bucket_for_period(&filter.period).to_string());
+            match compute_timeseries(
+                &state.db_pool,
+                &filter.period,
+                Some(bucket.as_str()),
+                filter.term.as_deref(),
+            )
+            .await
+            {
+                Ok((points, period, bucket)) => {
+                    send_message(
+                        sink,
+                        &StreamServerMessage::Snapshot {
+                            subscription_id: subscription_id.to_string(),
+                            snapshot: StreamSnapshot::ScraperTimeseries {
+                                points,
+                                period,
+                                bucket,
+                            },
+                        },
+                    )
+                    .await
+                }
+                Err(_) => {
+                    send_error(
+                        sink,
+                        None,
+                        StreamErrorCode::InternalError,
+                        "Failed to load timeseries",
+                    )
+                    .await
+                }
+            }
+        }
+        Subscription::ScraperSubjects => {
+            let ref_cache = state.reference_cache.read().await;
+            match compute_subjects(&state.db_pool, &state.events, &ref_cache).await {
+                Ok(subjects) => {
+                    send_message(
+                        sink,
+                        &StreamServerMessage::Snapshot {
+                            subscription_id: subscription_id.to_string(),
+                            snapshot: StreamSnapshot::ScraperSubjects { subjects },
+                        },
+                    )
+                    .await
+                }
+                Err(_) => {
+                    send_error(
+                        sink,
+                        None,
+                        StreamErrorCode::InternalError,
+                        "Failed to load subjects",
+                    )
+                    .await
+                }
+            }
+        }
+        _ => true, // Non-computed subscriptions don't need resync here
+    }
+}
+
+async fn resync_computed(
+    sink: &mut futures::stream::SplitSink<WebSocket, Message>,
+    state: &AppState,
+    registry: &SubscriptionRegistry,
+) -> bool {
+    for (subscription_id, subscription) in registry.iter() {
+        if subscription.is_computed()
+            && !send_computed_snapshot(sink, state, subscription, subscription_id).await
+        {
+            return false;
+        }
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::web::admin_scraper::validate_bucket;
+    use crate::web::stream::filters::ScraperTimeseriesFilter;
+    use crate::web::stream::subscriptions::Subscription;
+
+    #[test]
+    fn subscription_to_cache_key_default_bucket_is_valid() {
+        let periods = ["1h", "6h", "24h", "7d", "30d"];
+        for period in periods {
+            let sub = Subscription::ScraperTimeseries {
+                filter: ScraperTimeseriesFilter {
+                    period: period.to_string(),
+                    bucket: None,
+                    term: None,
+                },
+            };
+            let key = subscription_to_cache_key(&sub)
+                .expect("ScraperTimeseries should produce a cache key");
+            if let ComputedCacheKey::Timeseries { bucket, .. } = &key {
+                assert!(
+                    validate_bucket(bucket).is_some(),
+                    "Default bucket '{bucket}' for period '{period}' is not valid"
+                );
+            } else {
+                panic!("Expected Timeseries cache key");
+            }
+        }
+    }
 }

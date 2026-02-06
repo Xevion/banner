@@ -11,14 +11,14 @@ use axum::response::Json;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::Row;
+use sqlx::{PgPool, Row};
 use tracing::{debug, error, instrument, warn};
 use ts_rs::TS;
 
 use crate::banner::models::terms::Term;
 use crate::db::DbContext;
 use crate::scraper::adaptive::{self, SubjectSchedule, SubjectStats};
-use crate::state::AppState;
+use crate::state::{AppState, ReferenceCache};
 use crate::web::extractors::AdminUser;
 
 type ApiError = (StatusCode, Json<serde_json::Value>);
@@ -68,7 +68,7 @@ fn parse_bucket(bucket: &str) -> Result<&'static str, ApiError> {
     }
 }
 
-fn default_bucket_for_period(period: &str) -> &'static str {
+pub fn default_bucket_for_period(period: &str) -> &'static str {
     match period {
         "1h" => "1m",
         "6h" => "5m",
@@ -97,31 +97,31 @@ fn default_period() -> String {
     "24h".to_string()
 }
 
-#[derive(Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ScraperStatsResponse {
-    period: String,
+    pub period: String,
     /// The term filter applied, or null if showing all terms.
-    term: Option<String>,
+    pub term: Option<String>,
     #[ts(type = "number")]
-    total_scrapes: i64,
+    pub total_scrapes: i64,
     #[ts(type = "number")]
-    successful_scrapes: i64,
+    pub successful_scrapes: i64,
     #[ts(type = "number")]
-    failed_scrapes: i64,
-    success_rate: Option<f64>,
-    avg_duration_ms: Option<f64>,
+    pub failed_scrapes: i64,
+    pub success_rate: Option<f64>,
+    pub avg_duration_ms: Option<f64>,
     #[ts(type = "number")]
-    total_courses_changed: i64,
+    pub total_courses_changed: i64,
     #[ts(type = "number")]
-    total_courses_fetched: i64,
+    pub total_courses_fetched: i64,
     #[ts(type = "number")]
-    total_audits_generated: i64,
+    pub total_audits_generated: i64,
     #[ts(type = "number")]
-    pending_jobs: i64,
+    pub pending_jobs: i64,
     #[ts(type = "number")]
-    locked_jobs: i64,
+    pub locked_jobs: i64,
 }
 
 #[instrument(skip_all, fields(period = %params.period))]
@@ -131,92 +131,17 @@ pub async fn scraper_stats(
     Query(params): Query<StatsParams>,
 ) -> Result<Json<ScraperStatsResponse>, ApiError> {
     let start = Instant::now();
-    let _duration = parse_period(&params.period)?;
-    let interval_str = period_to_interval_str(&params.period);
+    let _ = parse_period(&params.period)?;
 
-    // Build query with optional term filter
-    let (query_str, term_filter) = if let Some(ref term) = params.term {
-        (
-            "SELECT \
-                COUNT(*) AS total_scrapes, \
-                COUNT(*) FILTER (WHERE success) AS successful_scrapes, \
-                COUNT(*) FILTER (WHERE NOT success) AS failed_scrapes, \
-                (AVG(duration_ms) FILTER (WHERE success))::FLOAT8 AS avg_duration_ms, \
-                COALESCE(SUM(courses_changed) FILTER (WHERE success), 0) AS total_courses_changed, \
-                COALESCE(SUM(courses_fetched) FILTER (WHERE success), 0) AS total_courses_fetched, \
-                COALESCE(SUM(audits_generated) FILTER (WHERE success), 0) AS total_audits_generated \
-             FROM scrape_job_results \
-             WHERE completed_at > NOW() - $1::interval AND payload->>'term' = $2",
-            Some(term.clone()),
-        )
-    } else {
-        (
-            "SELECT \
-                COUNT(*) AS total_scrapes, \
-                COUNT(*) FILTER (WHERE success) AS successful_scrapes, \
-                COUNT(*) FILTER (WHERE NOT success) AS failed_scrapes, \
-                (AVG(duration_ms) FILTER (WHERE success))::FLOAT8 AS avg_duration_ms, \
-                COALESCE(SUM(courses_changed) FILTER (WHERE success), 0) AS total_courses_changed, \
-                COALESCE(SUM(courses_fetched) FILTER (WHERE success), 0) AS total_courses_fetched, \
-                COALESCE(SUM(audits_generated) FILTER (WHERE success), 0) AS total_audits_generated \
-             FROM scrape_job_results \
-             WHERE completed_at > NOW() - $1::interval",
-            None,
-        )
-    };
-
-    let row = if let Some(term) = &term_filter {
-        sqlx::query(query_str)
-            .bind(interval_str)
-            .bind(term)
-            .fetch_one(&state.db_pool)
-            .await
-    } else {
-        sqlx::query(query_str)
-            .bind(interval_str)
-            .fetch_one(&state.db_pool)
-            .await
-    }
-    .map_err(|e| {
-        error!(error = %e, "failed to fetch scraper stats");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch scraper stats"})),
-        )
-    })?;
-
-    let total_scrapes: i64 = row.get("total_scrapes");
-    let successful_scrapes: i64 = row.get("successful_scrapes");
-    let failed_scrapes: i64 = row.get("failed_scrapes");
-    let avg_duration_ms: Option<f64> = row.get("avg_duration_ms");
-    let total_courses_changed: i64 = row.get("total_courses_changed");
-    let total_courses_fetched: i64 = row.get("total_courses_fetched");
-    let total_audits_generated: i64 = row.get("total_audits_generated");
-
-    let queue_row = sqlx::query(
-        "SELECT \
-            COUNT(*) FILTER (WHERE locked_at IS NULL) AS pending_jobs, \
-            COUNT(*) FILTER (WHERE locked_at IS NOT NULL) AS locked_jobs \
-         FROM scrape_jobs",
-    )
-    .fetch_one(&state.db_pool)
-    .await
-    .map_err(|e| {
-        error!(error = %e, "failed to fetch queue stats");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch queue stats"})),
-        )
-    })?;
-
-    let pending_jobs: i64 = queue_row.get("pending_jobs");
-    let locked_jobs: i64 = queue_row.get("locked_jobs");
-
-    let success_rate = if total_scrapes > 0 {
-        Some(successful_scrapes as f64 / total_scrapes as f64)
-    } else {
-        None
-    };
+    let result = compute_stats(&state.db_pool, &params.period, params.term.as_deref())
+        .await
+        .map_err(|e| {
+            error!(error = %e, "failed to fetch scraper stats");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to fetch scraper stats"})),
+            )
+        })?;
 
     let elapsed = start.elapsed();
     if elapsed > SLOW_OP_THRESHOLD {
@@ -226,22 +151,12 @@ pub async fn scraper_stats(
         );
     }
 
-    debug!(total_scrapes, "fetched scraper stats");
+    debug!(
+        total_scrapes = result.total_scrapes,
+        "fetched scraper stats"
+    );
 
-    Ok(Json(ScraperStatsResponse {
-        period: params.period,
-        term: params.term,
-        total_scrapes,
-        successful_scrapes,
-        failed_scrapes,
-        success_rate,
-        avg_duration_ms,
-        total_courses_changed,
-        total_courses_fetched,
-        total_audits_generated,
-        pending_jobs,
-        locked_jobs,
-    }))
+    Ok(Json(result))
 }
 
 // ---------------------------------------------------------------------------
@@ -260,31 +175,31 @@ pub struct TimeseriesParams {
     pub term: Option<String>,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Clone, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeseriesResponse {
-    period: String,
-    bucket: String,
-    points: Vec<TimeseriesPoint>,
+    pub period: String,
+    pub bucket: String,
+    pub points: Vec<TimeseriesPoint>,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeseriesPoint {
     /// ISO-8601 UTC timestamp for this data point (e.g., "2024-01-15T10:00:00Z")
     #[ts(type = "string")]
-    timestamp: DateTime<Utc>,
+    pub timestamp: DateTime<Utc>,
     #[ts(type = "number")]
-    scrape_count: i64,
+    pub scrape_count: i64,
     #[ts(type = "number")]
-    success_count: i64,
+    pub success_count: i64,
     #[ts(type = "number")]
-    error_count: i64,
+    pub error_count: i64,
     #[ts(type = "number")]
-    courses_changed: i64,
-    avg_duration_ms: f64,
+    pub courses_changed: i64,
+    pub avg_duration_ms: f64,
 }
 
 #[instrument(skip_all, fields(period = %params.period))]
@@ -294,90 +209,19 @@ pub async fn scraper_timeseries(
     Query(params): Query<TimeseriesParams>,
 ) -> Result<Json<TimeseriesResponse>, ApiError> {
     let start = Instant::now();
-    let _duration = parse_period(&params.period)?;
-    let period_interval = period_to_interval_str(&params.period);
-
-    let bucket_code = match &params.bucket {
-        Some(b) => {
-            // Validate the bucket
-            parse_bucket(b)?;
-            b.as_str()
-        }
-        None => default_bucket_for_period(&params.period),
-    };
-    let bucket_interval = parse_bucket(bucket_code)?;
-
-    // Build query with optional term filter
-    let rows = if let Some(ref term) = params.term {
-        sqlx::query(
-            "WITH buckets AS ( \
-                SELECT generate_series( \
-                    date_bin($1::interval, NOW() - $2::interval, '2020-01-01'::timestamptz), \
-                    date_bin($1::interval, NOW(), '2020-01-01'::timestamptz), \
-                    $1::interval \
-                ) AS bucket_start \
-             ), \
-             raw AS ( \
-                SELECT date_bin($1::interval, completed_at, '2020-01-01'::timestamptz) AS bucket_start, \
-                       COUNT(*)::BIGINT AS scrape_count, \
-                       COUNT(*) FILTER (WHERE success)::BIGINT AS success_count, \
-                       COUNT(*) FILTER (WHERE NOT success)::BIGINT AS error_count, \
-                       COALESCE(SUM(courses_changed) FILTER (WHERE success), 0)::BIGINT AS courses_changed, \
-                       COALESCE(AVG(duration_ms) FILTER (WHERE success), 0)::FLOAT8 AS avg_duration_ms \
-                FROM scrape_job_results \
-                WHERE completed_at > NOW() - $2::interval AND payload->>'term' = $3 \
-                GROUP BY 1 \
-             ) \
-             SELECT b.bucket_start, \
-                    COALESCE(r.scrape_count, 0) AS scrape_count, \
-                    COALESCE(r.success_count, 0) AS success_count, \
-                    COALESCE(r.error_count, 0) AS error_count, \
-                    COALESCE(r.courses_changed, 0) AS courses_changed, \
-                    COALESCE(r.avg_duration_ms, 0) AS avg_duration_ms \
-             FROM buckets b \
-             LEFT JOIN raw r ON b.bucket_start = r.bucket_start \
-             ORDER BY b.bucket_start",
-        )
-        .bind(bucket_interval)
-        .bind(period_interval)
-        .bind(term)
-        .fetch_all(&state.db_pool)
-        .await
-    } else {
-        sqlx::query(
-            "WITH buckets AS ( \
-                SELECT generate_series( \
-                    date_bin($1::interval, NOW() - $2::interval, '2020-01-01'::timestamptz), \
-                    date_bin($1::interval, NOW(), '2020-01-01'::timestamptz), \
-                    $1::interval \
-                ) AS bucket_start \
-             ), \
-             raw AS ( \
-                SELECT date_bin($1::interval, completed_at, '2020-01-01'::timestamptz) AS bucket_start, \
-                       COUNT(*)::BIGINT AS scrape_count, \
-                       COUNT(*) FILTER (WHERE success)::BIGINT AS success_count, \
-                       COUNT(*) FILTER (WHERE NOT success)::BIGINT AS error_count, \
-                       COALESCE(SUM(courses_changed) FILTER (WHERE success), 0)::BIGINT AS courses_changed, \
-                       COALESCE(AVG(duration_ms) FILTER (WHERE success), 0)::FLOAT8 AS avg_duration_ms \
-                FROM scrape_job_results \
-                WHERE completed_at > NOW() - $2::interval \
-                GROUP BY 1 \
-             ) \
-             SELECT b.bucket_start, \
-                    COALESCE(r.scrape_count, 0) AS scrape_count, \
-                    COALESCE(r.success_count, 0) AS success_count, \
-                    COALESCE(r.error_count, 0) AS error_count, \
-                    COALESCE(r.courses_changed, 0) AS courses_changed, \
-                    COALESCE(r.avg_duration_ms, 0) AS avg_duration_ms \
-             FROM buckets b \
-             LEFT JOIN raw r ON b.bucket_start = r.bucket_start \
-             ORDER BY b.bucket_start",
-        )
-        .bind(bucket_interval)
-        .bind(period_interval)
-        .fetch_all(&state.db_pool)
-        .await
+    let _ = parse_period(&params.period)?;
+    // Validate bucket if provided
+    if let Some(ref b) = params.bucket {
+        parse_bucket(b)?;
     }
+
+    let (points, period, bucket) = compute_timeseries(
+        &state.db_pool,
+        &params.period,
+        params.bucket.as_deref(),
+        params.term.as_deref(),
+    )
+    .await
     .map_err(|e| {
         error!(error = %e, "failed to fetch scraper timeseries");
         (
@@ -394,23 +238,11 @@ pub async fn scraper_timeseries(
         );
     }
 
-    let points: Vec<TimeseriesPoint> = rows
-        .iter()
-        .map(|row| TimeseriesPoint {
-            timestamp: row.get("bucket_start"),
-            scrape_count: row.get("scrape_count"),
-            success_count: row.get("success_count"),
-            error_count: row.get("error_count"),
-            courses_changed: row.get("courses_changed"),
-            avg_duration_ms: row.get("avg_duration_ms"),
-        })
-        .collect();
-
     debug!(point_count = points.len(), "fetched scraper timeseries");
 
     Ok(Json(TimeseriesResponse {
-        period: params.period,
-        bucket: bucket_code.to_string(),
+        period,
+        bucket,
         points,
     }))
 }
@@ -426,33 +258,51 @@ pub struct SubjectsResponse {
     subjects: Vec<SubjectSummary>,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectSummary {
-    subject: String,
-    subject_description: Option<String>,
+    pub subject: String,
+    pub subject_description: Option<String>,
     #[ts(type = "number")]
-    tracked_course_count: i64,
-    schedule_state: String,
+    pub tracked_course_count: i64,
+    pub schedule_state: String,
     #[ts(type = "number")]
-    current_interval_secs: u64,
-    time_multiplier: u32,
+    pub current_interval_secs: u64,
+    pub time_multiplier: u32,
     /// ISO-8601 UTC timestamp of last scrape (e.g., "2024-01-15T10:30:00Z")
     #[ts(type = "string")]
-    last_scraped: DateTime<Utc>,
+    pub last_scraped: DateTime<Utc>,
     /// ISO-8601 UTC timestamp when next scrape is eligible (e.g., "2024-01-15T11:00:00Z")
     #[ts(type = "string | null")]
-    next_eligible_at: Option<DateTime<Utc>>,
+    pub next_eligible_at: Option<DateTime<Utc>>,
     #[ts(type = "number | null")]
-    cooldown_remaining_secs: Option<u64>,
-    avg_change_ratio: f64,
+    pub cooldown_remaining_secs: Option<u64>,
+    pub avg_change_ratio: f64,
     #[ts(type = "number")]
-    consecutive_zero_changes: i64,
+    pub consecutive_zero_changes: i64,
     #[ts(type = "number")]
-    recent_runs: i64,
+    pub recent_runs: i64,
     #[ts(type = "number")]
-    recent_failures: i64,
+    pub recent_failures: i64,
+}
+
+impl PartialEq for SubjectSummary {
+    fn eq(&self, other: &Self) -> bool {
+        // Exclude cooldown_remaining_secs and next_eligible_at from comparison
+        // since they change every second and clients derive cooldowns from next_eligible_at
+        self.subject == other.subject
+            && self.subject_description == other.subject_description
+            && self.tracked_course_count == other.tracked_course_count
+            && self.schedule_state == other.schedule_state
+            && self.current_interval_secs == other.current_interval_secs
+            && self.time_multiplier == other.time_multiplier
+            && self.last_scraped == other.last_scraped
+            && self.avg_change_ratio == other.avg_change_ratio
+            && self.consecutive_zero_changes == other.consecutive_zero_changes
+            && self.recent_runs == other.recent_runs
+            && self.recent_failures == other.recent_failures
+    }
 }
 
 #[instrument(skip_all)]
@@ -461,91 +311,17 @@ pub async fn scraper_subjects(
     State(state): State<AppState>,
 ) -> Result<Json<SubjectsResponse>, ApiError> {
     let start = Instant::now();
-    let db = DbContext::new(state.db_pool.clone(), state.events.clone());
-    let raw_stats = db.scrape_jobs().fetch_subject_stats().await.map_err(|e| {
-        error!(error = %e, "failed to fetch subject stats");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch subject stats"})),
-        )
-    })?;
-
-    let now = Utc::now();
-    let multiplier = adaptive::time_of_day_multiplier(now);
-
-    // Look up subject descriptions from the reference cache
     let ref_cache = state.reference_cache.read().await;
 
-    // Count tracked courses per subject for the current term
-    let term = Term::get_current().inner().to_string();
-    let course_counts: std::collections::HashMap<String, i64> = sqlx::query_as(
-        "SELECT subject, COUNT(*)::BIGINT AS cnt FROM courses WHERE term_code = $1 GROUP BY subject",
-    )
-    .bind(&term)
-    .fetch_all(&state.db_pool)
-    .await
-    .map_err(|e| {
-        error!(error = %e, "failed to fetch course counts");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to fetch course counts"})),
-        )
-    })?
-    .into_iter()
-    .map(|(subject, cnt): (String, i64)| (subject, cnt))
-    .collect();
-
-    let subjects: Vec<SubjectSummary> = raw_stats
-        .into_iter()
-        .map(|row| {
-            let stats: SubjectStats = row.into();
-            let schedule = adaptive::evaluate_subject(&stats, now, false);
-            let base_interval = adaptive::compute_base_interval(&stats);
-
-            let schedule_state = match &schedule {
-                SubjectSchedule::Eligible(_) => "eligible",
-                SubjectSchedule::Cooldown(_) => "cooldown",
-                SubjectSchedule::Paused => "paused",
-                SubjectSchedule::ReadOnly => "read_only",
-            };
-
-            let current_interval_secs = base_interval.as_secs() * multiplier as u64;
-
-            let (next_eligible_at, cooldown_remaining_secs) = match &schedule {
-                SubjectSchedule::Eligible(_) => (Some(now), Some(0)),
-                SubjectSchedule::Cooldown(remaining) => {
-                    let remaining_secs = remaining.as_secs();
-                    (
-                        Some(now + chrono::Duration::seconds(remaining_secs as i64)),
-                        Some(remaining_secs),
-                    )
-                }
-                SubjectSchedule::Paused | SubjectSchedule::ReadOnly => (None, None),
-            };
-
-            let subject_description = ref_cache
-                .lookup("subject", &stats.subject)
-                .map(|s| s.to_string());
-
-            let tracked_course_count = course_counts.get(&stats.subject).copied().unwrap_or(0);
-
-            SubjectSummary {
-                subject: stats.subject,
-                subject_description,
-                tracked_course_count,
-                schedule_state: schedule_state.to_string(),
-                current_interval_secs,
-                time_multiplier: multiplier,
-                last_scraped: stats.last_completed,
-                next_eligible_at,
-                cooldown_remaining_secs,
-                avg_change_ratio: stats.avg_change_ratio,
-                consecutive_zero_changes: stats.consecutive_zero_changes,
-                recent_runs: stats.recent_runs,
-                recent_failures: stats.recent_failure_count,
-            }
-        })
-        .collect();
+    let subjects = compute_subjects(&state.db_pool, &state.events, &ref_cache)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "failed to fetch subject stats");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to fetch subject stats"})),
+            )
+        })?;
 
     let elapsed = start.elapsed();
     if elapsed > SLOW_OP_THRESHOLD {
@@ -661,4 +437,300 @@ pub async fn scraper_subject_detail(
     debug!(count = results.len(), "fetched subject detail");
 
     Ok(Json(SubjectDetailResponse { subject, results }))
+}
+
+// ---------------------------------------------------------------------------
+// Reusable compute functions for both HTTP handlers and computed streams
+// ---------------------------------------------------------------------------
+
+/// Validate a period string and return the corresponding interval SQL string.
+pub fn validate_period(period: &str) -> Option<&'static str> {
+    match period {
+        "1h" | "6h" | "24h" | "7d" | "30d" => Some(period_to_interval_str(period)),
+        _ => None,
+    }
+}
+
+/// Validate a bucket string.
+pub fn validate_bucket(bucket: &str) -> Option<&'static str> {
+    match bucket {
+        "1m" => Some("1 minute"),
+        "5m" => Some("5 minutes"),
+        "15m" => Some("15 minutes"),
+        "1h" => Some("1 hour"),
+        "6h" => Some("6 hours"),
+        _ => None,
+    }
+}
+
+/// Compute scraper stats from the database.
+pub async fn compute_stats(
+    pool: &PgPool,
+    period: &str,
+    term: Option<&str>,
+) -> anyhow::Result<ScraperStatsResponse> {
+    let interval_str =
+        validate_period(period).ok_or_else(|| anyhow::anyhow!("Invalid period: {period}"))?;
+
+    let (query_str, term_filter) = if let Some(term) = term {
+        (
+            "SELECT \
+                COUNT(*) AS total_scrapes, \
+                COUNT(*) FILTER (WHERE success) AS successful_scrapes, \
+                COUNT(*) FILTER (WHERE NOT success) AS failed_scrapes, \
+                (AVG(duration_ms) FILTER (WHERE success))::FLOAT8 AS avg_duration_ms, \
+                COALESCE(SUM(courses_changed) FILTER (WHERE success), 0) AS total_courses_changed, \
+                COALESCE(SUM(courses_fetched) FILTER (WHERE success), 0) AS total_courses_fetched, \
+                COALESCE(SUM(audits_generated) FILTER (WHERE success), 0) AS total_audits_generated \
+             FROM scrape_job_results \
+             WHERE completed_at > NOW() - $1::interval AND payload->>'term' = $2",
+            Some(term.to_string()),
+        )
+    } else {
+        (
+            "SELECT \
+                COUNT(*) AS total_scrapes, \
+                COUNT(*) FILTER (WHERE success) AS successful_scrapes, \
+                COUNT(*) FILTER (WHERE NOT success) AS failed_scrapes, \
+                (AVG(duration_ms) FILTER (WHERE success))::FLOAT8 AS avg_duration_ms, \
+                COALESCE(SUM(courses_changed) FILTER (WHERE success), 0) AS total_courses_changed, \
+                COALESCE(SUM(courses_fetched) FILTER (WHERE success), 0) AS total_courses_fetched, \
+                COALESCE(SUM(audits_generated) FILTER (WHERE success), 0) AS total_audits_generated \
+             FROM scrape_job_results \
+             WHERE completed_at > NOW() - $1::interval",
+            None,
+        )
+    };
+
+    let row = if let Some(term) = &term_filter {
+        sqlx::query(query_str)
+            .bind(interval_str)
+            .bind(term)
+            .fetch_one(pool)
+            .await?
+    } else {
+        sqlx::query(query_str)
+            .bind(interval_str)
+            .fetch_one(pool)
+            .await?
+    };
+
+    let total_scrapes: i64 = row.get("total_scrapes");
+    let successful_scrapes: i64 = row.get("successful_scrapes");
+    let failed_scrapes: i64 = row.get("failed_scrapes");
+    let avg_duration_ms: Option<f64> = row.get("avg_duration_ms");
+    let total_courses_changed: i64 = row.get("total_courses_changed");
+    let total_courses_fetched: i64 = row.get("total_courses_fetched");
+    let total_audits_generated: i64 = row.get("total_audits_generated");
+
+    let queue_row = sqlx::query(
+        "SELECT \
+            COUNT(*) FILTER (WHERE locked_at IS NULL) AS pending_jobs, \
+            COUNT(*) FILTER (WHERE locked_at IS NOT NULL) AS locked_jobs \
+         FROM scrape_jobs",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let pending_jobs: i64 = queue_row.get("pending_jobs");
+    let locked_jobs: i64 = queue_row.get("locked_jobs");
+
+    let success_rate = if total_scrapes > 0 {
+        Some(successful_scrapes as f64 / total_scrapes as f64)
+    } else {
+        None
+    };
+
+    Ok(ScraperStatsResponse {
+        period: period.to_string(),
+        term: term.map(|t| t.to_string()),
+        total_scrapes,
+        successful_scrapes,
+        failed_scrapes,
+        success_rate,
+        avg_duration_ms,
+        total_courses_changed,
+        total_courses_fetched,
+        total_audits_generated,
+        pending_jobs,
+        locked_jobs,
+    })
+}
+
+/// Compute timeseries data from the database.
+pub async fn compute_timeseries(
+    pool: &PgPool,
+    period: &str,
+    bucket: Option<&str>,
+    term: Option<&str>,
+) -> anyhow::Result<(Vec<TimeseriesPoint>, String, String)> {
+    let period_interval =
+        validate_period(period).ok_or_else(|| anyhow::anyhow!("Invalid period: {period}"))?;
+
+    let bucket_code = bucket.unwrap_or_else(|| default_bucket_for_period(period));
+    let bucket_interval = validate_bucket(bucket_code)
+        .ok_or_else(|| anyhow::anyhow!("Invalid bucket: {bucket_code}"))?;
+
+    let rows = if let Some(term) = term {
+        sqlx::query(
+            "WITH buckets AS ( \
+                SELECT generate_series( \
+                    date_bin($1::interval, NOW() - $2::interval, '2020-01-01'::timestamptz), \
+                    date_bin($1::interval, NOW(), '2020-01-01'::timestamptz), \
+                    $1::interval \
+                ) AS bucket_start \
+             ), \
+             raw AS ( \
+                SELECT date_bin($1::interval, completed_at, '2020-01-01'::timestamptz) AS bucket_start, \
+                       COUNT(*)::BIGINT AS scrape_count, \
+                       COUNT(*) FILTER (WHERE success)::BIGINT AS success_count, \
+                       COUNT(*) FILTER (WHERE NOT success)::BIGINT AS error_count, \
+                       COALESCE(SUM(courses_changed) FILTER (WHERE success), 0)::BIGINT AS courses_changed, \
+                       COALESCE(AVG(duration_ms) FILTER (WHERE success), 0)::FLOAT8 AS avg_duration_ms \
+                FROM scrape_job_results \
+                WHERE completed_at > NOW() - $2::interval AND payload->>'term' = $3 \
+                GROUP BY 1 \
+             ) \
+             SELECT b.bucket_start, \
+                    COALESCE(r.scrape_count, 0) AS scrape_count, \
+                    COALESCE(r.success_count, 0) AS success_count, \
+                    COALESCE(r.error_count, 0) AS error_count, \
+                    COALESCE(r.courses_changed, 0) AS courses_changed, \
+                    COALESCE(r.avg_duration_ms, 0) AS avg_duration_ms \
+             FROM buckets b \
+             LEFT JOIN raw r ON b.bucket_start = r.bucket_start \
+             ORDER BY b.bucket_start",
+        )
+        .bind(bucket_interval)
+        .bind(period_interval)
+        .bind(term)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "WITH buckets AS ( \
+                SELECT generate_series( \
+                    date_bin($1::interval, NOW() - $2::interval, '2020-01-01'::timestamptz), \
+                    date_bin($1::interval, NOW(), '2020-01-01'::timestamptz), \
+                    $1::interval \
+                ) AS bucket_start \
+             ), \
+             raw AS ( \
+                SELECT date_bin($1::interval, completed_at, '2020-01-01'::timestamptz) AS bucket_start, \
+                       COUNT(*)::BIGINT AS scrape_count, \
+                       COUNT(*) FILTER (WHERE success)::BIGINT AS success_count, \
+                       COUNT(*) FILTER (WHERE NOT success)::BIGINT AS error_count, \
+                       COALESCE(SUM(courses_changed) FILTER (WHERE success), 0)::BIGINT AS courses_changed, \
+                       COALESCE(AVG(duration_ms) FILTER (WHERE success), 0)::FLOAT8 AS avg_duration_ms \
+                FROM scrape_job_results \
+                WHERE completed_at > NOW() - $2::interval \
+                GROUP BY 1 \
+             ) \
+             SELECT b.bucket_start, \
+                    COALESCE(r.scrape_count, 0) AS scrape_count, \
+                    COALESCE(r.success_count, 0) AS success_count, \
+                    COALESCE(r.error_count, 0) AS error_count, \
+                    COALESCE(r.courses_changed, 0) AS courses_changed, \
+                    COALESCE(r.avg_duration_ms, 0) AS avg_duration_ms \
+             FROM buckets b \
+             LEFT JOIN raw r ON b.bucket_start = r.bucket_start \
+             ORDER BY b.bucket_start",
+        )
+        .bind(bucket_interval)
+        .bind(period_interval)
+        .fetch_all(pool)
+        .await?
+    };
+
+    let points: Vec<TimeseriesPoint> = rows
+        .iter()
+        .map(|row| TimeseriesPoint {
+            timestamp: row.get("bucket_start"),
+            scrape_count: row.get("scrape_count"),
+            success_count: row.get("success_count"),
+            error_count: row.get("error_count"),
+            courses_changed: row.get("courses_changed"),
+            avg_duration_ms: row.get("avg_duration_ms"),
+        })
+        .collect();
+
+    Ok((points, period.to_string(), bucket_code.to_string()))
+}
+
+/// Compute subject summaries from the database.
+pub async fn compute_subjects(
+    pool: &PgPool,
+    events: &std::sync::Arc<crate::events::EventBuffer>,
+    ref_cache: &ReferenceCache,
+) -> anyhow::Result<Vec<SubjectSummary>> {
+    let db = DbContext::new(pool.clone(), events.clone());
+    let raw_stats = db.scrape_jobs().fetch_subject_stats().await?;
+
+    let now = Utc::now();
+    let multiplier = adaptive::time_of_day_multiplier(now);
+
+    let term = Term::get_current().inner().to_string();
+    let course_counts: std::collections::HashMap<String, i64> = sqlx::query_as(
+        "SELECT subject, COUNT(*)::BIGINT AS cnt FROM courses WHERE term_code = $1 GROUP BY subject",
+    )
+    .bind(&term)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|(subject, cnt): (String, i64)| (subject, cnt))
+    .collect();
+
+    let subjects: Vec<SubjectSummary> = raw_stats
+        .into_iter()
+        .map(|row| {
+            let stats: SubjectStats = row.into();
+            let schedule = adaptive::evaluate_subject(&stats, now, false);
+            let base_interval = adaptive::compute_base_interval(&stats);
+
+            let schedule_state = match &schedule {
+                SubjectSchedule::Eligible(_) => "eligible",
+                SubjectSchedule::Cooldown(_) => "cooldown",
+                SubjectSchedule::Paused => "paused",
+                SubjectSchedule::ReadOnly => "read_only",
+            };
+
+            let current_interval_secs = base_interval.as_secs() * multiplier as u64;
+
+            let (next_eligible_at, cooldown_remaining_secs) = match &schedule {
+                SubjectSchedule::Eligible(_) => (Some(now), Some(0)),
+                SubjectSchedule::Cooldown(remaining) => {
+                    let remaining_secs = remaining.as_secs();
+                    (
+                        Some(now + chrono::Duration::seconds(remaining_secs as i64)),
+                        Some(remaining_secs),
+                    )
+                }
+                SubjectSchedule::Paused | SubjectSchedule::ReadOnly => (None, None),
+            };
+
+            let subject_description = ref_cache
+                .lookup("subject", &stats.subject)
+                .map(|s| s.to_string());
+
+            let tracked_course_count = course_counts.get(&stats.subject).copied().unwrap_or(0);
+
+            SubjectSummary {
+                subject: stats.subject,
+                subject_description,
+                tracked_course_count,
+                schedule_state: schedule_state.to_string(),
+                current_interval_secs,
+                time_multiplier: multiplier,
+                last_scraped: stats.last_completed,
+                next_eligible_at,
+                cooldown_remaining_secs,
+                avg_change_ratio: stats.avg_change_ratio,
+                consecutive_zero_changes: stats.consecutive_zero_changes,
+                recent_runs: stats.recent_runs,
+                recent_failures: stats.recent_failure_count,
+            }
+        })
+        .collect();
+
+    Ok(subjects)
 }

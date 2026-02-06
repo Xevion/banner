@@ -3,15 +3,21 @@
  *
  * Provides declarative event handling with Svelte 5 runes.
  */
-import { acquireStreamClient, releaseStreamClient, type ConnectionState } from "$lib/ws";
+import {
+  acquireStreamClient,
+  releaseStreamClient,
+  type ConnectionState,
+  type FilterFor,
+} from "$lib/ws";
 import type {
   StreamKind,
   StreamSnapshot,
   StreamDelta,
-  ScrapeJobsFilter,
-  AuditLogFilter,
   ScrapeJobEvent,
   AuditLogEntry,
+  ScraperStatsResponse,
+  SubjectSummary,
+  TimeseriesPoint,
 } from "$lib/bindings";
 
 // Type helpers for stream-specific types
@@ -21,13 +27,15 @@ type EventFor<S extends StreamKind> = S extends "scrapeJobs"
   ? ScrapeJobEvent
   : S extends "auditLog"
     ? { entries: AuditLogEntry[] }
-    : never;
+    : S extends "scraperStats"
+      ? { stats: ScraperStatsResponse }
+      : S extends "scraperTimeseries"
+        ? { changed: TimeseriesPoint[] }
+        : S extends "scraperSubjects"
+          ? { changed: SubjectSummary[]; removed: string[] }
+          : never;
 
-type FilterFor<S extends StreamKind> = S extends "scrapeJobs"
-  ? ScrapeJobsFilter | null
-  : S extends "auditLog"
-    ? AuditLogFilter | null
-    : never;
+// FilterFor imported from $lib/ws to avoid duplication
 
 // Extract the event type discriminator
 type EventType<S extends StreamKind> = EventFor<S> extends { type: infer T } ? T : never;
@@ -35,13 +43,13 @@ type EventType<S extends StreamKind> = EventFor<S> extends { type: infer T } ? T
 interface UseStreamOptions<S extends StreamKind, T> {
   /** Initial state before any data is received */
   initial: T;
-  /** Event handlers keyed by event type */
-  on: {
+  /** Event handlers keyed by event type (optional for computed streams) */
+  on?: {
     [K in EventType<S> & string]?: (state: T, event: Extract<EventFor<S>, { type: K }>) => T;
   };
-  /** Optional custom snapshot handler (defaults to extracting data array) */
+  /** Custom snapshot handler */
   onSnapshot?: (snapshot: SnapshotFor<S>) => T;
-  /** Fallback delta handler for streams without typed event discriminators */
+  /** Delta handler for computed streams or fallback */
   onDelta?: (state: T, event: EventFor<S>) => T;
 }
 
@@ -100,7 +108,9 @@ export function useStream<S extends StreamKind, T>(
       onDelta: (delta) => {
         const event = extractEvent(stream, delta);
         if (!event) return;
-        if ("type" in event) {
+
+        // For typed event streams (scrapeJobs), use the 'on' handlers
+        if ("type" in event && options.on) {
           const eventType = event.type as EventType<S> & string;
           const handler = options.on[eventType];
           if (handler) {
@@ -108,6 +118,8 @@ export function useStream<S extends StreamKind, T>(
             return;
           }
         }
+
+        // For computed streams or fallback, use onDelta
         if (options.onDelta) {
           state = options.onDelta(state, event);
         }
@@ -142,6 +154,15 @@ function extractSnapshotState<S extends StreamKind>(stream: S, snapshot: StreamS
   if (stream === "auditLog" && snapshot.stream === "auditLog") {
     return snapshot.entries;
   }
+  if (stream === "scraperStats" && snapshot.stream === "scraperStats") {
+    return snapshot.stats;
+  }
+  if (stream === "scraperTimeseries" && snapshot.stream === "scraperTimeseries") {
+    return { points: snapshot.points, period: snapshot.period, bucket: snapshot.bucket };
+  }
+  if (stream === "scraperSubjects" && snapshot.stream === "scraperSubjects") {
+    return snapshot.subjects;
+  }
   return null;
 }
 
@@ -154,6 +175,15 @@ function extractEvent<S extends StreamKind>(stream: S, delta: StreamDelta): Even
   }
   if (stream === "auditLog" && delta.stream === "auditLog") {
     return { entries: delta.entries } as EventFor<S>;
+  }
+  if (stream === "scraperStats" && delta.stream === "scraperStats") {
+    return { stats: delta.stats } as EventFor<S>;
+  }
+  if (stream === "scraperTimeseries" && delta.stream === "scraperTimeseries") {
+    return { changed: delta.changed } as EventFor<S>;
+  }
+  if (stream === "scraperSubjects" && delta.stream === "scraperSubjects") {
+    return { changed: delta.changed, removed: delta.removed } as EventFor<S>;
   }
   return null;
 }

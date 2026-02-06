@@ -7,6 +7,8 @@ import type {
   StreamSnapshot,
   AuditLogFilter,
   ScrapeJobsFilter,
+  ScraperStatsFilter,
+  ScraperTimeseriesFilter,
 } from "$lib/bindings";
 
 export type ConnectionState = "connected" | "reconnecting" | "disconnected";
@@ -14,14 +16,20 @@ export type ConnectionState = "connected" | "reconnecting" | "disconnected";
 const MAX_RECONNECT_DELAY = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
-type StreamKey = StreamKind;
+export type StreamKey = StreamKind;
 type SnapshotFor<S extends StreamKey> = Extract<StreamSnapshot, { stream: S }>;
 type DeltaFor<S extends StreamKey> = Extract<StreamDelta, { stream: S }>;
-type FilterFor<S extends StreamKey> = S extends "scrapeJobs"
+export type FilterFor<S extends StreamKey> = S extends "scrapeJobs"
   ? ScrapeJobsFilter | null
   : S extends "auditLog"
     ? AuditLogFilter | null
-    : never;
+    : S extends "scraperStats"
+      ? ScraperStatsFilter
+      : S extends "scraperTimeseries"
+        ? ScraperTimeseriesFilter
+        : S extends "scraperSubjects"
+          ? null
+          : never;
 
 interface SubscriptionHandlers<S extends StreamKey> {
   onSnapshot: (snapshot: SnapshotFor<S>) => void;
@@ -74,7 +82,19 @@ export class StreamClient {
     return this._connectionState;
   }
 
+  private closeExisting(): void {
+    if (this.ws) {
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+
   connect(): void {
+    this.closeExisting();
     this.intentionalClose = false;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${protocol}//${window.location.host}/api/ws`;
@@ -125,15 +145,17 @@ export class StreamClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    this.closeExisting();
     this._connectionState = "disconnected";
     this.notifyStateListeners();
   }
 
   retry(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.closeExisting();
     this.reconnectAttempts = 0;
     this._connectionState = "reconnecting";
     this.notifyStateListeners();

@@ -75,7 +75,7 @@ async fn db_context_emits_event_on_job_complete(pool: sqlx::PgPool) {
     // Verify Completed event was emitted (at position after Locked)
     let event = events.read(cursor + 1);
     assert!(
-        matches!(event, Some(DomainEvent::ScrapeJob(ScrapeJobEvent::Completed { id })) if id == job_id),
+        matches!(event, Some(DomainEvent::ScrapeJob(ScrapeJobEvent::Completed { id, .. })) if id == job_id),
         "Expected Completed event for job {}, got {:?}",
         job_id,
         event

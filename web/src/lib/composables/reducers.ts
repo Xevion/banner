@@ -29,3 +29,35 @@ export function addItem<T>(items: T[], item: T, sortFn?: (a: T, b: T) => number)
   const result = [...items, item];
   return sortFn ? result.sort(sortFn) : result;
 }
+
+/**
+ * Merge updates into an array by key, handling additions, updates, and removals.
+ * Used for computed stream delta handling.
+ */
+export function mergeByKey<T, K>(
+  items: T[],
+  updates: T[],
+  keyFn: (item: T) => K,
+  removed?: K[]
+): T[] {
+  const result = new Map<K, T>();
+
+  // Start with existing items
+  for (const item of items) {
+    result.set(keyFn(item), item);
+  }
+
+  // Remove items
+  if (removed) {
+    for (const key of removed) {
+      result.delete(key);
+    }
+  }
+
+  // Upsert updates (adds new, updates existing)
+  for (const item of updates) {
+    result.set(keyFn(item), item);
+  }
+
+  return Array.from(result.values());
+}

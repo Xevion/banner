@@ -1,6 +1,8 @@
 <script lang="ts">
-import type { TimeseriesResponse } from "$lib/bindings";
+import type { TimeseriesPoint } from "$lib/bindings";
 import type { ScraperPeriod } from "$lib/api";
+import { useStream } from "$lib/composables/useStream.svelte";
+import { mergeByKey } from "$lib/composables/reducers";
 import { Chart, Svg, Area, Axis, Highlight, Tooltip } from "layerchart";
 import { curveMonotoneX } from "d3-shape";
 import { cubicOut } from "svelte/easing";
@@ -8,11 +10,35 @@ import { Tween } from "svelte/motion";
 import { scaleTime, scaleLinear } from "d3-scale";
 
 interface Props {
-  timeseries: TimeseriesResponse | null;
   period: ScraperPeriod;
+  term?: string;
 }
 
-let { timeseries, period }: Props = $props();
+let { period, term }: Props = $props();
+
+interface TimeseriesState {
+  points: TimeseriesPoint[];
+  period: string;
+  bucket: string;
+}
+
+const timeseries = useStream(
+  "scraperTimeseries",
+  { period, term },
+  {
+    initial: { points: [], period: "", bucket: "" } as TimeseriesState,
+    onSnapshot: (s) => ({ points: s.points, period: s.period, bucket: s.bucket }),
+    onDelta: (state, delta) => ({
+      ...state,
+      points: mergeByKey(state.points, delta.changed, (p) => p.timestamp),
+    }),
+  }
+);
+
+// Reactively update filter when period/term changes
+$effect(() => {
+  timeseries.modify({ period, term });
+});
 
 interface ChartPoint {
   date: Date;
@@ -22,7 +48,7 @@ interface ChartPoint {
 }
 
 let chartData = $derived(
-  (timeseries?.points ?? []).map((p) => ({
+  (timeseries.state.points ?? []).map((p) => ({
     date: new Date(p.timestamp),
     success: p.successCount,
     errors: p.errorCount,

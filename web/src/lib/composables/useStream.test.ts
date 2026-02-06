@@ -182,6 +182,7 @@ describe("reducer patterns for scrape jobs", () => {
       const event: ScrapeJobEvent = {
         type: "completed",
         id: 1,
+        subject: "CS",
       };
 
       const result = removeById(jobs, event.id);

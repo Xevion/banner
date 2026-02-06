@@ -1,13 +1,15 @@
 <script lang="ts">
 import { client, type ScraperPeriod } from "$lib/api";
 import { useAutoRefresh } from "$lib/composables/useAutoRefresh.svelte";
+import { useStream } from "$lib/composables/useStream.svelte";
+import { mergeByKey } from "$lib/composables/reducers";
+import type { ScraperStatsResponse, SubjectSummary } from "$lib/bindings";
 import SimpleTooltip from "$lib/components/SimpleTooltip.svelte";
 import { formatDurationMs } from "$lib/time";
 import { formatNumber } from "$lib/utils";
 import { Tabs } from "bits-ui";
-import { AlertCircle, ChevronDown, ChevronUp, Info, LoaderCircle } from "@lucide/svelte";
+import { ChevronDown, ChevronUp, Info } from "@lucide/svelte";
 import { Select } from "bits-ui";
-import { fade } from "svelte/transition";
 
 import ScraperCharts from "./ScraperCharts.svelte";
 import ScraperJobs from "./ScraperJobs.svelte";
@@ -15,8 +17,6 @@ import ScraperAudit from "./ScraperAudit.svelte";
 import ScraperSubjects from "./ScraperSubjects.svelte";
 
 const PERIODS: ScraperPeriod[] = ["1h", "6h", "24h", "7d", "30d"];
-const REFRESH_INTERVAL = 5_000;
-const MIN_SPIN_MS = 700;
 
 let selectedPeriod = $state<ScraperPeriod>("24h");
 let selectedTerm = $state<string | undefined>(undefined);
@@ -24,41 +24,37 @@ let selectedTerm = $state<string | undefined>(undefined);
 // Tab state
 let activeTab = $state("charts");
 
-// --- Auto-refresh hooks for page-level data ---
+// --- WebSocket streams for real-time data ---
 
-const stats = useAutoRefresh({
-  fetcher: () => client.getScraperStats(selectedPeriod, selectedTerm),
-  deps: () => [selectedPeriod, selectedTerm],
-  interval: REFRESH_INTERVAL,
-  minLoadingMs: MIN_SPIN_MS,
+const stats = useStream(
+  "scraperStats",
+  { period: selectedPeriod, term: selectedTerm },
+  {
+    initial: null as ScraperStatsResponse | null,
+    onDelta: (_, delta) => delta.stats,
+  }
+);
+
+// Reactively update stats filter when period/term changes
+$effect(() => {
+  stats.modify({ period: selectedPeriod, term: selectedTerm });
 });
 
-const timeseries = useAutoRefresh({
-  fetcher: () => client.getScraperTimeseries(selectedPeriod, undefined, selectedTerm),
-  deps: () => [selectedPeriod, selectedTerm],
-  interval: REFRESH_INTERVAL,
+const subjects = useStream("scraperSubjects", null, {
+  initial: [] as SubjectSummary[],
+  onDelta: (state, delta) => mergeByKey(state, delta.changed, (s) => s.subject, delta.removed),
 });
 
-const subjects = useAutoRefresh({
-  fetcher: () => client.getScraperSubjects().then((r) => r.subjects),
-  interval: REFRESH_INTERVAL,
-});
-
+// Terms: keep as HTTP fetch (per plan)
 const terms = useAutoRefresh({
   fetcher: () => client.getAdminTerms().then((r) => r.terms),
   interval: 0, // Fetch once, no auto-refresh
 });
 
 // Derived data with defaults
-let currentStats = $derived(stats.data);
-let currentTimeseries = $derived(timeseries.data);
-let currentSubjects = $derived(subjects.data ?? []);
+let currentStats = $derived(stats.state);
+let currentSubjects = $derived(subjects.state);
 let currentTerms = $derived(terms.data ?? []);
-
-// Combined loading/error state
-let isLoading = $derived(stats.isLoading);
-let hasError = $derived(stats.hasError || timeseries.hasError || subjects.hasError);
-let errorMessage = $derived(stats.error ?? timeseries.error ?? subjects.error);
 
 // --- Term Select Items ---
 let termItems = $derived([
@@ -78,24 +74,41 @@ function successRateColor(rate: number): string {
 </script>
 
 <div class="flex flex-col gap-y-6">
-  <h1 class="text-base font-semibold text-foreground">Scraper</h1>
+  <!-- Header: Title + Connection indicator + Controls -->
+  <div class="grid grid-cols-1 items-center gap-x-4 gap-y-2
+              sm:grid-cols-[auto_1fr]
+              lg:grid-cols-[auto_auto_1fr]">
+    <h1 class="text-base font-semibold text-foreground sm:col-span-2 lg:col-span-1">Scraper</h1>
 
-  <!-- Header controls: Term + Period selectors -->
-  <div class="flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      {#if isLoading}
-        <span in:fade={{ duration: 150 }} out:fade={{ duration: 200 }}>
-          <LoaderCircle class="size-4 animate-spin text-muted-foreground" />
+    <!-- Connection indicator -->
+    <div class="flex items-center">
+      {#if stats.connectionState === "connected"}
+        <span class="inline-flex items-center gap-1.5 text-sm">
+          <span class="size-2 shrink-0 rounded-full bg-green-500"></span>
+          <span class="text-green-500 lg:hidden">Live</span>
         </span>
-      {:else if hasError}
-        <span in:fade={{ duration: 150 }} out:fade={{ duration: 200 }}>
-          <SimpleTooltip text={errorMessage ?? "Refresh failed"} side="right" passthrough>
-            <AlertCircle class="size-4 text-destructive" />
-          </SimpleTooltip>
+      {:else if stats.connectionState === "reconnecting"}
+        <span class="inline-flex items-center gap-1.5 text-sm">
+          <span class="size-2 shrink-0 rounded-full bg-amber-500 animate-pulse"></span>
+          <span class="text-amber-500">Reconnecting...</span>
+        </span>
+      {:else}
+        <span class="inline-flex items-center gap-2 text-sm">
+          <span class="inline-flex items-center gap-1.5">
+            <span class="size-2 shrink-0 rounded-full bg-red-500"></span>
+            <span class="text-red-500">Disconnected</span>
+          </span>
+          <button
+            class="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
+            onclick={() => stats.retry()}
+          >
+            Retry
+          </button>
         </span>
       {/if}
     </div>
-    <div class="flex items-center gap-2">
+
+    <div class="flex items-center gap-2 sm:justify-self-end">
       <!-- Term Dropdown -->
       <Select.Root
         type="single"
@@ -172,8 +185,8 @@ function successRateColor(rate: number): string {
     </div>
   </div>
 
-  {#if errorMessage && !currentStats}
-    <p class="text-destructive">{errorMessage}</p>
+  {#if stats.connectionState === "disconnected" && !currentStats}
+    <p class="text-destructive">WebSocket connection lost</p>
   {:else if currentStats}
     <!-- Aggregate Stats Cards -->
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -284,7 +297,7 @@ function successRateColor(rate: number): string {
       </Tabs.List>
 
       <Tabs.Content value="charts" class="pt-4">
-        <ScraperCharts timeseries={currentTimeseries} period={selectedPeriod} />
+        <ScraperCharts period={selectedPeriod} term={selectedTerm} />
       </Tabs.Content>
 
       <Tabs.Content value="jobs" class="pt-4">
@@ -297,7 +310,7 @@ function successRateColor(rate: number): string {
     </Tabs.Root>
 
     <!-- Subjects Table -->
-    <ScraperSubjects subjects={currentSubjects} isLoading={subjects.isLoading} />
+    <ScraperSubjects subjects={currentSubjects} isLoading={subjects.connectionState !== "connected"} />
   {:else}
     <!-- Initial loading skeleton -->
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">

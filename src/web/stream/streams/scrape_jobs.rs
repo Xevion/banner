@@ -105,7 +105,9 @@ pub async fn event_matches(
                 }
             }
         }
-        ScrapeJobEvent::Completed { id } | ScrapeJobEvent::Deleted { id } => known_ids.remove(id),
+        ScrapeJobEvent::Completed { id, .. } | ScrapeJobEvent::Deleted { id } => {
+            known_ids.remove(id)
+        }
     }
 }
 

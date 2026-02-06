@@ -65,8 +65,6 @@ const stream = useStream("scrapeJobs", null, {
 
 // Expose jobs as a derived binding for the template
 const jobs = $derived(stream.state);
-const connectionState = $derived(stream.connectionState);
-
 // Shared tooltip state — single tooltip for all timing cells via event delegation
 let tooltipText = $state<string | null>(null);
 let tooltipX = $state(0);
@@ -397,35 +395,6 @@ function getTimingDisplay(
   };
 }
 </script>
-
-<div class="flex items-center justify-end mb-4">
-  <div class="flex items-center gap-2 text-sm">
-    {#if connectionState === "connected"}
-      <span class="inline-flex items-center gap-1.5">
-        <span class="size-2 shrink-0 rounded-full bg-green-500"></span>
-        <span class="text-green-500">Live</span>
-      </span>
-    {:else if connectionState === "reconnecting"}
-      <span class="inline-flex items-center gap-1.5">
-        <span class="size-2 shrink-0 rounded-full bg-amber-500"></span>
-        <span class="text-amber-500">Reconnecting...</span>
-      </span>
-    {:else}
-      <span class="inline-flex items-center gap-2">
-        <span class="inline-flex items-center gap-1.5">
-          <span class="size-2 shrink-0 rounded-full bg-red-500"></span>
-          <span class="text-red-500">Disconnected</span>
-        </span>
-        <button
-          class="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
-          onclick={() => stream.retry()}
-        >
-          Retry
-        </button>
-      </span>
-    {/if}
-  </div>
-</div>
 
 {#if error}
   <p class="text-destructive">{error}</p>

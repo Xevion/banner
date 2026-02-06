@@ -88,17 +88,22 @@ impl<'a> ScrapeJobOps<'a> {
 
     /// Mark a job as completed (deletes it).
     ///
-    /// Emits a `ScrapeJobEvent::Completed` event.
+    /// Emits a `ScrapeJobEvent::Completed` event with the subject extracted from
+    /// the job's target payload.
     pub async fn complete(&self, job_id: i32) -> Result<()> {
-        sqlx::query("DELETE FROM scrape_jobs WHERE id = $1")
-            .bind(job_id)
-            .execute(self.ctx.pool())
-            .await?;
+        let subject: Option<String> = sqlx::query_scalar(
+            "DELETE FROM scrape_jobs WHERE id = $1 RETURNING target_payload->>'subject'",
+        )
+        .bind(job_id)
+        .fetch_optional(self.ctx.pool())
+        .await?
+        .flatten();
 
         self.ctx
             .events()
             .publish(DomainEvent::ScrapeJob(ScrapeJobEvent::Completed {
                 id: job_id,
+                subject,
             }));
 
         Ok(())

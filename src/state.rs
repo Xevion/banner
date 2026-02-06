@@ -7,6 +7,7 @@ use crate::events::EventBuffer;
 use crate::status::ServiceStatusRegistry;
 use crate::web::schedule_cache::ScheduleCache;
 use crate::web::session_cache::{OAuthStateStore, SessionCache};
+use crate::web::stream::computed::ComputedStreamManager;
 use anyhow::Result;
 use dashmap::DashMap;
 use sqlx::PgPool;
@@ -82,22 +83,27 @@ pub struct AppState {
     pub schedule_cache: ScheduleCache,
     pub events: Arc<EventBuffer>,
     pub search_options_cache: Arc<DashMap<String, (Instant, serde_json::Value)>>,
+    pub computed_streams: ComputedStreamManager,
 }
 
 impl AppState {
     pub fn new(banner_api: Arc<BannerApi>, db_pool: PgPool) -> Self {
         let events = Arc::new(EventBuffer::new(1024));
         let schedule_cache = ScheduleCache::new(db_pool.clone());
+        let reference_cache = Arc::new(RwLock::new(ReferenceCache::new()));
+        let computed_streams =
+            ComputedStreamManager::new(events.clone(), db_pool.clone(), reference_cache.clone());
         Self {
             session_cache: SessionCache::new(db_pool.clone()),
             oauth_state_store: OAuthStateStore::new(),
             banner_api,
             db_pool,
             service_statuses: ServiceStatusRegistry::new(),
-            reference_cache: Arc::new(RwLock::new(ReferenceCache::new())),
+            reference_cache,
             schedule_cache,
             events,
             search_options_cache: Arc::new(DashMap::new()),
+            computed_streams,
         }
     }
 

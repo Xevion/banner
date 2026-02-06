@@ -183,35 +183,6 @@ const skeletonWidths: Record<string, string> = {
 const columnCount = columns.length;
 </script>
 
-<div class="mb-4 flex items-center justify-end">
-  <div class="flex items-center gap-2 text-sm">
-    {#if connectionState === "connected"}
-      <span class="inline-flex items-center gap-1.5">
-        <span class="size-2 shrink-0 rounded-full bg-green-500"></span>
-        <span class="text-green-500">Live</span>
-      </span>
-    {:else if connectionState === "reconnecting"}
-      <span class="inline-flex items-center gap-1.5">
-        <span class="size-2 shrink-0 rounded-full bg-amber-500"></span>
-        <span class="text-amber-500">Reconnecting...</span>
-      </span>
-    {:else}
-      <span class="inline-flex items-center gap-2">
-        <span class="inline-flex items-center gap-1.5">
-          <span class="size-2 shrink-0 rounded-full bg-red-500"></span>
-          <span class="text-red-500">Disconnected</span>
-        </span>
-        <button
-          class="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
-          onclick={() => stream.retry()}
-        >
-          Retry
-        </button>
-      </span>
-    {/if}
-  </div>
-</div>
-
 <div class="bg-card border-border overflow-hidden rounded-lg border">
   <table class="w-full text-sm">
     <thead>

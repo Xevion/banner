@@ -57,6 +57,7 @@ pub enum ScrapeJobEvent {
     },
     Completed {
         id: i32,
+        subject: Option<String>,
     },
     Retried {
         id: i32,

@@ -69,7 +69,7 @@ mod tests {
     use crate::web::ws::ScrapeJobEvent;
 
     fn make_scrape_event(id: i32) -> DomainEvent {
-        DomainEvent::ScrapeJob(ScrapeJobEvent::Completed { id })
+        DomainEvent::ScrapeJob(ScrapeJobEvent::Completed { id, subject: None })
     }
 
     #[test]
