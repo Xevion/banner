@@ -1,11 +1,17 @@
 //! Main Banner API client implementation.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::banner::{
-    SessionPool, create_shared_rate_limiter, errors::BannerApiError, json::parse_json_with_context,
-    middleware::LoggingMiddleware, models::*, nonce, query::SearchQuery,
-    rate_limit_middleware::RateLimitMiddleware, util::user_agent,
+    SessionPool,
+    errors::BannerApiError,
+    json::parse_json_with_context,
+    middleware::{BannerRateLimiter, LoggingMiddleware, RateLimitMiddleware},
+    models::*,
+    nonce,
+    query::SearchQuery,
+    util::user_agent,
 };
 use crate::config::RateLimitingConfig;
 use anyhow::{Context, Result, anyhow};
@@ -22,18 +28,12 @@ pub struct BannerApi {
 }
 
 impl BannerApi {
-    /// Creates a new Banner API client.
-    #[allow(dead_code)]
-    pub fn new(base_url: String) -> Result<Self> {
-        Self::new_with_config(base_url, RateLimitingConfig::default())
-    }
-
     /// Creates a new Banner API client with custom rate limiting configuration.
     pub fn new_with_config(
         base_url: String,
         rate_limit_config: RateLimitingConfig,
     ) -> Result<Self> {
-        let rate_limiter = create_shared_rate_limiter(Some(rate_limit_config));
+        let rate_limiter = Arc::new(BannerRateLimiter::new(rate_limit_config));
 
         let http = ClientBuilder::new(
             Client::builder()

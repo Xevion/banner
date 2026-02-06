@@ -13,7 +13,7 @@ pub fn setup_logging(config: &Config, tracing_format: TracingFormat) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         let base_level = &config.log_level;
         EnvFilter::new(format!(
-            "warn,banner={},banner::rate_limiter=warn,banner::session=debug,banner::rate_limit_middleware=warn,banner::middleware=debug",
+            "warn,banner={},banner::middleware::rate_limit=warn,banner::session=debug,banner::middleware::logging=debug",
             base_level
         ))
     });

@@ -5,8 +5,6 @@ use crate::banner::models::Term;
 use anyhow::{Context, Result};
 use cookie::Cookie;
 use dashmap::DashMap;
-use governor::state::InMemoryState;
-use governor::{Quota, RateLimiter};
 use rand::distr::{Alphanumeric, SampleString};
 use reqwest_middleware::ClientWithMiddleware;
 use std::collections::{HashMap, VecDeque};
@@ -14,20 +12,14 @@ use std::collections::{HashMap, VecDeque};
 use crate::utils::fmt_duration;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify};
 use tracing::{debug, trace};
 use url::Url;
 
 const SESSION_EXPIRY: Duration = Duration::from_secs(25 * 60); // 25 minutes
-
-// A global rate limiter to ensure we only try to create one new session every 10 seconds,
-// preventing us from overwhelming the server with session creation requests.
-static SESSION_CREATION_RATE_LIMITER: LazyLock<
-    RateLimiter<governor::state::direct::NotKeyed, InMemoryState, governor::clock::DefaultClock>,
-> = LazyLock::new(|| RateLimiter::direct(Quota::with_period(Duration::from_secs(10)).unwrap()));
 
 /// Represents an active anonymous session within the Banner API.
 /// Identified by multiple persistent cookies, as well as a client-generated "unique session ID".
@@ -171,10 +163,9 @@ mod tests {
         }
 
         // Second acquire: verify it reaches the server (i.e., is_creating was reset).
-        // The global rate limiter has a 10s period, so allow 15s for the second attempt.
         tokio::select! {
             _ = pool.acquire(term) => {}
-            result = tokio::time::timeout(Duration::from_secs(15), rx.recv()) => {
+            result = tokio::time::timeout(Duration::from_secs(5), rx.recv()) => {
                 assert!(
                     result.is_ok(),
                     "acquire() deadlocked — is_creating was not reset after cancellation"
@@ -413,33 +404,24 @@ impl SessionPool {
             let creating_guard = CreatingGuard(Arc::clone(&term_pool));
 
             debug!(term = %term, "Creating new session (pool empty)");
-            tokio::select! {
-                _ = term_pool.notifier.notified() => {
-                    // A session was returned — release creator role and race for it.
-                    drop(creating_guard);
-                    continue;
-                }
-                _ = SESSION_CREATION_RATE_LIMITER.until_ready() => {
-                    let new_session_result = self.create_session(&term).await;
-                    drop(creating_guard);
+            let new_session_result = self.create_session(&term).await;
+            drop(creating_guard);
 
-                    match new_session_result {
-                        Ok(new_session) => {
-                            let elapsed = start.elapsed();
-                            debug!(
-                                id = new_session.unique_session_id,
-                                elapsed = fmt_duration(elapsed),
-                                "Created new session"
-                            );
-                            return Ok(PooledSession {
-                                session: ManuallyDrop::new(new_session),
-                                pool: term_pool,
-                            });
-                        }
-                        Err(e) => {
-                            return Err(e.context("Failed to create new session in pool"));
-                        }
-                    }
+            match new_session_result {
+                Ok(new_session) => {
+                    let elapsed = start.elapsed();
+                    debug!(
+                        id = new_session.unique_session_id,
+                        elapsed = fmt_duration(elapsed),
+                        "Created new session"
+                    );
+                    return Ok(PooledSession {
+                        session: ManuallyDrop::new(new_session),
+                        pool: term_pool,
+                    });
+                }
+                Err(e) => {
+                    return Err(e.context("Failed to create new session in pool"));
                 }
             }
         }

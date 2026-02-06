@@ -11,8 +11,6 @@ pub mod json;
 pub mod middleware;
 pub mod models;
 pub mod query;
-pub mod rate_limit_middleware;
-pub mod rate_limiter;
 pub mod session;
 pub mod util;
 
@@ -20,5 +18,4 @@ pub use api::*;
 pub use errors::*;
 pub use models::*;
 pub use query::*;
-pub use rate_limiter::*;
 pub use session::*;
